@@ -1,0 +1,141 @@
+import type { ForecastHour, ConditionRating } from '@/types/forecast'
+import { format, parseISO, getHours } from 'date-fns'
+
+export type SessionWindow = 'dawn' | 'morning' | 'midday' | 'afternoon' | 'evening'
+
+export interface BestTimeSlot {
+  window: SessionWindow
+  label: string
+  timeRange: string
+  hours: ForecastHour[]
+  avgScore: number
+  rating: ConditionRating
+  avgWaveHeight: number
+  avgPeriod: number
+  avgWindSpeed: number
+  windQuality: 'glassy' | 'light offshore' | 'light onshore' | 'choppy'
+  tip: string
+  recommended: boolean
+}
+
+const WINDOWS: Record<SessionWindow, { label: string; start: number; end: number; emoji: string }> = {
+  dawn:      { label: 'Dawn Patrol', start: 5,  end: 8,  emoji: '🌅' },
+  morning:   { label: 'Morning',     start: 8,  end: 12, emoji: '☀️' },
+  midday:    { label: 'Midday',      start: 12, end: 15, emoji: '🌤️' },
+  afternoon: { label: 'Afternoon',   start: 15, end: 18, emoji: '🌊' },
+  evening:   { label: 'Evening',     start: 18, end: 21, emoji: '🌇' },
+}
+
+function classifyWindQuality(avgWindSpeed: number, avgScore: number): BestTimeSlot['windQuality'] {
+  if (avgWindSpeed < 8) return 'glassy'
+  if (avgWindSpeed < 15 && avgScore >= 60) return 'light offshore'
+  if (avgWindSpeed < 20) return 'light onshore'
+  return 'choppy'
+}
+
+function generateTip(
+  window: SessionWindow,
+  rating: ConditionRating,
+  waveHeight: number,
+  windQuality: BestTimeSlot['windQuality']
+): string {
+  const heightFt = Math.round(waveHeight * 3.281)
+
+  if (rating === 'epic') {
+    return `Don't miss this! ${heightFt}ft ${windQuality === 'glassy' || windQuality === 'light offshore' ? 'with clean conditions' : ''}. All-time session potential.`
+  }
+  if (rating === 'good') {
+    if (windQuality === 'glassy') return `${heightFt}ft of glassy ${window === 'dawn' ? 'dawn patrol' : 'surf'} — get out there early before the wind picks up.`
+    if (window === 'dawn') return `Dawn patrol window looks solid at ${heightFt}ft. Offshore winds keep it clean early.`
+    return `Quality surf at ${heightFt}ft. ${windQuality === 'light offshore' ? 'Light offshore winds helping the faces.' : 'Worth checking out.'}`
+  }
+  if (rating === 'fair') {
+    if (window === 'dawn' || window === 'morning') return `Small but fun at ${heightFt}ft. Good for longboards or a quick pre-work session.`
+    if (windQuality === 'choppy') return `${heightFt}ft but onshore wind is making it messy. Consider earlier windows.`
+    return `Rideable at ${heightFt}ft. Manage expectations.`
+  }
+  // poor
+  if (window === 'dawn') return `Conditions are challenging early. Only worth it if you need the paddle.`
+  return `Skip this window unless you're desperate for water time.`
+}
+
+export function computeBestTimes(todayHours: ForecastHour[]): BestTimeSlot[] {
+  const slots: BestTimeSlot[] = []
+
+  for (const [key, win] of Object.entries(WINDOWS) as [SessionWindow, typeof WINDOWS[SessionWindow]][]) {
+    const hours = todayHours.filter((h) => {
+      const hr = getHours(parseISO(h.time))
+      return hr >= win.start && hr < win.end
+    })
+
+    if (hours.length === 0) continue
+
+    const avgScore = hours.reduce((s, h) => s + h.ratingScore, 0) / hours.length
+    const avgWaveHeight = hours.reduce((s, h) => s + h.waveHeight, 0) / hours.length
+    const avgPeriod = hours.reduce((s, h) => s + h.swellPeriod, 0) / hours.length
+    const avgWindSpeed = hours.reduce((s, h) => s + h.wind.speed, 0) / hours.length
+
+    // Rating from avg score
+    let rating: ConditionRating
+    if (avgScore >= 80) rating = 'epic'
+    else if (avgScore >= 60) rating = 'good'
+    else if (avgScore >= 35) rating = 'fair'
+    else rating = 'poor'
+
+    const windQuality = classifyWindQuality(avgWindSpeed, avgScore)
+    const tip = generateTip(key, rating, avgWaveHeight, windQuality)
+
+    const startHour = hours[0]
+    const endHour = hours[hours.length - 1]
+    const timeRange = `${format(parseISO(startHour.time), 'h:mm a')} – ${format(parseISO(endHour.time), 'h:mm a')}`
+
+    slots.push({
+      window: key,
+      label: win.label,
+      timeRange,
+      hours,
+      avgScore: Math.round(avgScore),
+      rating,
+      avgWaveHeight: Math.round(avgWaveHeight * 10) / 10,
+      avgPeriod: Math.round(avgPeriod * 10) / 10,
+      avgWindSpeed: Math.round(avgWindSpeed),
+      windQuality,
+      tip,
+      recommended: rating === 'good' || rating === 'epic',
+    })
+  }
+
+  return slots
+}
+
+// Find the single best 2-hour window within a day
+export function findBestWindow(todayHours: ForecastHour[]): {
+  start: string
+  end: string
+  score: number
+  rating: ConditionRating
+} | null {
+  if (todayHours.length < 2) return null
+
+  let best = { idx: 0, score: 0 }
+
+  for (let i = 0; i < todayHours.length - 1; i++) {
+    const window = todayHours.slice(i, i + 3)
+    const avg = window.reduce((s, h) => s + h.ratingScore, 0) / window.length
+    if (avg > best.score) best = { idx: i, score: avg }
+  }
+
+  const window = todayHours.slice(best.idx, best.idx + 3)
+  let rating: ConditionRating
+  if (best.score >= 80) rating = 'epic'
+  else if (best.score >= 60) rating = 'good'
+  else if (best.score >= 35) rating = 'fair'
+  else rating = 'poor'
+
+  return {
+    start: format(parseISO(window[0].time), 'h a'),
+    end: format(parseISO(window[window.length - 1].time), 'h a'),
+    score: Math.round(best.score),
+    rating,
+  }
+}

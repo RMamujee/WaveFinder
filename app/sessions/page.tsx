@@ -1,0 +1,1377 @@
+'use client'
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSession } from '@/lib/auth-client'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
+import { format, parseISO } from 'date-fns'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface SurfSession {
+  id: string
+  spotName: string
+  spotSlug: string | null
+  region: string | null
+  sessionDate: string
+  duration: number | null
+  waveHeightFt: number | null
+  wavePeriod: number | null
+  windSpeed: number | null
+  windDir: string | null
+  waterTempC: number | null
+  boardType: string | null
+  wetsuitMm: string | null
+  rating: number | null
+  highlights: string | null
+  buddies: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface FormState {
+  spotName: string
+  region: string
+  sessionDate: string
+  duration: string
+  waveHeightFt: string
+  wavePeriod: string
+  windSpeed: string
+  windDir: string
+  waterTempC: string
+  boardType: string
+  wetsuitMm: string
+  rating: number
+  buddies: string
+  highlights: string
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function todayISO() {
+  return new Date().toISOString().split('T')[0]
+}
+
+function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}min`
+}
+
+function WaveRating({ value, max = 5 }: { value: number; max?: number }) {
+  return (
+    <span style={{ letterSpacing: '1px', fontSize: '14px' }}>
+      {Array.from({ length: max }, (_, i) => (
+        <span key={i} style={{ opacity: i < value ? 1 : 0.2 }}>
+          🌊
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// ─── Log Session Modal ────────────────────────────────────────────────────────
+
+const BOARD_TYPES = ['Shortboard', 'Longboard', 'Fish', 'Mid-length', 'Gun', 'Foil', 'Bodyboard', 'Other']
+const WETSUIT_OPTIONS = ['None / Boardshorts', '2mm', '3/2mm', '4/3mm', '5/4mm', 'Drysuit']
+const WIND_DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+
+const EMPTY_FORM: FormState = {
+  spotName: '',
+  region: '',
+  sessionDate: todayISO(),
+  duration: '',
+  waveHeightFt: '',
+  wavePeriod: '',
+  windSpeed: '',
+  windDir: '',
+  waterTempC: '',
+  boardType: '',
+  wetsuitMm: '',
+  rating: 0,
+  buddies: '',
+  highlights: '',
+}
+
+function inputStyle(extra?: React.CSSProperties): React.CSSProperties {
+  return {
+    width: '100%',
+    background: 'var(--sand-50)',
+    border: '1.5px solid var(--border)',
+    borderRadius: '10px',
+    padding: '8px 12px',
+    fontSize: '14px',
+    color: 'var(--text)',
+    outline: 'none',
+    ...extra,
+  }
+}
+
+function labelStyle(): React.CSSProperties {
+  return {
+    display: 'block',
+    fontSize: '11px',
+    fontWeight: 600,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase' as const,
+    color: 'var(--text-3)',
+    marginBottom: '5px',
+  }
+}
+
+function sectionHeadingStyle(): React.CSSProperties {
+  return {
+    fontSize: '11px',
+    fontWeight: 700,
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase' as const,
+    color: 'var(--ocean-600)',
+    marginBottom: '12px',
+    paddingBottom: '6px',
+    borderBottom: '1px solid var(--border)',
+  }
+}
+
+interface SpotSuggestion { id: string; name: string; slug: string; region: string }
+
+interface LogSessionModalProps {
+  onClose: () => void
+  onSuccess: () => void
+  initialData?: Partial<FormState>
+}
+
+function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalProps) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, ...initialData })
+  const [submitError, setSubmitError] = useState('')
+
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState<SpotSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const comboboxRef = useRef<HTMLDivElement>(null)
+
+  // Auto-fill state
+  const [autoFilling, setAutoFilling] = useState(false)
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set())
+
+  const set = (field: keyof FormState, value: string | number) => {
+    setAutoFilledFields((prev) => { const n = new Set(prev); n.delete(field as string); return n })
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Debounced spot search
+  const handleSpotInput = useCallback((value: string) => {
+    setForm((prev) => ({ ...prev, spotName: value }))
+    setSelectedSlug(null)
+    setAutoFilledFields(new Set())
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    if (value.trim().length < 2) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setIsSearching(true)
+      try {
+        const res = await fetch(`/api/spots?q=${encodeURIComponent(value.trim())}`)
+        const spots: SpotSuggestion[] = await res.json()
+        setSuggestions(spots.slice(0, 8))
+        setShowSuggestions(spots.length > 0)
+      } catch {
+        setSuggestions([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 280)
+  }, [])
+
+  // Pick a spot from dropdown
+  const selectSuggestion = (spot: SpotSuggestion) => {
+    setForm((prev) => ({ ...prev, spotName: spot.name, region: spot.region }))
+    setSelectedSlug(spot.slug)
+    setSuggestions([])
+    setShowSuggestions(false)
+  }
+
+  // Auto-fill conditions from forecast when slug + date are set
+  useEffect(() => {
+    if (!selectedSlug || !form.sessionDate) return
+
+    const today = new Date().toISOString().split('T')[0]
+    const sevenDaysOut = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+    if (form.sessionDate > sevenDaysOut) return  // outside forecast window
+
+    let cancelled = false
+    setAutoFilling(true)
+
+    fetch(`/api/forecast/${selectedSlug}`)
+      .then((r) => r.json())
+      .then((data: { forecast?: Array<{ date: string; hours: Array<{ time: string; waveHeight: number; swellPeriod: number; wind: { speed: number; directionLabel: string }; waterTemp: number | null }> }> }) => {
+        if (cancelled) return
+
+        const targetDay = data.forecast?.find((d) => d.date === form.sessionDate)
+        if (!targetDay?.hours.length) return
+
+        // Pick best hour: noon for future days, nearest to now for today
+        let hour = targetDay.hours[Math.floor(targetDay.hours.length / 2)]
+        if (form.sessionDate === today) {
+          const now = new Date()
+          hour = targetDay.hours.reduce((best, h) => {
+            const diff = Math.abs(new Date(h.time).getTime() - now.getTime())
+            const bestDiff = Math.abs(new Date(best.time).getTime() - now.getTime())
+            return diff < bestDiff ? h : best
+          })
+        }
+
+        // Find a noon hour if possible (index 12 for hourly data)
+        const noonHour = targetDay.hours.find((h) => h.time.includes('T12:'))
+        if (noonHour && form.sessionDate !== today) hour = noonHour
+
+        const waveHeightFt = String(Math.round(hour.waveHeight * 3.281 * 2) / 2)
+        const wavePeriod = String(Math.round(hour.swellPeriod))
+        const windSpeed = String(Math.round(hour.wind.speed))
+        const windDir = hour.wind.directionLabel
+        const waterTempC = hour.waterTemp !== null ? String(Math.round(hour.waterTemp * 2) / 2) : ''
+
+        setForm((prev) => ({
+          ...prev,
+          waveHeightFt,
+          wavePeriod,
+          windSpeed,
+          windDir,
+          waterTempC,
+        }))
+
+        const filled = new Set(['waveHeightFt', 'wavePeriod', 'windSpeed', 'windDir'])
+        if (waterTempC) filled.add('waterTempC')
+        setAutoFilledFields(filled)
+      })
+      .catch(() => {/* silently fail — user can enter manually */})
+      .finally(() => { if (!cancelled) setAutoFilling(false) })
+
+    return () => { cancelled = true }
+  }, [selectedSlug, form.sessionDate])
+
+  const mutation = useMutation({
+    mutationFn: async (data: FormState) => {
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error ?? 'Failed to log session')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['surf-sessions'] })
+      onSuccess()
+      onClose()
+    },
+    onError: (err: Error) => {
+      setSubmitError(err.message)
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitError('')
+    if (!form.spotName.trim()) {
+      setSubmitError('Spot name is required.')
+      return
+    }
+    mutation.mutate(form)
+  }
+
+  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) onClose()
+  }
+
+  // Pill badge shown on auto-filled labels
+  const AutoBadge = () => (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '3px',
+      background: '#eff6ff', color: '#1d4ed8',
+      fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em',
+      borderRadius: '4px', padding: '1px 5px', marginLeft: '6px',
+      verticalAlign: 'middle',
+    }}>
+      ⚡ AUTO
+    </span>
+  )
+
+  return (
+    <div
+      onClick={handleBackdrop}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(10,20,40,0.45)',
+        backdropFilter: 'blur(3px)',
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+      }}
+    >
+      <div
+        style={{
+          background: 'white',
+          borderRadius: '20px',
+          border: '1px solid var(--border)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+          width: '100%',
+          maxWidth: '520px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Modal header */}
+        <div
+          style={{
+            padding: '20px 24px 16px',
+            borderBottom: '1px solid var(--border)',
+            position: 'sticky',
+            top: 0,
+            background: 'white',
+            borderRadius: '20px 20px 0 0',
+            zIndex: 1,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ocean-600)', marginBottom: '3px' }}>
+                Surf Log Entry
+              </p>
+              <h2
+                style={{
+                  fontFamily: 'Playfair Display, serif',
+                  fontSize: '22px',
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                  margin: 0,
+                }}
+              >
+                Log a Session
+              </h2>
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'var(--sand-100)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '16px',
+                color: 'var(--text-3)',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+          {/* Section 1: Location & Date */}
+          <div>
+            <p style={sectionHeadingStyle()}>① Location &amp; Date</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+
+              {/* Spot autocomplete */}
+              <div style={{ gridColumn: '1 / -1' }} ref={comboboxRef}>
+                <label style={labelStyle()}>Spot name *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={form.spotName}
+                    onChange={(e) => handleSpotInput(e.target.value)}
+                    onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                    placeholder="Search for a spot… e.g. Santa Monica"
+                    required
+                    autoComplete="off"
+                    style={{
+                      ...inputStyle(),
+                      paddingRight: isSearching ? '36px' : '12px',
+                      border: selectedSlug ? '1.5px solid var(--ocean-600)' : '1.5px solid var(--border)',
+                    }}
+                  />
+                  {/* Search spinner */}
+                  {isSearching && (
+                    <div style={{
+                      position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                      width: '14px', height: '14px',
+                      border: '2px solid var(--sand-200)',
+                      borderTopColor: 'var(--ocean-600)',
+                      borderRadius: '50%',
+                      animation: 'spin 0.7s linear infinite',
+                    }} />
+                  )}
+                  {/* Checkmark when confirmed */}
+                  {selectedSlug && !isSearching && (
+                    <div style={{
+                      position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                      color: 'var(--ocean-600)', fontSize: '14px', fontWeight: 700,
+                    }}>✓</div>
+                  )}
+
+                  {/* Dropdown */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div style={{
+                      position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                      background: 'white',
+                      border: '1.5px solid var(--border)',
+                      borderRadius: '12px',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                      zIndex: 100,
+                      overflow: 'hidden',
+                    }}>
+                      {suggestions.map((spot, i) => (
+                        <button
+                          key={spot.id}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); selectSuggestion(spot) }}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            width: '100%',
+                            padding: '10px 14px',
+                            background: 'none',
+                            border: 'none',
+                            borderTop: i > 0 ? '1px solid var(--sand-100)' : 'none',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--sand-50)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                        >
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
+                            {spot.name}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '1px' }}>
+                            {spot.region}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {selectedSlug && (
+                  <p style={{ fontSize: '11px', color: 'var(--ocean-600)', marginTop: '4px' }}>
+                    ⚡ Conditions will be auto-filled from forecast data
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label style={labelStyle()}>Date</label>
+                <input
+                  type="date"
+                  value={form.sessionDate}
+                  onChange={(e) => set('sessionDate', e.target.value)}
+                  required
+                  style={inputStyle()}
+                />
+              </div>
+              <div>
+                <label style={labelStyle()}>
+                  Duration in water
+                  {form.duration ? ` — ${formatDuration(parseInt(form.duration))}` : ''}
+                </label>
+                <input
+                  type="number"
+                  value={form.duration}
+                  onChange={(e) => set('duration', e.target.value)}
+                  placeholder="minutes (e.g. 120)"
+                  min={1}
+                  style={inputStyle()}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Conditions */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <p style={{ ...sectionHeadingStyle(), margin: 0, flex: 1 }}>② Conditions</p>
+              {autoFilling && (
+                <span style={{ fontSize: '11px', color: 'var(--ocean-600)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{
+                    display: 'inline-block', width: '10px', height: '10px',
+                    border: '2px solid #bfdbfe', borderTopColor: 'var(--ocean-600)',
+                    borderRadius: '50%', animation: 'spin 0.7s linear infinite',
+                  }} />
+                  Fetching conditions…
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={labelStyle()}>
+                  Wave height (ft)
+                  {autoFilledFields.has('waveHeightFt') && <AutoBadge />}
+                </label>
+                <input
+                  type="number"
+                  value={form.waveHeightFt}
+                  onChange={(e) => set('waveHeightFt', e.target.value)}
+                  placeholder="e.g. 6"
+                  min={0}
+                  step={0.5}
+                  style={{
+                    ...inputStyle(),
+                    borderColor: autoFilledFields.has('waveHeightFt') ? '#93c5fd' : undefined,
+                    background: autoFilledFields.has('waveHeightFt') ? '#eff6ff' : undefined,
+                  }}
+                />
+              </div>
+              <div>
+                <label style={labelStyle()}>
+                  Wave period (s)
+                  {autoFilledFields.has('wavePeriod') && <AutoBadge />}
+                </label>
+                <input
+                  type="number"
+                  value={form.wavePeriod}
+                  onChange={(e) => set('wavePeriod', e.target.value)}
+                  placeholder="e.g. 14"
+                  min={1}
+                  style={{
+                    ...inputStyle(),
+                    borderColor: autoFilledFields.has('wavePeriod') ? '#93c5fd' : undefined,
+                    background: autoFilledFields.has('wavePeriod') ? '#eff6ff' : undefined,
+                  }}
+                />
+              </div>
+              <div>
+                <label style={labelStyle()}>
+                  Wind speed (km/h)
+                  {autoFilledFields.has('windSpeed') && <AutoBadge />}
+                </label>
+                <input
+                  type="number"
+                  value={form.windSpeed}
+                  onChange={(e) => set('windSpeed', e.target.value)}
+                  placeholder="e.g. 15"
+                  min={0}
+                  style={{
+                    ...inputStyle(),
+                    borderColor: autoFilledFields.has('windSpeed') ? '#93c5fd' : undefined,
+                    background: autoFilledFields.has('windSpeed') ? '#eff6ff' : undefined,
+                  }}
+                />
+              </div>
+              <div>
+                <label style={labelStyle()}>
+                  Wind direction
+                  {autoFilledFields.has('windDir') && <AutoBadge />}
+                </label>
+                <select
+                  value={form.windDir}
+                  onChange={(e) => set('windDir', e.target.value)}
+                  style={{
+                    ...inputStyle({ appearance: 'auto' }),
+                    borderColor: autoFilledFields.has('windDir') ? '#93c5fd' : undefined,
+                    background: autoFilledFields.has('windDir') ? '#eff6ff' : undefined,
+                  }}
+                >
+                  <option value="">— select —</option>
+                  {WIND_DIRS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle()}>
+                  Water temp (°C)
+                  {autoFilledFields.has('waterTempC') && <AutoBadge />}
+                </label>
+                <input
+                  type="number"
+                  value={form.waterTempC}
+                  onChange={(e) => set('waterTempC', e.target.value)}
+                  placeholder="e.g. 14"
+                  step={0.5}
+                  style={{
+                    ...inputStyle(),
+                    borderColor: autoFilledFields.has('waterTempC') ? '#93c5fd' : undefined,
+                    background: autoFilledFields.has('waterTempC') ? '#eff6ff' : undefined,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Equipment */}
+          <div>
+            <p style={sectionHeadingStyle()}>③ Equipment</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={labelStyle()}>Board type</label>
+                <select
+                  value={form.boardType}
+                  onChange={(e) => set('boardType', e.target.value)}
+                  style={inputStyle({ appearance: 'auto' })}
+                >
+                  <option value="">— select —</option>
+                  {BOARD_TYPES.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle()}>Wetsuit</label>
+                <select
+                  value={form.wetsuitMm}
+                  onChange={(e) => set('wetsuitMm', e.target.value)}
+                  style={inputStyle({ appearance: 'auto' })}
+                >
+                  <option value="">— select —</option>
+                  {WETSUIT_OPTIONS.map((w) => (
+                    <option key={w} value={w}>{w}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Session */}
+          <div>
+            <p style={sectionHeadingStyle()}>④ Session</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Rating */}
+              <div>
+                <label style={labelStyle()}>Rating</label>
+                <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => set('rating', form.rating === n ? 0 : n)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px 4px',
+                        fontSize: '22px',
+                        opacity: n <= form.rating ? 1 : 0.2,
+                        transition: 'opacity 0.15s, transform 0.15s',
+                        transform: n <= form.rating ? 'scale(1.1)' : 'scale(1)',
+                      }}
+                      title={`${n} star${n !== 1 ? 's' : ''}`}
+                    >
+                      🌊
+                    </button>
+                  ))}
+                  {form.rating > 0 && (
+                    <span style={{ fontSize: '13px', color: 'var(--text-3)', alignSelf: 'center', marginLeft: '4px' }}>
+                      {['', 'Poor', 'Fair', 'Good', 'Great', 'Epic!'][form.rating]}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Buddies */}
+              <div>
+                <label style={labelStyle()}>Surfed with</label>
+                <input
+                  type="text"
+                  value={form.buddies}
+                  onChange={(e) => set('buddies', e.target.value)}
+                  placeholder="e.g. Jake, Sarah"
+                  style={inputStyle()}
+                />
+              </div>
+
+              {/* Highlights */}
+              <div>
+                <label style={labelStyle()}>Highlights / Notes</label>
+                <textarea
+                  value={form.highlights}
+                  onChange={(e) => set('highlights', e.target.value)}
+                  placeholder="Best sets, conditions notes, anything memorable…"
+                  rows={3}
+                  style={{
+                    ...inputStyle(),
+                    resize: 'vertical',
+                    fontFamily: 'DM Sans, sans-serif',
+                    minHeight: '72px',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Error */}
+          {submitError && (
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fca5a5',
+                color: '#b91c1c',
+                borderRadius: '10px',
+                padding: '10px 14px',
+                fontSize: '13px',
+              }}
+            >
+              {submitError}
+            </div>
+          )}
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            style={{
+              background: 'var(--ocean-600)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '12px 24px',
+              fontSize: '14px',
+              fontWeight: 700,
+              cursor: mutation.isPending ? 'not-allowed' : 'pointer',
+              opacity: mutation.isPending ? 0.6 : 1,
+              width: '100%',
+              transition: 'opacity 0.2s',
+              fontFamily: 'DM Sans, sans-serif',
+            }}
+          >
+            {mutation.isPending ? 'Logging session…' : '🌊 Log Session'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Session Card ─────────────────────────────────────────────────────────────
+
+interface SessionCardProps {
+  session: SurfSession
+  index: number
+  total: number
+  onDelete: (id: string) => void
+  isDeleting: boolean
+}
+
+function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCardProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const entryNumber = total - index
+
+  const dateObj = parseISO(session.sessionDate)
+  const dateLabel = format(dateObj, 'MMMM d, yyyy')
+
+  return (
+    <div
+      style={{
+        background: 'white',
+        border: '1px solid var(--border)',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
+        transition: 'box-shadow 0.2s',
+      }}
+    >
+      {/* Card top bar — entry number + rating */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+          background: 'var(--sand-50)',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div
+            style={{
+              background: 'var(--ocean-600)',
+              color: 'white',
+              borderRadius: '8px',
+              padding: '3px 9px',
+              fontSize: '12px',
+              fontWeight: 700,
+              fontFamily: 'DM Sans, sans-serif',
+              letterSpacing: '0.02em',
+            }}
+          >
+            #{entryNumber}
+          </div>
+          <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>{dateLabel}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {session.rating !== null && session.rating > 0 && (
+            <WaveRating value={session.rating} />
+          )}
+          {confirmDelete ? (
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>Delete?</span>
+              <button
+                onClick={() => onDelete(session.id)}
+                disabled={isDeleting}
+                style={{
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '3px 8px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                style={{
+                  background: 'var(--sand-200)',
+                  color: 'var(--text-2)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '3px 8px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              title="Delete session"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-3)',
+                fontSize: '14px',
+                padding: '2px 4px',
+                borderRadius: '4px',
+                transition: 'color 0.15s',
+              }}
+            >
+              🗑
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Card body */}
+      <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Spot + duration */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+          <div>
+            <h3
+              style={{
+                fontFamily: 'Playfair Display, serif',
+                fontSize: '18px',
+                fontWeight: 700,
+                color: 'var(--text)',
+                margin: 0,
+                lineHeight: 1.2,
+              }}
+            >
+              {session.spotName}
+            </h3>
+            {session.region && (
+              <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>
+                📍 {session.region}
+              </p>
+            )}
+          </div>
+          {session.duration !== null && (
+            <span
+              style={{
+                background: 'var(--ocean-100)',
+                color: 'var(--ocean-700)',
+                borderRadius: '20px',
+                padding: '3px 10px',
+                fontSize: '12px',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              ⏱ {formatDuration(session.duration)}
+            </span>
+          )}
+        </div>
+
+        {/* Conditions row */}
+        {(session.waveHeightFt !== null || session.windSpeed !== null || session.waterTempC !== null) && (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            {session.waveHeightFt !== null && (
+              <Chip>
+                🌊 {session.waveHeightFt}ft
+                {session.wavePeriod !== null ? ` @ ${session.wavePeriod}s` : ''}
+              </Chip>
+            )}
+            {session.windSpeed !== null && (
+              <Chip>
+                💨 {session.windSpeed} km/h{session.windDir ? ` ${session.windDir}` : ''}
+              </Chip>
+            )}
+            {session.waterTempC !== null && (
+              <Chip>🌡 {session.waterTempC}°C</Chip>
+            )}
+          </div>
+        )}
+
+        {/* Equipment row */}
+        {(session.boardType || session.wetsuitMm) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {session.boardType && <Chip variant="sand">🏄 {session.boardType}</Chip>}
+            {session.wetsuitMm && <Chip variant="sand">🤿 {session.wetsuitMm}</Chip>}
+          </div>
+        )}
+
+        {/* Highlights */}
+        {session.highlights && (
+          <p
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-2)',
+              lineHeight: 1.55,
+              margin: 0,
+              background: 'var(--sand-50)',
+              borderRadius: '8px',
+              padding: '8px 10px',
+              borderLeft: '3px solid var(--ocean-300)',
+            }}
+          >
+            {session.highlights}
+          </p>
+        )}
+
+        {/* Buddies */}
+        {session.buddies && (
+          <p style={{ fontSize: '12px', color: 'var(--text-3)', margin: 0 }}>
+            🤙 With {session.buddies}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Chip({
+  children,
+  variant = 'ocean',
+}: {
+  children: React.ReactNode
+  variant?: 'ocean' | 'sand'
+}) {
+  return (
+    <span
+      style={{
+        background: variant === 'ocean' ? 'var(--ocean-50)' : 'var(--sand-100)',
+        color: variant === 'ocean' ? 'var(--ocean-700)' : 'var(--text-2)',
+        border: `1px solid ${variant === 'ocean' ? 'var(--ocean-200)' : 'var(--sand-200)'}`,
+        borderRadius: '20px',
+        padding: '3px 10px',
+        fontSize: '12px',
+        fontWeight: 500,
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+function SessionsPageInner() {
+  const { data: session, isPending } = useSession()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [successBanner, setSuccessBanner] = useState(false)
+
+  // Pre-fill from ?spot=&region=&slug= when coming from a spot page
+  const prefill: Partial<FormState> = {
+    spotName: searchParams.get('spot') ?? '',
+    region: searchParams.get('region') ?? '',
+  }
+  const hasPrefill = !!searchParams.get('spot')
+
+  useEffect(() => {
+    if (hasPrefill && !isPending && session?.user) setModalOpen(true)
+  }, [hasPrefill, isPending, session?.user])
+
+  useEffect(() => {
+    if (!isPending && !session?.user) router.push('/login')
+  }, [session, isPending, router])
+
+  const { data: sessions = [], isLoading } = useQuery<SurfSession[]>({
+    queryKey: ['surf-sessions'],
+    queryFn: () => fetch('/api/sessions').then((r) => r.json()),
+    enabled: !!session?.user,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['surf-sessions'] })
+    },
+  })
+
+  const handleLogSuccess = () => {
+    setSuccessBanner(true)
+    setTimeout(() => setSuccessBanner(false), 3000)
+  }
+
+  if (isPending) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          height: '64px',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--sand-50)',
+        }}
+      >
+        <div
+          style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            border: '2px solid var(--ocean-500)',
+            borderTopColor: 'transparent',
+            animation: 'spin 0.7s linear infinite',
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (!session?.user) return null
+
+  return (
+    <>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 640px) {
+          .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+      `}</style>
+
+      <div style={{ minHeight: '100vh', background: 'var(--sand-50)' }}>
+        {/* Success banner */}
+        {successBanner && (
+          <div
+            style={{
+              position: 'fixed',
+              top: '16px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: '#16a34a',
+              color: 'white',
+              borderRadius: '12px',
+              padding: '10px 20px',
+              fontSize: '14px',
+              fontWeight: 600,
+              zIndex: 100,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            }}
+          >
+            🌊 Session logged!
+          </div>
+        )}
+
+        {/* Page header */}
+        <div style={{ background: 'white', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ maxWidth: '720px', margin: '0 auto', padding: '28px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px' }}>
+              <div>
+                <p
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: 'var(--ocean-600)',
+                    marginBottom: '4px',
+                  }}
+                >
+                  Personal Surf Journal
+                </p>
+                <h1
+                  style={{
+                    fontFamily: 'Playfair Display, serif',
+                    fontSize: '30px',
+                    fontWeight: 700,
+                    color: 'var(--text)',
+                    margin: 0,
+                    lineHeight: 1.15,
+                  }}
+                >
+                  Surf Log
+                </h1>
+                <p style={{ fontSize: '14px', color: 'var(--text-3)', marginTop: '4px' }}>
+                  {sessions.length === 0
+                    ? 'Start logging your sessions'
+                    : `${sessions.length} session${sessions.length !== 1 ? 's' : ''} logged`}
+                </p>
+              </div>
+              <button
+                onClick={() => setModalOpen(true)}
+                style={{
+                  background: 'var(--ocean-600)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '10px 18px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  fontFamily: 'DM Sans, sans-serif',
+                  transition: 'opacity 0.2s',
+                  flexShrink: 0,
+                }}
+              >
+                + Log Session
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ maxWidth: '720px', margin: '0 auto', padding: '24px 20px' }}>
+          {isLoading ? (
+            // Skeleton
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    height: '130px',
+                    borderRadius: '16px',
+                    background: 'var(--sand-100)',
+                    animation: 'pulse 1.5s ease-in-out infinite',
+                  }}
+                />
+              ))}
+            </div>
+          ) : sessions.length === 0 ? (
+            // Empty state
+            <div
+              style={{
+                background: 'white',
+                border: '2px dashed var(--border)',
+                borderRadius: '20px',
+                padding: '64px 24px',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📔</div>
+              <h2
+                style={{
+                  fontFamily: 'Playfair Display, serif',
+                  fontSize: '22px',
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                  marginBottom: '8px',
+                }}
+              >
+                Your log is empty
+              </h2>
+              <p style={{ fontSize: '14px', color: 'var(--text-3)', marginBottom: '24px', maxWidth: '320px', margin: '0 auto 24px' }}>
+                Every great surfer tracks their sessions. Log your first one to start building your surf history.
+              </p>
+              <button
+                onClick={() => setModalOpen(true)}
+                style={{
+                  background: 'var(--ocean-600)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '12px 28px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontFamily: 'DM Sans, sans-serif',
+                }}
+              >
+                Log your first session
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Stats */}
+              <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+                {(
+                  [
+                    { label: 'Sessions', value: sessions.length.toString(), icon: '📔' },
+                    {
+                      label: 'Hours in water',
+                      value: ((sessions.reduce((a, s) => a + (s.duration ?? 0), 0)) / 60).toFixed(1),
+                      icon: '⏱',
+                    },
+                    {
+                      label: 'Fav break',
+                      value: (() => {
+                        const counts = sessions.reduce<Record<string, number>>((a, s) => {
+                          a[s.spotName] = (a[s.spotName] ?? 0) + 1
+                          return a
+                        }, {})
+                        return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
+                      })(),
+                      icon: '📍',
+                    },
+                    {
+                      label: 'Fav board',
+                      value: (() => {
+                        const counts = sessions.reduce<Record<string, number>>((a, s) => {
+                          if (s.boardType) a[s.boardType] = (a[s.boardType] ?? 0) + 1
+                          return a
+                        }, {})
+                        return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
+                      })(),
+                      icon: '🏄',
+                    },
+                  ] as { label: string; value: string; icon: string }[]
+                ).map((stat) => (
+                  <div
+                    key={stat.label}
+                    style={{
+                      background: 'white',
+                      border: '1px solid var(--border)',
+                      borderRadius: '14px',
+                      padding: '14px 12px',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: '18px', marginBottom: '3px' }}>{stat.icon}</div>
+                    <div
+                      style={{
+                        fontSize: '16px',
+                        fontWeight: 700,
+                        color: 'var(--text)',
+                        fontFamily: 'Playfair Display, serif',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {stat.value}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        color: 'var(--text-3)',
+                        marginTop: '1px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.07em',
+                      }}
+                    >
+                      {stat.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Logbook divider */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+                <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+                  Log entries
+                </span>
+                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+              </div>
+
+              {/* Session cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {sessions.map((s, i) => (
+                  <SessionCard
+                    key={s.id}
+                    session={s}
+                    index={i}
+                    total={sessions.length}
+                    onDelete={(id) => deleteMutation.mutate(id)}
+                    isDeleting={deleteMutation.isPending}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Modal */}
+      {modalOpen && (
+        <LogSessionModal
+          onClose={() => setModalOpen(false)}
+          onSuccess={handleLogSuccess}
+          initialData={prefill}
+        />
+      )}
+    </>
+  )
+}
+
+export default function SessionsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-64 items-center justify-center" style={{ background: 'var(--sand-50)' }}>
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--ocean-500)] border-t-transparent" />
+      </div>
+    }>
+      <SessionsPageInner />
+    </Suspense>
+  )
+}
