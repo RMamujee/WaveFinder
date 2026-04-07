@@ -26,16 +26,21 @@ export async function GET(
     spot.noaaBuoyId ? fetchBuoyData(spot.noaaBuoyId) : Promise.resolve(null),
   ])
 
-  if (marineResult.status === 'rejected' || windResult.status === 'rejected') {
+  if (marineResult.status === 'rejected') {
     return NextResponse.json(
-      { error: 'Failed to fetch forecast data' },
+      { error: 'Failed to fetch wave forecast data' },
       { status: 502 }
     )
   }
 
+  // Wind data is best-effort — if unavailable, forecast still loads without wind ratings
+  const windData = windResult.status === 'fulfilled'
+    ? windResult.value
+    : { hourly: { time: [], wind_speed_10m: [], wind_direction_10m: [], wind_gusts_10m: [] } }
+
   const hours = mergeForecastData(
     marineResult.value,
-    windResult.value,
+    windData,
     spot.facingDirection
   )
 

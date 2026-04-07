@@ -1,6 +1,12 @@
 const MARINE_BASE = 'https://marine-api.open-meteo.com/v1/marine'
 const WEATHER_BASE = 'https://api.open-meteo.com/v1/forecast'
 
+// Some CDN/Cloudflare configs block headless requests without a UA
+const HEADERS = {
+  'User-Agent': 'WaveFinder/1.0 surf-forecast-app',
+  'Accept': 'application/json',
+}
+
 export interface OpenMeteoMarineResponse {
   hourly: {
     time: string[]
@@ -55,14 +61,14 @@ export async function fetchCurrentConditions(
     })
 
     const [marineRes, windRes] = await Promise.all([
-      fetch(`${MARINE_BASE}?${params}`, { next: { revalidate: 1800 } }),
+      fetch(`${MARINE_BASE}?${params}`, { next: { revalidate: 1800 }, headers: HEADERS }),
       fetch(`${WEATHER_BASE}?${new URLSearchParams({
         latitude: lat.toString(),
         longitude: lng.toString(),
         current: 'wind_speed_10m,wind_direction_10m',
         wind_speed_unit: 'kmh',
         timezone: 'auto',
-      })}`, { next: { revalidate: 1800 } }),
+      })}`, { next: { revalidate: 1800 }, headers: HEADERS }),
     ])
 
     if (!marineRes.ok) return null
@@ -109,6 +115,7 @@ export async function fetchMarineForecast(
 
   const res = await fetch(`${MARINE_BASE}?${params}`, {
     next: { revalidate: 3600 },
+    headers: HEADERS,
   })
 
   if (!res.ok) {
@@ -155,37 +162,50 @@ export async function fetchWindForecast(
     timezone: 'auto',
   })
 
-  const res = await fetch(`${WEATHER_BASE}?${params}`, {
-    next: { revalidate: 3600 },
-  })
-
-  if (!res.ok) {
-    throw new Error(`Open-Meteo weather API error: ${res.status} ${res.statusText}`)
-  }
-
-  const data: OpenMeteoWindResponse = await res.json()
-
-  // UV index — optional, silently skipped if unavailable
   try {
-    const uvParams = new URLSearchParams({
-      latitude: lat.toString(),
-      longitude: lng.toString(),
-      hourly: 'uv_index',
-      forecast_days: '7',
-      timezone: 'auto',
-    })
-    const uvRes = await fetch(`${WEATHER_BASE}?${uvParams}`, {
+    const res = await fetch(`${WEATHER_BASE}?${params}`, {
       next: { revalidate: 3600 },
+      headers: HEADERS,
     })
-    if (uvRes.ok) {
-      const uvData = await uvRes.json()
-      if (Array.isArray(uvData?.hourly?.uv_index)) {
-        data.hourly.uv_index = uvData.hourly.uv_index
-      }
-    }
-  } catch {
-    // UV unavailable for this location
-  }
 
-  return data
+    if (!res.ok) throw new Error(`status ${res.status}`)
+
+    const text = await res.text()
+    const data: OpenMeteoWindResponse = JSON.parse(text)
+
+    // UV index — optional, silently skipped if unavailable
+    try {
+      const uvParams = new URLSearchParams({
+        latitude: lat.toString(),
+        longitude: lng.toString(),
+        hourly: 'uv_index',
+        forecast_days: '7',
+        timezone: 'auto',
+      })
+      const uvRes = await fetch(`${WEATHER_BASE}?${uvParams}`, {
+        next: { revalidate: 3600 },
+        headers: HEADERS,
+      })
+      if (uvRes.ok) {
+        const uvText = await uvRes.text()
+        const uvData = JSON.parse(uvText)
+        if (Array.isArray(uvData?.hourly?.uv_index)) {
+          data.hourly.uv_index = uvData.hourly.uv_index
+        }
+      }
+    } catch { /* UV unavailable */ }
+
+    return data
+  } catch {
+    // Wind API unavailable — return empty structure so forecast still loads
+    // Wind wave direction from marine API will be used as fallback in merge
+    return {
+      hourly: {
+        time: [],
+        wind_speed_10m: [],
+        wind_direction_10m: [],
+        wind_gusts_10m: [],
+      },
+    }
+  }
 }
