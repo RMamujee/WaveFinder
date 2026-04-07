@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+import { LogSessionButton } from '@/components/sessions/LogSessionButton'
 
 export default async function HomePage() {
   const spotCount = await prisma.surfSpot.count().catch(() => 0)
@@ -133,6 +134,7 @@ export default async function HomePage() {
               >
                 🗺️ Live Map
               </Link>
+              <LogSessionButton />
             </div>
 
             {/* Stats row */}
