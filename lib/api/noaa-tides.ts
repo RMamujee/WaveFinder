@@ -2,14 +2,13 @@ import type { TidePoint } from '@/types/forecast'
 
 const NOAA_TIDES_BASE = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter'
 
-interface NOAATidePrediction {
-  t: string   // time "YYYY-MM-DD HH:MM"
-  v: string   // value in meters
-  type: 'H' | 'L'
+interface NOAATideHourly {
+  t: string  // "YYYY-MM-DD HH:MM"
+  v: string  // height in meters
 }
 
 interface NOAATidesResponse {
-  predictions?: NOAATidePrediction[]
+  predictions?: NOAATideHourly[]
   error?: { message: string }
 }
 
@@ -22,20 +21,22 @@ function formatDate(d: Date): string {
 
 export async function fetchTidePredictions(stationId: string): Promise<TidePoint[]> {
   const today = new Date()
-  const twoDaysLater = new Date(today)
-  twoDaysLater.setDate(today.getDate() + 2)
+  const end = new Date(today)
+  end.setDate(today.getDate() + 7)
 
+  // Fetch hourly predictions for 7 days — gives a smooth curve (168 points)
+  // and enough data to filter by any day in the forecast window.
   const params = new URLSearchParams({
     begin_date: formatDate(today),
-    end_date: formatDate(twoDaysLater),
-    station: stationId,
-    product: 'predictions',
-    datum: 'MLLW',
-    time_zone: 'lst_ldt',
-    interval: 'hilo',
-    units: 'metric',
+    end_date:   formatDate(end),
+    station:    stationId,
+    product:    'predictions',
+    datum:      'MLLW',
+    time_zone:  'lst_ldt',
+    interval:   'h',          // hourly — smooth curve
+    units:      'metric',
     application: 'surf_forecast_app',
-    format: 'json',
+    format:     'json',
   })
 
   const res = await fetch(`${NOAA_TIDES_BASE}?${params}`, {
@@ -45,12 +46,23 @@ export async function fetchTidePredictions(stationId: string): Promise<TidePoint
   if (!res.ok) return []
 
   const data: NOAATidesResponse = await res.json()
-
   if (!data.predictions || data.error) return []
 
-  return data.predictions.map((p) => ({
-    time: new Date(p.t).toISOString(),
-    height: parseFloat(p.v),
-    type: p.type,
+  const raw = data.predictions.map((p) => ({
+    // Keep time as local "YYYY-MM-DDTHH:MM" so date filters work correctly
+    time:   p.t.replace(' ', 'T'),
+    height: Math.round(parseFloat(p.v) * 100) / 100,
+    type:   null as 'H' | 'L' | null,
   }))
+
+  // Detect local maxima (High) and minima (Low) from the hourly series
+  for (let i = 1; i < raw.length - 1; i++) {
+    const prev = raw[i - 1].height
+    const curr = raw[i].height
+    const next = raw[i + 1].height
+    if (curr > prev && curr > next) raw[i].type = 'H'
+    else if (curr < prev && curr < next) raw[i].type = 'L'
+  }
+
+  return raw
 }
