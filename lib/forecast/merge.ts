@@ -1,11 +1,13 @@
 import type { ForecastDay, ForecastHour } from '@/types/forecast'
 import type { OpenMeteoMarineResponse, OpenMeteoWindResponse } from '@/lib/api/open-meteo'
 import { degreesToCompass, rateSurfConditions, computeWavePower } from './rating'
+import { computeUVIndex } from './solar-uv'
 
 export function mergeForecastData(
   marine: OpenMeteoMarineResponse,
   wind: OpenMeteoWindResponse,
-  spotFacing: number
+  spotFacing: number,
+  lat: number
 ): ForecastHour[] {
   const { hourly: m } = marine
   const { hourly: w } = wind
@@ -19,10 +21,6 @@ export function mergeForecastData(
       dir: w.wind_direction_10m[i] ?? 0,
     })
   })
-
-  // Build UV index map by time
-  const uvMap = new Map<string, number>()
-  w.time.forEach((t, i) => { uvMap.set(t, w.uv_index?.[i] ?? 0) })
 
   return m.time.map((time, i) => {
     const rawWind = windMap.get(time) ?? { speed: 0, gust: 0, dir: 0 }
@@ -73,7 +71,7 @@ export function mergeForecastData(
       rating,
       ratingScore: score,
       wavePower: computeWavePower(waveHeight, swellPeriod),
-      uvIndex: uvMap.get(time) ?? 0,
+      uvIndex: computeUVIndex(lat, time),
       waterTemp: m.sea_surface_temperature?.[i] ?? null,
     }
   })

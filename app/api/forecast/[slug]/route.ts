@@ -41,7 +41,8 @@ export async function GET(
   const hours = mergeForecastData(
     marineResult.value,
     windData,
-    spot.facingDirection
+    spot.facingDirection,
+    spot.lat
   )
 
   const forecast = groupHoursByDay(hours)

@@ -29,7 +29,6 @@ export interface OpenMeteoWindResponse {
     wind_speed_10m: number[]
     wind_direction_10m: number[]
     wind_gusts_10m: number[]
-    uv_index?: number[]
   }
 }
 
@@ -165,12 +164,10 @@ export async function fetchWindForecast(
   lat: number,
   lng: number
 ): Promise<OpenMeteoWindResponse> {
-  // Include uv_index in the same request — a separate fetch silently fails too
-  // often on Vercel (Cloudflare blocks), leaving uvIndex = 0 for every hour.
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lng.toString(),
-    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index',
+    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m',
     wind_speed_unit: 'kmh',
     forecast_days: '7',
     timezone: 'auto',
