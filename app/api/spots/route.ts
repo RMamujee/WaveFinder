@@ -5,6 +5,7 @@ import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
 
 export const revalidate = 1800
+export const maxDuration = 60
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)

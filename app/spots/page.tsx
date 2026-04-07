@@ -40,19 +40,35 @@ export default function SpotsPage() {
   const [quickSearch, setQuickSearch] = useState('')
   const [view, setView] = useState<ViewMode>('map')
 
-  const params = new URLSearchParams()
   const effectiveSearch = search || quickSearch
-  if (effectiveSearch) params.set('q', effectiveSearch)
-  if (difficulty) params.set('difficulty', difficulty)
 
-  // Always fetch with conditions for the map — buoy batch is fast (~5 unique IDs)
-  params.set('withConditions', 'true')
+  const baseParams = new URLSearchParams()
+  if (effectiveSearch) baseParams.set('q', effectiveSearch)
+  if (difficulty) baseParams.set('difficulty', difficulty)
 
-  const { data: spots = [], isLoading } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots', effectiveSearch, difficulty, 'withConditions'],
-    queryFn: () => fetch(`/api/spots?${params}`).then((r) => r.json()),
-    staleTime: 15 * 60 * 1000,
+  // Stage 1: load spots from DB instantly (no external API calls)
+  const { data: baseSpots = [], isLoading } = useQuery<SpotWithRating[]>({
+    queryKey: ['spots', effectiveSearch, difficulty],
+    queryFn: () => fetch(`/api/spots?${baseParams}`).then((r) => r.json()),
+    staleTime: 30 * 60 * 1000,
   })
+
+  // Stage 2: enrich with live conditions in background (separate slower request)
+  const condParams = new URLSearchParams(baseParams)
+  condParams.set('withConditions', 'true')
+  const { data: conditionData } = useQuery<SpotWithRating[]>({
+    queryKey: ['spots-conditions', effectiveSearch, difficulty],
+    queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => r.json()),
+    staleTime: 15 * 60 * 1000,
+    enabled: baseSpots.length > 0,
+  })
+
+  // Merge: use base spots immediately, overlay conditions when available
+  const spots = useMemo(() => {
+    if (!conditionData) return baseSpots
+    const condMap = new Map(conditionData.map((s) => [s.id, s]))
+    return baseSpots.map((s) => ({ ...s, ...condMap.get(s.id) }))
+  }, [baseSpots, conditionData])
 
   // Center map on filtered region
   const mapCenter = useMemo(() => {
@@ -245,7 +261,18 @@ export default function SpotsPage() {
                 className="rounded-xl px-4 py-3 text-sm"
                 style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-2)' }}
               >
-                Loading live conditions…
+                Loading spots…
+              </div>
+            </div>
+          )}
+          {!isLoading && !conditionData && (
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[999]">
+              <div
+                className="rounded-xl px-4 py-2.5 text-xs flex items-center gap-2"
+                style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+              >
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-[var(--sand-200)] border-t-[var(--ocean-600)]" />
+                Fetching live conditions…
               </div>
             </div>
           )}
