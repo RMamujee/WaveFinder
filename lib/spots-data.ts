@@ -2,7 +2,18 @@
 // SoCal NDBC buoys: 46025 (Santa Monica), 46086 (San Clemente), 46221 (Santa Monica Bay),
 // 46222 (San Pedro), 46253 (WNW Santa Cruz Island), 46254 (W Santa Cruz Island)
 
-export const SURF_SPOTS_SEED = [
+import { EAST_COAST_SPOTS } from './spots/east-coast'
+import { HAWAII_GULF_LAKES_CARIB_SPOTS } from './spots/hawaii-gulf-lakes-carib'
+import { PNW_ALASKA_SPOTS } from './spots/pnw-alaska'
+import { EUROPE_ATLANTIC_SPOTS } from './spots/europe-atlantic'
+import { EUROPE_MED_AFRICA_SPOTS } from './spots/europe-med-africa'
+import { MEXICO_CENTRAL_AMERICA_SPOTS } from './spots/mexico-central-america'
+import { SOUTH_AMERICA_SPOTS } from './spots/south-america'
+import { AUSTRALIA_NZ_SPOTS } from './spots/australia-nz'
+import { PACIFIC_ISLANDS_SPOTS } from './spots/pacific-islands'
+import { ASIA_INDIAN_OCEAN_SPOTS } from './spots/asia-indian-ocean'
+
+const CALIFORNIA_SPOTS = [
   // ─── SOUTHERN CALIFORNIA ─────────────────────────────────────────────────────
 
   // San Diego County
@@ -3454,4 +3465,18 @@ export const SURF_SPOTS_SEED = [
     webcamType: 'none',
     webcamUrl: null,
   },
+]
+
+export const SURF_SPOTS_SEED = [
+  ...CALIFORNIA_SPOTS,
+  ...EAST_COAST_SPOTS,
+  ...HAWAII_GULF_LAKES_CARIB_SPOTS,
+  ...PNW_ALASKA_SPOTS,
+  ...EUROPE_ATLANTIC_SPOTS,
+  ...EUROPE_MED_AFRICA_SPOTS,
+  ...MEXICO_CENTRAL_AMERICA_SPOTS,
+  ...SOUTH_AMERICA_SPOTS,
+  ...AUSTRALIA_NZ_SPOTS,
+  ...PACIFIC_ISLANDS_SPOTS,
+  ...ASIA_INDIAN_OCEAN_SPOTS,
 ]
