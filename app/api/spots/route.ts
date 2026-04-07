@@ -7,6 +7,11 @@ import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
 export const revalidate = 1800
 export const maxDuration = 60
 
+// Offshore NOAA buoys read open-ocean swell before it loses height approaching
+// shore. Multiply by this factor to approximate nearshore surf height — keeps
+// node labels consistent with the Open-Meteo nearshore forecast on each spot page.
+const BUOY_NEARSHORE_FACTOR = 0.65
+
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
 }
@@ -35,111 +40,132 @@ export async function GET(req: Request) {
 
   if (!withConditions) return NextResponse.json(spots)
 
-  // ── Build lat/lng buckets for ALL spots (1-decimal ≈ 11 km grid) ─────────────
-  // We fetch Open-Meteo marine current at each unique coordinate — this is the
-  // SAME data source the individual forecast pages use, so node and page agree.
-  const bucketMap = new Map<string, { lat: number; lng: number }>()
-  for (const spot of spots) {
-    const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
-    if (!bucketMap.has(key)) bucketMap.set(key, { lat: spot.lat, lng: spot.lng })
-  }
-  const bucketKeys = [...bucketMap.keys()]
-
-  // ── Unique buoy IDs (for supplementary wind / period data) ───────────────────
+  // ── Stage 1: fetch the ~15 unique NOAA buoys in parallel ─────────────────────
+  // Buoy fetches are few (15 unique IDs), fast, and cached 30 min by Next.js.
   const uniqueBuoyIds = [...new Set(spots.filter((s) => s.noaaBuoyId).map((s) => s.noaaBuoyId!))]
-
-  // ── Fetch everything in parallel ─────────────────────────────────────────────
-  const [omResults, buoyResults] = await Promise.all([
-    // Open-Meteo marine current — primary wave height source (matches forecast page)
-    Promise.all(bucketKeys.map((k) =>
-      withTimeout(fetchCurrentConditions(bucketMap.get(k)!.lat, bucketMap.get(k)!.lng), 8000)
-    )),
-    // NOAA buoys — supplementary wind speed / swell period
-    Promise.all(uniqueBuoyIds.map((id) => withTimeout(fetchBuoyData(id), 6000))),
-  ])
-
-  const omMap = new Map<string, Awaited<ReturnType<typeof fetchCurrentConditions>>>()
-  bucketKeys.forEach((k, i) => omMap.set(k, omResults[i]))
-
+  const buoyResults = await Promise.all(
+    uniqueBuoyIds.map((id) => withTimeout(fetchBuoyData(id), 6000))
+  )
   const buoyMap = new Map<string, Awaited<ReturnType<typeof fetchBuoyData>>>()
   uniqueBuoyIds.forEach((id, i) => buoyMap.set(id, buoyResults[i]))
 
-  // ── Enrich each spot ──────────────────────────────────────────────────────────
+  // ── Stage 2: Open-Meteo fallback only for spots with no/offline buoy ─────────
+  // Keep this set small to avoid hammering the API with 70+ parallel calls.
   type EnrichedSpot = (typeof spots)[0] & {
     currentRating: string
     currentWaveHeight: number | null
     currentPeriod: number | null
     currentWindSpeed: number | null
     wavePower: number | null
+    _needsFallback: boolean
   }
 
   const enriched: EnrichedSpot[] = spots.map((spot) => {
-    const key  = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
-    const om   = omMap.get(key) ?? null
-    const buoy = spot.noaaBuoyId ? (buoyMap.get(spot.noaaBuoyId) ?? null) : null
+    if (spot.noaaBuoyId) {
+      const buoy = buoyMap.get(spot.noaaBuoyId) ?? null
 
-    // Wave height — always from Open-Meteo at spot coordinates (matches forecast page)
-    const waveHeight = om?.waveHeight ?? null
+      if (buoy && buoy.waveHeight !== null) {
+        // Apply nearshore attenuation so node height matches the forecast page
+        const nearshoreHeight = Math.round(buoy.waveHeight * BUOY_NEARSHORE_FACTOR * 10) / 10
 
-    // Period — prefer buoy (more accurate offshore reading), fall back to Open-Meteo
-    const period = (buoy?.dominantPeriod ?? null) ?? (om?.wavePeriod ?? null)
+        if (nearshoreHeight > 0) {
+          const period = buoy.dominantPeriod ?? 8
+          const { rating } = rateSurfConditions({
+            waveHeight:    nearshoreHeight,
+            swellPeriod:   period,
+            swellHeight:   nearshoreHeight * 0.75,
+            windSpeed:     buoy.windSpeed ?? 8,
+            windDirection: buoy.windDirection ?? 270,
+            swellDirection: buoy.meanDirection,
+            spotFacing:    spot.facingDirection,
+          })
+          return {
+            ...spot,
+            currentRating: rating,
+            currentWaveHeight: nearshoreHeight,
+            currentPeriod: period,
+            currentWindSpeed: buoy.windSpeed,
+            wavePower: computeWavePower(nearshoreHeight, period),
+            _needsFallback: false,
+          }
+        }
 
-    // Wind — prefer buoy, fall back to Open-Meteo estimate
-    const windSpeed = buoy?.windSpeed ?? om?.windSpeed ?? null
-    const windDir   = buoy?.windDirection ?? om?.windDirection ?? 270
+        // Buoy reports 0 — flat/calm
+        return {
+          ...spot, currentRating: 'poor', currentWaveHeight: 0,
+          currentPeriod: null, currentWindSpeed: buoy.windSpeed,
+          wavePower: 0, _needsFallback: false,
+        }
+      }
 
-    if (waveHeight === null) {
+      // Buoy WVHT sensor offline (null) — fall through to Open-Meteo
       return {
         ...spot, currentRating: 'unknown', currentWaveHeight: null,
-        currentPeriod: null, currentWindSpeed: null, wavePower: null,
+        currentPeriod: null, currentWindSpeed: null,
+        wavePower: null, _needsFallback: true,
       }
     }
 
-    if (waveHeight === 0) {
-      return {
-        ...spot, currentRating: 'poor', currentWaveHeight: 0,
-        currentPeriod: period, currentWindSpeed: windSpeed, wavePower: 0,
-      }
-    }
-
-    const { rating } = rateSurfConditions({
-      waveHeight,
-      swellPeriod:   period ?? 8,
-      swellHeight:   waveHeight * 0.7,
-      windSpeed:     windSpeed ?? 8,
-      windDirection: windDir,
-      swellDirection: om?.swellDirection ?? 270,
-      spotFacing:    spot.facingDirection,
-    })
-
+    // No buoy ID — fall through to Open-Meteo
     return {
-      ...spot,
-      currentRating: rating,
-      currentWaveHeight: waveHeight,
-      currentPeriod: period,
-      currentWindSpeed: windSpeed,
-      wavePower: computeWavePower(waveHeight, period ?? 8),
+      ...spot, currentRating: 'unknown', currentWaveHeight: null,
+      currentPeriod: null, currentWindSpeed: null,
+      wavePower: null, _needsFallback: true,
     }
   })
 
-  // ── Nearest-neighbor fallback — guarantee zero gray nodes ─────────────────────
-  // If Open-Meteo returned null for a bucket (e.g. request timed out), copy from
-  // the closest spot that has real data. Surf conditions are nearly identical
-  // within a few miles so this is a reasonable estimate.
-  const withData = enriched.filter((s) => s.currentWaveHeight !== null)
+  // ── Stage 3: Open-Meteo for the small set with no buoy data ──────────────────
+  const needFallback = enriched.filter((s) => s._needsFallback)
 
+  if (needFallback.length > 0) {
+    const buckets = new Map<string, { lat: number; lng: number }>()
+    for (const spot of needFallback) {
+      const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
+      if (!buckets.has(key)) buckets.set(key, { lat: spot.lat, lng: spot.lng })
+    }
+    const bucketKeys = [...buckets.keys()]
+    const omResults = await Promise.all(
+      bucketKeys.map((k) =>
+        withTimeout(fetchCurrentConditions(buckets.get(k)!.lat, buckets.get(k)!.lng), 6000)
+      )
+    )
+    const omMap = new Map<string, Awaited<ReturnType<typeof fetchCurrentConditions>>>()
+    bucketKeys.forEach((k, i) => omMap.set(k, omResults[i]))
+
+    for (const spot of enriched) {
+      if (!spot._needsFallback) continue
+      const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
+      const om = omMap.get(key)
+      if (om && om.waveHeight > 0) {
+        const { rating } = rateSurfConditions({
+          waveHeight:    om.waveHeight,
+          swellPeriod:   om.wavePeriod,
+          swellHeight:   om.waveHeight * 0.7,
+          windSpeed:     om.windSpeed,
+          windDirection: om.windDirection,
+          swellDirection: om.swellDirection,
+          spotFacing:    spot.facingDirection,
+        })
+        spot.currentRating     = rating
+        spot.currentWaveHeight = om.waveHeight
+        spot.currentPeriod     = om.wavePeriod
+        spot.currentWindSpeed  = om.windSpeed
+        spot.wavePower         = computeWavePower(om.waveHeight, om.wavePeriod)
+      }
+    }
+  }
+
+  // ── Stage 4: nearest-neighbor guarantee — no gray nodes ──────────────────────
+  const withData = enriched.filter((s) => s.currentWaveHeight !== null)
   for (const spot of enriched) {
     if (spot.currentWaveHeight !== null) continue
     if (withData.length === 0) continue
-
-    let closest = withData[0]
-    let minDist = Infinity
+    let closest = withData[0], minDist = Infinity
     for (const s of withData) {
       const d = Math.hypot(s.lat - spot.lat, s.lng - spot.lng)
       if (d < minDist) { minDist = d; closest = s }
     }
-
-    const wh     = closest.currentWaveHeight ?? 0
+    const wh = closest.currentWaveHeight ?? 0
     const period = closest.currentPeriod ?? 8
     const { rating } = rateSurfConditions({
       waveHeight: wh, swellPeriod: period, swellHeight: wh * 0.7,
@@ -153,7 +179,8 @@ export async function GET(req: Request) {
     spot.wavePower         = computeWavePower(wh, period)
   }
 
-  return NextResponse.json(enriched, {
+  const response = enriched.map(({ _needsFallback: _, ...rest }) => rest)
+  return NextResponse.json(response, {
     headers: { 'Cache-Control': 's-maxage=900, stale-while-revalidate=900' },
   })
 }
