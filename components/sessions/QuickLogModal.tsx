@@ -132,7 +132,7 @@ export function QuickLogModal({ open, onClose }: Props) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="w-full max-w-md rounded-2xl overflow-hidden"
+        className="w-full max-w-md rounded-2xl"
         style={{ background: 'white', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}
       >
         {/* Header */}
@@ -182,9 +182,9 @@ export function QuickLogModal({ open, onClose }: Props) {
             </div>
           </div>
         ) : (
-          <div className="px-6 py-5 space-y-4">
+          <div className="px-6 py-5 space-y-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
             {/* Spot */}
-            <div className="relative">
+            <div style={{ position: 'relative', zIndex: 10 }}>
               <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>
                 Spot <span style={{ color: 'var(--coral)' }}>*</span>
               </label>
@@ -199,8 +199,12 @@ export function QuickLogModal({ open, onClose }: Props) {
               />
               {showSuggestions && suggestions.length > 0 && (
                 <div
-                  className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl overflow-hidden"
-                  style={{ background: 'white', border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+                  style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999,
+                    marginTop: '4px', borderRadius: '12px', overflow: 'hidden',
+                    background: 'white', border: '1px solid var(--border)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+                  }}
                 >
                   {suggestions.map((s) => (
                     <button
