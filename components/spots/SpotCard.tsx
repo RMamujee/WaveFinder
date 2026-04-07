@@ -59,7 +59,7 @@ export function SpotCard({ spot, rating, waveHeight }: Props) {
         </span>
         {waveHeight !== undefined && (
           <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-            {waveHeight}m
+            {Math.round(waveHeight * 3.281)}ft
           </span>
         )}
       </div>
