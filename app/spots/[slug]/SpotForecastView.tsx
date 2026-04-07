@@ -16,7 +16,7 @@ import { WebcamPanel } from '@/components/webcam/WebcamPanel'
 import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
 import { SurfReports } from '@/components/forecast/SurfReports'
 import { BestTimePanel } from '@/components/forecast/BestTimePanel'
-import { BeachSafetyPanel } from '@/components/forecast/BeachSafetyPanel'
+import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
@@ -284,18 +284,11 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         </div>
 
-        {/* Beach Safety */}
-        {(current || activeDayData) && (
-          <div>
-            <SectionTitle>Beach Safety</SectionTitle>
-            <BeachSafetyPanel
-              current={current ?? null}
-              activeDayData={activeDayData}
-              spotLat={spot.lat}
-              spotLng={spot.lng}
-            />
-          </div>
-        )}
+        {/* Water Quality */}
+        <div>
+          <SectionTitle>Water Quality</SectionTitle>
+          <WaterQualityPanel spotSlug={spot.slug} />
+        </div>
 
         {/* Best time + hourly table */}
         {forecast?.forecast && activeDayData && (
