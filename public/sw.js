@@ -24,7 +24,6 @@ self.addEventListener('fetch', (e) => {
   if (
     url.pathname.startsWith('/_next/webpack') ||
     url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/api/auth') ||
     e.request.method !== 'GET'
   ) return
 
