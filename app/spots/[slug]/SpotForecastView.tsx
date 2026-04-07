@@ -11,6 +11,7 @@ import { UVChart } from '@/components/forecast/UVChart'
 import { GearPanel } from '@/components/forecast/GearPanel'
 import { ForecastDayCard } from '@/components/forecast/ForecastDayCard'
 import { BuoyReadings } from '@/components/forecast/BuoyReadings'
+import { SwellPanel } from '@/components/forecast/SwellPanel'
 import { WebcamPanel } from '@/components/webcam/WebcamPanel'
 import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
 import { SurfReports } from '@/components/forecast/SurfReports'
@@ -403,14 +404,26 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         )}
 
-        {/* Buoy + UV side by side */}
-        <div className="grid gap-5 lg:grid-cols-2">
+        {/* Swell + Buoy + UV — swell is the anchor */}
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {/* Swell panel — always shown when current conditions available */}
+          {current && (
+            <div className="md:row-span-1">
+              <SectionTitle>
+                Swell —{' '}
+                <span style={{ fontWeight: 400 }}>{activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : 'Now'}</span>
+              </SectionTitle>
+              <SwellPanel current={current} activeDayData={activeDayData} />
+            </div>
+          )}
+
           {forecast?.buoy && spot.noaaBuoyId && (
             <div>
               <SectionTitle>Live Buoy Data</SectionTitle>
               <BuoyReadings buoy={forecast.buoy} buoyId={spot.noaaBuoyId} />
             </div>
           )}
+
           {activeDayData && (
             <div>
               <SectionTitle>
