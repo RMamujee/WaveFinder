@@ -128,7 +128,7 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
               />
               <StatCard
                 label="Wind"
-                value={report.windSpeed != null ? `${report.windSpeed} km/h` : null}
+                value={report.windSpeed != null ? `${Math.round(report.windSpeed * 0.621371)} mph` : null}
                 sub={report.windDirection ?? undefined}
               />
               {report.swellDirection && (
@@ -137,8 +137,7 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
               {report.waterTemp != null && (
                 <StatCard
                   label="Water Temp"
-                  value={`${report.waterTemp.toFixed(1)}°C`}
-                  sub={`${Math.round(report.waterTemp * 9/5 + 32)}°F`}
+                  value={`${Math.round(report.waterTemp * 9/5 + 32)}°F`}
                 />
               )}
             </div>

@@ -129,7 +129,7 @@ export function SpotForecastView({ spot }: Props) {
                       <span style={{ fontSize: '38px', fontWeight: 700, color: 'var(--text)', lineHeight: 1, fontFamily: 'Playfair Display, serif' }}>
                         {metersToFeet(current.waveHeight)}
                       </span>
-                      <span className="text-sm" style={{ color: 'var(--text-3)' }}>{current.waveHeight}m</span>
+                      <span className="text-sm" style={{ color: 'var(--text-3)' }}>ft</span>
                     </div>
                   </div>
 
@@ -156,7 +156,7 @@ export function SpotForecastView({ spot }: Props) {
                   <div>
                     <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-3)' }}>Wind</p>
                     <div style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text)' }}>
-                      {Math.round(current.wind.speed)} km/h
+                      {Math.round(current.wind.speed * 0.621371)} mph
                     </div>
                     <p className="text-xs" style={{ color: 'var(--text-3)' }}>{current.wind.directionLabel}</p>
                   </div>
@@ -332,7 +332,7 @@ export function SpotForecastView({ spot }: Props) {
                             <td className="px-4 py-3 font-semibold text-xs whitespace-nowrap" style={{ color: 'var(--text)' }}>
                               {metersToFeet(h.waveHeight)}
                               <span className="ml-1 font-normal hidden sm:inline" style={{ color: 'var(--text-3)', fontSize: '11px' }}>
-                                {h.waveHeight}m
+                                ft
                               </span>
                             </td>
                             <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text)' }}>
@@ -342,7 +342,7 @@ export function SpotForecastView({ spot }: Props) {
                               {degreesToCompass(h.swellDirection)}
                             </td>
                             <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                              {Math.round(h.wind.speed)} {h.wind.directionLabel}
+                              {Math.round(h.wind.speed * 0.621371)} mph {h.wind.directionLabel}
                             </td>
                             {/* Weather */}
                             <td className="px-4 py-3 whitespace-nowrap">
