@@ -11,7 +11,8 @@ export async function DELETE(
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  await prisma.spotAlert.deleteMany({ where: { id, userId: session.user.id } })
+  const result = await prisma.spotAlert.deleteMany({ where: { id, userId: session.user.id } })
+  if (result.count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
 
@@ -24,9 +25,10 @@ export async function PATCH(
 
   const { id } = await params
   const { active } = await req.json()
-  const alert = await prisma.spotAlert.updateMany({
+  const result = await prisma.spotAlert.updateMany({
     where: { id, userId: session.user.id },
     data: { active },
   })
-  return NextResponse.json(alert)
+  if (result.count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json({ ok: true })
 }

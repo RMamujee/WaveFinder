@@ -44,7 +44,8 @@ export async function GET(req: Request) {
 
     try {
       // Fetch the forecast for this spot
-      const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
+      const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null
+      const base = process.env.NEXT_PUBLIC_BASE_URL ?? vercelUrl ?? 'http://localhost:3000'
       const res = await fetch(`${base}/api/forecast/${spot.slug}`)
       if (!res.ok) continue
       const data = await res.json()

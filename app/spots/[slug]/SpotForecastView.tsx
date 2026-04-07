@@ -63,7 +63,7 @@ export function SpotForecastView({ spot }: Props) {
     return computeBestTimes(activeDayData.hours, spot.facingDirection)
   }, [activeDayData, spot.facingDirection])
 
-  const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES]
+  const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES] ?? DIFFICULTY_STYLES.beginner
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--sand-50)' }}>

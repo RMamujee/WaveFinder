@@ -189,7 +189,7 @@ export default function AlertsPage() {
           >
             {createMutation.isPending ? 'Saving…' : '🔔 Create Alert'}
           </button>
-          {saved && <p style={{ color: '#15803d', fontSize: 13, textAlign: 'center', marginTop: 10 }}>✓ Alert saved! You'll get emails at 7am when conditions match.</p>}
+          {saved && <p style={{ color: '#15803d', fontSize: 13, textAlign: 'center', marginTop: 10 }}>✓ Alert saved! You'll get emails at 7am UTC when conditions match.</p>}
         </div>
 
         {/* Active alerts */}
