@@ -262,8 +262,10 @@ export function SpotMap({ spots, centerLat = 33.7, centerLng = -117.8, zoom = 9 
         mapInstanceRef.current = null
       }
     }
+  // Re-run when conditions data arrives (ratings/heights change) or map center/zoom changes.
+  // We derive a lightweight key instead of deep-comparing the full spots array.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spots.length, centerLat, centerLng, zoom])
+  }, [spots.map(s => `${s.id}:${s.currentRating ?? '?'}:${s.currentWaveHeight ?? 0}`).join('|'), centerLat, centerLng, zoom])
 
   return (
     <div
