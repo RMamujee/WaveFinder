@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { SpotForecastView } from './SpotForecastView'
+import { SpotCard } from '@/components/spots/SpotCard'
+import Link from 'next/link'
 import type { Metadata } from 'next'
 import type { SurfSpot } from '@/types/spot'
 
@@ -18,11 +20,62 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
+// Extract the broad region keyword from a "City, Region" string
+function broadRegion(region: string): string {
+  const parts = region.split(',')
+  return parts[parts.length - 1].trim()
+}
+
 export default async function SpotPage({ params }: Props) {
   const { slug } = await params
   const spot = await prisma.surfSpot.findUnique({ where: { slug } })
 
   if (!spot) notFound()
 
-  return <SpotForecastView spot={spot as SurfSpot} />
+  // Fetch nearby spots in the same broad region (exclude this spot)
+  const regionKeyword = broadRegion(spot.region)
+  const nearbySpots = regionKeyword
+    ? await prisma.surfSpot.findMany({
+        where: {
+          region: { contains: regionKeyword },
+          slug: { not: slug },
+        },
+        orderBy: { name: 'asc' },
+        take: 8,
+      })
+    : []
+
+  return (
+    <>
+      <SpotForecastView spot={spot as SurfSpot} />
+
+      {/* More spots in this region */}
+      {nearbySpots.length > 0 && (
+        <div style={{ background: 'var(--sand-50)', borderTop: '1px solid var(--border)' }}>
+          <div className="mx-auto max-w-7xl px-5 py-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2
+                className="font-semibold text-sm uppercase tracking-widest"
+                style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif' }}
+              >
+                More in {regionKeyword}
+              </h2>
+              <Link
+                href={`/spots?region=${encodeURIComponent(regionKeyword)}`}
+                className="text-xs font-semibold"
+                style={{ color: 'var(--ocean-600)' }}
+              >
+                View all →
+              </Link>
+            </div>
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8">
+              {nearbySpots.map((s) => (
+                <SpotCard key={s.slug} spot={s as SurfSpot} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
