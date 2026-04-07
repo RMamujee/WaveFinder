@@ -146,6 +146,44 @@ export async function GET(req: Request) {
     }
   }
 
+  // ── Stage 4: Nearest-neighbor fallback — guarantee zero gray nodes ───────────
+  // Any spot still unknown after buoy + Open-Meteo gets wave data copied from the
+  // closest spot that has a real reading. Conditions are physically similar within
+  // a few miles so this is a reasonable estimate.
+  const spotsWithData = enriched.filter((s) => s.currentWaveHeight !== null && s.currentWaveHeight !== undefined)
+
+  for (const spot of enriched) {
+    if (spot.currentWaveHeight !== null && spot.currentWaveHeight !== undefined) continue
+    if (spotsWithData.length === 0) continue
+
+    // Find the geographically closest spot that has data
+    let closest = spotsWithData[0]
+    let minDist = Infinity
+    for (const s of spotsWithData) {
+      const d = Math.hypot(s.lat - spot.lat, s.lng - spot.lng)
+      if (d < minDist) { minDist = d; closest = s }
+    }
+
+    if (closest) {
+      const wh = closest.currentWaveHeight ?? 0
+      const period = closest.currentPeriod ?? 8
+      const { rating } = rateSurfConditions({
+        waveHeight:    wh,
+        swellPeriod:   period,
+        swellHeight:   wh * 0.7,
+        windSpeed:     closest.currentWindSpeed ?? 8,
+        windDirection: 270, // westerly default for CA
+        swellDirection: 270,
+        spotFacing:    spot.facingDirection,
+      })
+      spot.currentRating = rating
+      spot.currentWaveHeight = wh
+      spot.currentPeriod = period
+      spot.currentWindSpeed = closest.currentWindSpeed
+      spot.wavePower = computeWavePower(wh, period)
+    }
+  }
+
   const response = enriched.map(({ _needsFallback: _, ...rest }) => rest)
   return NextResponse.json(response, {
     headers: { 'Cache-Control': 's-maxage=900, stale-while-revalidate=900' },
