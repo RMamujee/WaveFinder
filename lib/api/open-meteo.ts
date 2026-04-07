@@ -29,6 +29,9 @@ export interface OpenMeteoWindResponse {
     wind_speed_10m: number[]
     wind_direction_10m: number[]
     wind_gusts_10m: number[]
+    temperature_2m: number[]
+    weather_code: number[]
+    precipitation_probability: number[]
   }
 }
 
@@ -167,7 +170,7 @@ export async function fetchWindForecast(
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lng.toString(),
-    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m',
+    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code,precipitation_probability',
     wind_speed_unit: 'kmh',
     forecast_days: '7',
     timezone: 'auto',
@@ -194,6 +197,9 @@ export async function fetchWindForecast(
         wind_speed_10m: [],
         wind_direction_10m: [],
         wind_gusts_10m: [],
+        temperature_2m: [],
+        weather_code: [],
+        precipitation_probability: [],
       },
     }
   }

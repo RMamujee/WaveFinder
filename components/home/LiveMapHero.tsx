@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useState } from 'react'
 import { QuickLogModal } from '@/components/sessions/QuickLogModal'
+import { WaveLoader } from '@/components/layout/WaveLoader'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 
@@ -21,11 +22,8 @@ const SpotMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full flex items-center justify-center" style={{ background: '#dbeafe' }}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-blue-300 border-t-blue-600 animate-spin" />
-          <p className="text-xs font-medium" style={{ color: '#3b82f6' }}>Loading live map…</p>
-        </div>
+      <div className="h-full w-full flex items-center justify-center" style={{ background: 'var(--sand-50)' }}>
+        <WaveLoader compact label="Loading live map…" />
       </div>
     ),
   }

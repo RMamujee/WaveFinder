@@ -73,6 +73,9 @@ export function mergeForecastData(
       wavePower: computeWavePower(waveHeight, swellPeriod),
       uvIndex: computeUVIndex(lat, time),
       waterTemp: m.sea_surface_temperature?.[i] ?? null,
+      airTempC: w.temperature_2m?.[i] ?? null,
+      weatherCode: w.weather_code?.[i] ?? null,
+      precipProb: w.precipitation_probability?.[i] ?? null,
     }
   })
 }
@@ -100,12 +103,26 @@ export function groupHoursByDay(hours: ForecastHour[]): ForecastDay[] {
       (a, b) => b[1] - a[1]
     )[0]?.[0] ?? 'poor') as ForecastDay['dominantRating']
 
+    const tempsC = dayHours.map(h => h.airTempC).filter((t): t is number => t !== null)
+    const minTempC = tempsC.length ? Math.round(Math.min(...tempsC)) : null
+    const maxTempC = tempsC.length ? Math.round(Math.max(...tempsC)) : null
+
+    // Use midday weather code as representative for the day
+    const midday = dayHours.find(h => h.time.includes('T12:')) ?? dayHours[Math.floor(dayHours.length / 2)]
+
+    const precipProbs = dayHours.map(h => h.precipProb).filter((p): p is number => p !== null)
+    const maxPrecipProb = precipProbs.length ? Math.max(...precipProbs) : null
+
     return {
       date,
       hours: dayHours,
       maxWaveHeight: Math.round(maxWaveHeight * 10) / 10,
       avgPeriod: Math.round(avgPeriod * 10) / 10,
       dominantRating,
+      minTempC,
+      maxTempC,
+      weatherCode: midday?.weatherCode ?? null,
+      maxPrecipProb,
     }
   })
 }

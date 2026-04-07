@@ -75,7 +75,8 @@ export function WindChart({ days, activeDayData }: Props) {
             <XAxis
               dataKey="label"
               tick={{ fill: '#8888aa', fontSize: 10 }}
-              interval={mode === 'daily' ? 2 : 7}
+              interval="preserveStartEnd"
+              minTickGap={36}
               tickLine={false}
               axisLine={false}
             />

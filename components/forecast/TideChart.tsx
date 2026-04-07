@@ -47,7 +47,6 @@ export function TideChart({ tides, selectedDate }: Props) {
   // H/L annotation points
   const hlPoints = data.filter((d) => d.type !== null)
 
-  const xInterval = mode === 'daily' ? 2 : Math.floor(data.length / 8)
 
   return (
     <div>
@@ -97,14 +96,15 @@ export function TideChart({ tides, selectedDate }: Props) {
                 tick={{ fill: '#8888aa', fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
-                interval={xInterval}
+                interval="preserveStartEnd"
+                minTickGap={36}
               />
               <YAxis
                 tick={{ fill: '#8888aa', fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v) => `${v}m`}
-                width={34}
+                width={30}
               />
               <Tooltip
                 contentStyle={{

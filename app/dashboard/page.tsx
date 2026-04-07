@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { SpotCard } from '@/components/spots/SpotCard'
+import { WaveLoader } from '@/components/layout/WaveLoader'
 import type { SurfSpot } from '@/types/spot'
 
 export default function DashboardPage() {
@@ -65,11 +66,7 @@ export default function DashboardPage() {
       {/* Content */}
       <div className="mx-auto max-w-5xl px-5 py-8">
         {isLoading ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-24 animate-pulse rounded-xl" style={{ background: 'var(--sand-100)' }} />
-            ))}
-          </div>
+          <WaveLoader compact label="Loading your spots…" />
         ) : savedSpots.length === 0 ? (
           <div
             className="rounded-2xl py-20 text-center"

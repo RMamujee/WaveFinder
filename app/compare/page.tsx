@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ConditionRating, ForecastDay } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
+import { WaveLoader } from '@/components/layout/WaveLoader'
 
 // ── Fuzzy search ──────────────────────────────────────────────────────────────
 
@@ -347,15 +348,7 @@ function SpotColumn({ spot, forecast, isLoading, isError }: SpotColumnProps) {
       {/* Content */}
       <div className="flex-1 px-5 py-4 space-y-5">
         {isLoading ? (
-          <div className="space-y-3">
-            {[80, 60, 70, 50].map((w, i) => (
-              <div
-                key={i}
-                className="animate-pulse rounded-lg h-6"
-                style={{ background: 'var(--sand-100)', width: `${w}%` }}
-              />
-            ))}
-          </div>
+          <WaveLoader compact label="Fetching forecast…" />
         ) : isError ? (
           <p className="text-sm text-center py-6" style={{ color: '#ef4444' }}>
             Failed to load forecast

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { SpotCard } from '@/components/spots/SpotCard'
+import { WaveLoader } from '@/components/layout/WaveLoader'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 
@@ -17,7 +18,7 @@ interface SpotWithRating extends SurfSpot {
 
 const SpotMap = dynamic(
   () => import('@/components/spots/SpotMap').then((m) => m.SpotMap),
-  { ssr: false, loading: () => <div className="h-full w-full animate-pulse" style={{ background: 'var(--sand-100)' }} /> }
+  { ssr: false, loading: () => <div className="h-full w-full flex items-center justify-center" style={{ background: 'var(--sand-50)' }}><WaveLoader compact label="Loading map…" /></div> }
 )
 
 const QUICK_FILTERS = [
@@ -293,11 +294,7 @@ export default function SpotsPage() {
         <div className="flex-1 overflow-y-auto px-5 py-6">
           <div className="mx-auto max-w-6xl">
             {isLoading ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <div key={i} className="h-28 animate-pulse rounded-xl" style={{ background: 'var(--sand-100)' }} />
-                ))}
-              </div>
+              <WaveLoader compact label="Loading spots…" />
             ) : spots.length === 0 ? (
               <div className="py-20 text-center" style={{ color: 'var(--text-3)' }}>
                 No spots match your filters.

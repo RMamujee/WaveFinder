@@ -19,6 +19,8 @@ import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
+import { WaveLoader } from '@/components/layout/WaveLoader'
+import { weatherIcon, tempF, weatherLabel } from '@/lib/forecast/weather-code'
 import { format, parseISO } from 'date-fns'
 
 interface Props { spot: SurfSpot }
@@ -118,13 +120,7 @@ export function SpotForecastView({ spot }: Props) {
                 {spot.region}, {spot.country}
               </p>
 
-              {isLoading ? (
-                <div className="flex gap-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-14 w-24 animate-pulse rounded-xl" style={{ background: 'var(--sand-200)' }} />
-                  ))}
-                </div>
-              ) : current ? (
+              {isLoading ? null : current ? (
                 <div className="flex flex-wrap items-end gap-4 sm:gap-6">
                   {/* Wave height */}
                   <div>
@@ -239,20 +235,15 @@ export function SpotForecastView({ spot }: Props) {
       )}
 
       {/* Body */}
-      <div className="mx-auto max-w-7xl px-5 py-6 space-y-5">
+      {isLoading && <WaveLoader label="Fetching forecast…" />}
+      <div className="mx-auto max-w-7xl px-5 py-6 space-y-5" style={{ display: isLoading ? 'none' : undefined }}>
 
         {/* 7-day strip + webcam */}
         <div className="grid gap-5 lg:grid-cols-3">
           {/* 7-day strip */}
           <div className="lg:col-span-2">
             <SectionTitle>7-Day Forecast</SectionTitle>
-            {isLoading ? (
-              <div className="grid grid-cols-7 gap-2">
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <div key={i} className="h-32 animate-pulse rounded-xl" style={{ background: 'var(--sand-100)' }} />
-                ))}
-              </div>
-            ) : forecast?.forecast ? (
+            {forecast?.forecast ? (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
                 {forecast.forecast.map((day) => (
                   <ForecastDayCard
@@ -309,7 +300,7 @@ export function SpotForecastView({ spot }: Props) {
                 {format(parseISO(activeDayData.date), 'EEEE, MMM d')}
               </SectionTitle>
               <div className="rounded-2xl overflow-hidden overflow-x-auto" style={{ border: '1px solid var(--border)', background: 'white' }}>
-                <table className="w-full text-sm" style={{ minWidth: '400px' }}>
+                <table className="w-full text-sm" style={{ minWidth: '480px' }}>
                   <thead style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
                     <tr className="text-left">
                       <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Time</th>
@@ -317,6 +308,8 @@ export function SpotForecastView({ spot }: Props) {
                       <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Period</th>
                       <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Dir</th>
                       <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Wind</th>
+                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Weather</th>
+                      <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Temp</th>
                       <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Rating</th>
                     </tr>
                   </thead>
@@ -350,6 +343,21 @@ export function SpotForecastView({ spot }: Props) {
                             </td>
                             <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
                               {Math.round(h.wind.speed)} {h.wind.directionLabel}
+                            </td>
+                            {/* Weather */}
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span title={weatherLabel(h.weatherCode)} style={{ fontSize: 16, lineHeight: 1 }}>
+                                {h.weatherCode !== null ? weatherIcon(h.weatherCode) : '—'}
+                              </span>
+                              {h.precipProb !== null && h.precipProb >= 20 && (
+                                <span className="ml-1 text-xs" style={{ color: '#1b7fcb' }}>
+                                  {h.precipProb}%
+                                </span>
+                              )}
+                            </td>
+                            {/* Temp */}
+                            <td className="hidden sm:table-cell px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                              {tempF(h.airTempC)}
                             </td>
                             <td className="px-4 py-3">
                               <span
