@@ -1,10 +1,53 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ConditionRating, ForecastDay } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
+
+// ── Fuzzy search ──────────────────────────────────────────────────────────────
+
+function fuzzyScore(query: string, spot: SurfSpot): number {
+  const q = query.toLowerCase().trim()
+  if (!q) return 1
+
+  const name   = spot.name.toLowerCase()
+  const region = spot.region.toLowerCase()
+  const full   = `${name} ${region}`
+
+  // Exact substring wins outright
+  if (name.startsWith(q))   return 300
+  if (name.includes(q))     return 280 - name.indexOf(q)
+  if (region.includes(q))   return 200
+
+  // Each query word matches the start of at least one target word
+  const tWords = full.split(/[\s,·\-/]+/)
+  const qWords = q.split(/\s+/)
+  let wordScore = 0
+  for (const qw of qWords) {
+    let best = 0
+    for (const tw of tWords) {
+      if (tw.startsWith(qw))  best = Math.max(best, 80)
+      else if (tw.includes(qw)) best = Math.max(best, 50)
+    }
+    wordScore += best
+  }
+  if (wordScore > 0) return wordScore
+
+  // Character-level fuzzy (handles typos / missing letters)
+  let qi = 0, lastTi = -1, charScore = 0
+  for (let ti = 0; ti < full.length && qi < q.length; ti++) {
+    if (full[ti] === q[qi]) {
+      const gap = lastTi === -1 ? 0 : ti - lastTi - 1
+      charScore += Math.max(1, 20 - gap * 4)
+      lastTi = ti
+      qi++
+    }
+  }
+  if (qi < q.length) return 0  // couldn't match all query chars
+  return charScore
+}
 
 // ── Shared style maps ─────────────────────────────────────────────────────────
 
@@ -41,53 +84,175 @@ function shortDay(dateStr: string): string {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-interface SpotSelectorProps {
+interface SpotSearchInputProps {
   index: number
-  value: string
+  value: string          // currently selected slug
   spots: SurfSpot[]
   onChange: (slug: string) => void
   isLoading: boolean
 }
 
-function SpotSelector({ index, value, spots, onChange, isLoading }: SpotSelectorProps) {
+function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearchInputProps) {
+  const selectedSpot  = spots.find((s) => s.slug === value) ?? null
+  const [query, setQuery]             = useState('')
+  const [open, setOpen]               = useState(false)
+  const [highlighted, setHighlighted] = useState(0)
+  const inputRef   = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setQuery('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Sorted results — show all when query is empty, fuzzy-sorted when typing
+  const results = useCallback((): SurfSpot[] => {
+    if (!query.trim()) {
+      return spots.slice(0, 50)  // show first 50 when no query
+    }
+    return spots
+      .map((s) => ({ spot: s, score: fuzzyScore(query, s) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map((x) => x.spot)
+  }, [query, spots])()
+
+  const handleSelect = (spot: SurfSpot) => {
+    onChange(spot.slug)
+    setQuery('')
+    setOpen(false)
+  }
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onChange('')
+    setQuery('')
+    inputRef.current?.focus()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) { if (e.key !== 'Tab') setOpen(true); return }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted((h) => Math.min(h + 1, results.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlighted((h) => Math.max(h - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); if (results[highlighted]) handleSelect(results[highlighted]) }
+    else if (e.key === 'Escape') { setOpen(false); setQuery('') }
+  }
+
+  // Reset highlight when results change
+  useEffect(() => { setHighlighted(0) }, [query])
+
+  const isSelected = !!value
+
   return (
-    <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={`spot-select-${index}`}
-        className="text-xs font-semibold uppercase tracking-wide"
-        style={{ color: 'var(--text-3)' }}
-      >
+    <div className="flex flex-col gap-1.5" ref={containerRef}>
+      <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
         Spot {index + 1}
       </label>
+
       <div className="relative">
-        {/* Chevron icon */}
+        {/* Search icon */}
         <svg
-          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
           width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round"
+          stroke={isSelected ? 'var(--ocean-500)' : 'var(--text-3)'} strokeWidth="2"
         >
-          <path d="m6 9 6 6 6-6" />
+          <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
         </svg>
-        <select
-          id={`spot-select-${index}`}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+
+        <input
+          ref={inputRef}
+          type="text"
           disabled={isLoading}
-          className="w-full appearance-none rounded-xl pl-4 pr-10 py-3 text-sm font-medium focus:outline-none transition-all"
+          placeholder={isSelected ? selectedSpot!.name : 'Search spots…'}
+          value={open ? query : (isSelected ? selectedSpot!.name : '')}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
+          autoComplete="off"
+          className="w-full rounded-xl pl-9 pr-9 py-3 text-sm font-medium focus:outline-none transition-all"
           style={{
-            background: value ? 'var(--ocean-50)' : 'var(--sand-100)',
-            border: `1.5px solid ${value ? 'var(--ocean-300)' : 'var(--border)'}`,
-            color: value ? 'var(--text)' : 'var(--text-3)',
-            cursor: 'pointer',
+            background: isSelected && !open ? 'var(--ocean-50)' : 'var(--sand-100)',
+            border: `1.5px solid ${isSelected ? 'var(--ocean-300)' : open ? 'var(--ocean-400)' : 'var(--border)'}`,
+            color: isSelected && !open ? 'var(--text)' : 'var(--text)',
           }}
-        >
-          <option value="">— Select a spot —</option>
-          {spots.map((spot) => (
-            <option key={spot.slug} value={spot.slug}>
-              {spot.name} · {spot.region}
-            </option>
-          ))}
-        </select>
+        />
+
+        {/* Clear button (when selected) or chevron (when empty) */}
+        {isSelected ? (
+          <button
+            onClick={handleClear}
+            className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full w-4 h-4 transition-colors hover:bg-[var(--sand-200)]"
+            style={{ color: 'var(--text-3)' }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        ) : (
+          <svg
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+            width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        )}
+
+        {/* Dropdown */}
+        {open && (
+          <div
+            className="absolute left-0 right-0 z-50 mt-1.5 rounded-xl overflow-hidden"
+            style={{
+              background: 'white',
+              border: '1.5px solid var(--border)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
+              maxHeight: '260px',
+              overflowY: 'auto',
+            }}
+          >
+            {isLoading ? (
+              <div className="px-4 py-3 text-sm" style={{ color: 'var(--text-3)' }}>Loading spots…</div>
+            ) : results.length === 0 ? (
+              <div className="px-4 py-3 text-sm" style={{ color: 'var(--text-3)' }}>No spots found for &ldquo;{query}&rdquo;</div>
+            ) : (
+              results.map((spot, i) => (
+                <button
+                  key={spot.slug}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); handleSelect(spot) }}
+                  onMouseEnter={() => setHighlighted(i)}
+                  className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors"
+                  style={{
+                    background: i === highlighted ? 'var(--ocean-50)' : spot.slug === value ? 'var(--sand-50)' : 'white',
+                    borderTop: i > 0 ? '1px solid var(--sand-100)' : 'none',
+                  }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>
+                      {spot.name}
+                    </p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>
+                      {spot.region}
+                    </p>
+                  </div>
+                  {spot.slug === value && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ocean-500)" strokeWidth="2.5">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -361,7 +526,7 @@ export default function ComparePage() {
             {/* Spot selectors */}
             <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
               {Array.from({ length: MAX_SPOTS }).map((_, i) => (
-                <SpotSelector
+                <SpotSearchInput
                   key={i}
                   index={i}
                   value={selectedSlugs[i]}
