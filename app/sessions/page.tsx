@@ -33,6 +33,7 @@ interface FormState {
   spotName: string
   region: string
   sessionDate: string
+  sessionTime: string
   duration: string
   waveHeightFt: string
   wavePeriod: string
@@ -82,6 +83,7 @@ const EMPTY_FORM: FormState = {
   spotName: '',
   region: '',
   sessionDate: todayISO(),
+  sessionTime: '',
   duration: '',
   waveHeightFt: '',
   wavePeriod: '',
@@ -144,7 +146,9 @@ interface LogSessionModalProps {
 
 function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalProps) {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, ...initialData })
+  const now = new Date()
+  const defaultTime = `${String(now.getHours()).padStart(2, '0')}:00`
+  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, sessionTime: defaultTime, ...initialData })
   const [submitError, setSubmitError] = useState('')
 
   // Autocomplete state
@@ -212,64 +216,46 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
     setShowSuggestions(false)
   }
 
-  // Auto-fill conditions from forecast when slug + date are set
-  useEffect(() => {
+  // Auto-fill conditions from forecast — triggered manually by button
+  const handleAutoFill = async () => {
     if (!selectedSlug || !form.sessionDate) return
 
-    const today = new Date().toISOString().split('T')[0]
     const sevenDaysOut = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
     if (form.sessionDate > sevenDaysOut) return  // outside forecast window
 
-    let cancelled = false
     setAutoFilling(true)
+    try {
+      const res = await fetch(`/api/forecast/${selectedSlug}`)
+      const data: { forecast?: Array<{ date: string; hours: Array<{ time: string; waveHeight: number; swellPeriod: number; wind: { speed: number; directionLabel: string }; waterTemp: number | null }> }> } = await res.json()
 
-    fetch(`/api/forecast/${selectedSlug}`)
-      .then((r) => r.json())
-      .then((data: { forecast?: Array<{ date: string; hours: Array<{ time: string; waveHeight: number; swellPeriod: number; wind: { speed: number; directionLabel: string }; waterTemp: number | null }> }> }) => {
-        if (cancelled) return
+      const targetDay = data.forecast?.find((d) => d.date === form.sessionDate)
+      if (!targetDay?.hours.length) return
 
-        const targetDay = data.forecast?.find((d) => d.date === form.sessionDate)
-        if (!targetDay?.hours.length) return
+      // Use sessionTime to find the closest forecast hour
+      const targetHour = form.sessionTime
+        ? parseInt(form.sessionTime.split(':')[0], 10)
+        : 12
 
-        // Pick best hour: noon for future days, nearest to now for today
-        let hour = targetDay.hours[Math.floor(targetDay.hours.length / 2)]
-        if (form.sessionDate === today) {
-          const now = new Date()
-          hour = targetDay.hours.reduce((best, h) => {
-            const diff = Math.abs(new Date(h.time).getTime() - now.getTime())
-            const bestDiff = Math.abs(new Date(best.time).getTime() - now.getTime())
-            return diff < bestDiff ? h : best
-          })
-        }
-
-        // Find a noon hour if possible (index 12 for hourly data)
-        const noonHour = targetDay.hours.find((h) => h.time.includes('T12:'))
-        if (noonHour && form.sessionDate !== today) hour = noonHour
-
-        const waveHeightFt = String(Math.round(hour.waveHeight * 3.281 * 2) / 2)
-        const wavePeriod = String(Math.round(hour.swellPeriod))
-        const windSpeed = String(Math.round(hour.wind.speed))
-        const windDir = hour.wind.directionLabel
-        const waterTempC = hour.waterTemp !== null ? String(Math.round(hour.waterTemp * 2) / 2) : ''
-
-        setForm((prev) => ({
-          ...prev,
-          waveHeightFt,
-          wavePeriod,
-          windSpeed,
-          windDir,
-          waterTempC,
-        }))
-
-        const filled = new Set(['waveHeightFt', 'wavePeriod', 'windSpeed', 'windDir'])
-        if (waterTempC) filled.add('waterTempC')
-        setAutoFilledFields(filled)
+      const hour = targetDay.hours.reduce((best, h) => {
+        const hHour = parseInt(h.time.split('T')[1]?.split(':')[0] ?? '12', 10)
+        const bestHour = parseInt(best.time.split('T')[1]?.split(':')[0] ?? '12', 10)
+        return Math.abs(hHour - targetHour) < Math.abs(bestHour - targetHour) ? h : best
       })
-      .catch(() => {/* silently fail — user can enter manually */})
-      .finally(() => { if (!cancelled) setAutoFilling(false) })
 
-    return () => { cancelled = true }
-  }, [selectedSlug, form.sessionDate])
+      const waveHeightFt = String(Math.round(hour.waveHeight * 3.281 * 2) / 2)
+      const wavePeriod = String(Math.round(hour.swellPeriod))
+      const windSpeed = String(Math.round(hour.wind.speed))
+      const windDir = hour.wind.directionLabel
+      const waterTempC = hour.waterTemp !== null ? String(Math.round(hour.waterTemp * 2) / 2) : ''
+
+      setForm((prev) => ({ ...prev, waveHeightFt, wavePeriod, windSpeed, windDir, waterTempC }))
+
+      const filled = new Set(['waveHeightFt', 'wavePeriod', 'windSpeed', 'windDir'])
+      if (waterTempC) filled.add('waterTempC')
+      setAutoFilledFields(filled)
+    } catch {/* silently fail — user can enter manually */}
+    finally { setAutoFilling(false) }
+  }
 
   const mutation = useMutation({
     mutationFn: async (data: FormState) => {
@@ -297,8 +283,8 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitError('')
-    if (!form.spotName.trim()) {
-      setSubmitError('Spot name is required.')
+    if (!selectedSlug) {
+      setSubmitError('Please select a spot from the dropdown — only spots on the site can be logged.')
       return
     }
     mutation.mutate(form)
@@ -406,7 +392,7 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
           {/* Section 1: Location & Date */}
           <div>
             <p style={sectionHeadingStyle()}>① Location &amp; Date</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
 
               {/* Spot autocomplete */}
               <div style={{ gridColumn: '1 / -1' }} ref={comboboxRef}>
@@ -417,8 +403,17 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
                     value={form.spotName}
                     onChange={(e) => handleSpotInput(e.target.value)}
                     onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                    onBlur={() => {
+                      // If the user typed something but didn't pick from the list, clear it
+                      setTimeout(() => {
+                        if (!selectedSlug && form.spotName.trim()) {
+                          setForm((prev) => ({ ...prev, spotName: '', region: '' }))
+                          setSuggestions([])
+                        }
+                        setShowSuggestions(false)
+                      }, 200)
+                    }}
                     placeholder="Search for a spot… e.g. Santa Monica"
-                    required
                     autoComplete="off"
                     style={{
                       ...inputStyle(),
@@ -487,9 +482,14 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
                     </div>
                   )}
                 </div>
+                {!selectedSlug && (
+                  <p style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '4px' }}>
+                    Only spots listed on WaveFinder can be selected
+                  </p>
+                )}
                 {selectedSlug && (
                   <p style={{ fontSize: '11px', color: 'var(--ocean-600)', marginTop: '4px' }}>
-                    ⚡ Conditions will be auto-filled from forecast data
+                    ✓ {form.region} — set date &amp; time, then auto-fill conditions below
                   </p>
                 )}
               </div>
@@ -501,6 +501,15 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
                   value={form.sessionDate}
                   onChange={(e) => set('sessionDate', e.target.value)}
                   required
+                  style={inputStyle()}
+                />
+              </div>
+              <div>
+                <label style={labelStyle()}>Time of session</label>
+                <input
+                  type="time"
+                  value={form.sessionTime}
+                  onChange={(e) => set('sessionTime', e.target.value)}
                   style={inputStyle()}
                 />
               </div>
@@ -525,7 +534,7 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <p style={{ ...sectionHeadingStyle(), margin: 0, flex: 1 }}>② Conditions</p>
-              {autoFilling && (
+              {autoFilling ? (
                 <span style={{ fontSize: '11px', color: 'var(--ocean-600)', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <span style={{
                     display: 'inline-block', width: '10px', height: '10px',
@@ -534,7 +543,27 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
                   }} />
                   Fetching conditions…
                 </span>
-              )}
+              ) : selectedSlug ? (
+                <button
+                  type="button"
+                  onClick={handleAutoFill}
+                  style={{
+                    background: 'var(--ocean-600)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '5px 12px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  ⚡ Auto-fill from forecast
+                </button>
+              ) : null}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
