@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { SpotCard } from '@/components/spots/SpotCard'
 import type { SurfSpot } from '@/types/spot'
@@ -39,6 +39,16 @@ export default function SpotsPage() {
   const [difficulty, setDifficulty] = useState('')
   const [quickSearch, setQuickSearch] = useState('')
   const [view, setView] = useState<ViewMode>('map')
+
+  // Pre-populate region filter from ?region= URL param (from /regions page links)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const region = params.get('region')
+    if (region) {
+      setQuickSearch(decodeURIComponent(region))
+      setView('list')
+    }
+  }, [])
 
   const effectiveSearch = search || quickSearch
 
