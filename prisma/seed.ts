@@ -9,7 +9,11 @@ async function main() {
 
   for (const spot of SURF_SPOTS_SEED) {
     const parkingOptions = PARKING_DATA[spot.slug] ?? null
-    const data = { ...spot, parkingOptions: parkingOptions ?? undefined }
+    const data = {
+      ...spot,
+      // Prisma Json fields require casting through unknown
+      parkingOptions: parkingOptions ? (parkingOptions as unknown as import('@prisma/client').Prisma.InputJsonValue) : undefined,
+    }
     await prisma.surfSpot.upsert({
       where: { slug: spot.slug },
       update: data,
