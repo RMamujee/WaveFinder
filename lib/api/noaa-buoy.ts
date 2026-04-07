@@ -44,9 +44,9 @@ export async function fetchBuoyData(buoyId: string): Promise<BuoyReading | null>
 
     return {
       time: `${year}-${month}-${day}T${hour}:${min}:00Z`,
-      waveHeight: get('WVHT') ?? 0,
-      dominantPeriod: get('DPD') ?? 0,
-      averagePeriod: get('APD') ?? 0,
+      waveHeight: get('WVHT'),           // null if sensor offline (MM)
+      dominantPeriod: get('DPD'),        // null if sensor offline
+      averagePeriod: get('APD') ?? null,
       meanDirection: get('MWD') ?? 0,
       waterTemp: get('WTMP'),
       airTemp: get('ATMP'),
