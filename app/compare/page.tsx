@@ -73,7 +73,7 @@ function SpotSelector({ index, value, spots, onChange, isLoading }: SpotSelector
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={isLoading}
-          className="w-full appearance-none rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium focus:outline-none transition-all"
+          className="w-full appearance-none rounded-xl pl-4 pr-10 py-3 text-sm font-medium focus:outline-none transition-all"
           style={{
             background: value ? 'var(--ocean-50)' : 'var(--sand-100)',
             border: `1.5px solid ${value ? 'var(--ocean-300)' : 'var(--border)'}`,
@@ -342,25 +342,24 @@ export default function ComparePage() {
         }}
       >
         <div className="mx-auto max-w-7xl px-5 py-4">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-3">
             {/* Title */}
-            <div>
-              <h1
-                className="text-2xl font-bold leading-tight"
-                style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}
-              >
-                Compare Spots
-              </h1>
-              <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
-                Compare conditions across multiple breaks
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1
+                  className="text-2xl font-bold leading-tight"
+                  style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}
+                >
+                  Compare Spots
+                </h1>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
+                  Compare conditions across multiple breaks
+                </p>
+              </div>
             </div>
 
             {/* Spot selectors */}
-            <div
-              className="flex-1 grid gap-3 min-w-0"
-              style={{ gridTemplateColumns: `repeat(${MAX_SPOTS}, minmax(0, 1fr))` }}
-            >
+            <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
               {Array.from({ length: MAX_SPOTS }).map((_, i) => (
                 <SpotSelector
                   key={i}
@@ -409,10 +408,13 @@ export default function ComparePage() {
         ) : (
           /* Comparison columns */
           <div
-            className="grid gap-5"
-            style={{
-              gridTemplateColumns: `repeat(${activeSlugs.length}, minmax(0, 1fr))`,
-            }}
+            className={`grid gap-5 ${
+              activeSlugs.length === 1
+                ? 'grid-cols-1 max-w-md'
+                : activeSlugs.length === 2
+                ? 'grid-cols-1 sm:grid-cols-2'
+                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+            }`}
           >
             {activeSlugs.map((slug) => (
               <ConnectedSpotColumn key={slug} slug={slug} spots={spots} />
