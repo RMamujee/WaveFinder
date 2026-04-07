@@ -193,13 +193,13 @@ export async function fetchWindForecast(
     // Wind wave direction from marine API will be used as fallback in merge
     return {
       hourly: {
-        time: [],
-        wind_speed_10m: [],
-        wind_direction_10m: [],
-        wind_gusts_10m: [],
-        temperature_2m: [],
-        weather_code: [],
-        precipitation_probability: [],
+        time: [] as string[],
+        wind_speed_10m: [] as number[],
+        wind_direction_10m: [] as number[],
+        wind_gusts_10m: [] as number[],
+        temperature_2m: [] as number[],
+        weather_code: [] as number[],
+        precipitation_probability: [] as number[],
       },
     }
   }
