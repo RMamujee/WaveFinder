@@ -5,6 +5,7 @@ import { useSession } from '@/lib/auth-client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { format, parseISO } from 'date-fns'
+import { WaveLoader } from '@/components/layout/WaveLoader'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1255,20 +1256,7 @@ function SessionsPageInner() {
         {/* Content */}
         <div style={{ maxWidth: '720px', margin: '0 auto', padding: '24px 20px' }}>
           {isLoading ? (
-            // Skeleton
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  style={{
-                    height: '130px',
-                    borderRadius: '16px',
-                    background: 'var(--sand-100)',
-                    animation: 'pulse 1.5s ease-in-out infinite',
-                  }}
-                />
-              ))}
-            </div>
+            <WaveLoader compact label="Loading your log…" />
           ) : sessions.length === 0 ? (
             // Empty state
             <div

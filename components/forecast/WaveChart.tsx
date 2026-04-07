@@ -76,11 +76,12 @@ export function WaveChart({ days, activeDayData }: Props) {
                 <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#ede0cc" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#ede0cc" vertical={false} />
             <XAxis
               dataKey="label"
               tick={{ fill: '#8888aa', fontSize: 10 }}
-              interval={mode === 'daily' ? 2 : 7}
+              interval="preserveStartEnd"
+              minTickGap={36}
               tickLine={false}
               axisLine={false}
             />
@@ -89,7 +90,7 @@ export function WaveChart({ days, activeDayData }: Props) {
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => `${v}m`}
-              width={34}
+              width={30}
             />
             <Tooltip
               contentStyle={{

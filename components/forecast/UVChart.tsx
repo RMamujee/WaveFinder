@@ -115,10 +115,11 @@ export function UVChart({ activeDayData }: Props) {
                 strokeOpacity={0.5}
                 label={{
                   value: t.label,
-                  position: 'right',
+                  position: 'insideTopLeft',
                   fill: t.color,
                   fontSize: 9,
                   fontWeight: 600,
+                  dx: 4,
                 }}
               />
             ))}
@@ -128,7 +129,8 @@ export function UVChart({ activeDayData }: Props) {
               tick={{ fill: '#8888aa', fontSize: 10 }}
               tickLine={false}
               axisLine={false}
-              interval={2}
+              interval="preserveStartEnd"
+              minTickGap={36}
             />
             <YAxis
               tick={{ fill: '#8888aa', fontSize: 10 }}

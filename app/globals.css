@@ -124,3 +124,35 @@ body {
 .animate-float-delay-2 { animation: float-up 0.6s 0.2s ease both; }
 .animate-float-delay-3 { animation: float-up 0.6s 0.3s ease both; }
 .animate-float-delay-4 { animation: float-up 0.6s 0.4s ease both; }
+
+/* ── WaveLoader animations ── */
+@keyframes wl-wave1 {
+  0%, 100% { transform: translateX(0px); }
+  50%      { transform: translateX(-22px); }
+}
+@keyframes wl-wave2 {
+  0%, 100% { transform: translateX(0px); }
+  50%      { transform: translateX(18px); }
+}
+@keyframes wl-buoy {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  25%      { transform: translateY(-5px) rotate(2deg); }
+  50%      { transform: translateY(-8px) rotate(0deg); }
+  75%      { transform: translateY(-4px) rotate(-2deg); }
+}
+@keyframes wl-foam {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  40%, 60% { opacity: 1; transform: scale(1); }
+}
+@keyframes wl-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+
+.wl-wave1  { animation: wl-wave1 3.2s ease-in-out infinite; }
+.wl-wave2  { animation: wl-wave2 2.4s ease-in-out infinite; }
+.wl-buoy   { animation: wl-buoy  2.4s ease-in-out infinite; }
+.wl-foam1  { animation: wl-foam  2.4s ease-in-out 0.3s infinite; }
+.wl-foam2  { animation: wl-foam  2.4s ease-in-out 0.9s infinite; }
+.wl-foam3  { animation: wl-foam  2.4s ease-in-out 1.5s infinite; }
+.wl-label  { animation: wl-pulse 1.8s ease-in-out infinite; }

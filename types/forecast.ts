@@ -29,6 +29,9 @@ export interface ForecastHour {
   wavePower: number
   uvIndex: number
   waterTemp: number | null
+  airTempC: number | null
+  weatherCode: number | null
+  precipProb: number | null
 }
 
 export interface ForecastDay {
@@ -37,6 +40,10 @@ export interface ForecastDay {
   maxWaveHeight: number
   avgPeriod: number
   dominantRating: ConditionRating
+  minTempC: number | null
+  maxTempC: number | null
+  weatherCode: number | null
+  maxPrecipProb: number | null
 }
 
 export interface TidePoint {

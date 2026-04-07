@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import type { LiveConditionReport } from '@/app/api/surf-reports/[spotSlug]/route'
+import { WaveLoader } from '@/components/layout/WaveLoader'
 
 const TREND_ICON: Record<string, string> = {
   rising: '↑',
@@ -74,11 +75,7 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
 
       <div className="p-4">
         {isLoading ? (
-          <div className="grid grid-cols-2 gap-2">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-16 animate-pulse rounded-xl" style={{ background: 'var(--sand-100)' }} />
-            ))}
-          </div>
+          <WaveLoader compact label="Checking buoy…" />
         ) : !report || report.source === 'none' ? (
           <div className="py-6 text-center">
             <div className="text-3xl mb-2">📡</div>
