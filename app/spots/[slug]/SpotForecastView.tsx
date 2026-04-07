@@ -392,14 +392,22 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         )}
 
-        {/* Tides + UV side by side */}
+        {/* Tides — full width */}
+        {forecast?.tides && forecast.tides.length > 0 && (
+          <div>
+            <SectionTitle>Tides</SectionTitle>
+            <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+              <TideChart tides={forecast.tides} selectedDate={activeDayData?.date} />
+            </div>
+          </div>
+        )}
+
+        {/* Buoy + UV side by side */}
         <div className="grid gap-5 lg:grid-cols-2">
-          {forecast?.tides && forecast.tides.length > 0 && (
+          {forecast?.buoy && spot.noaaBuoyId && (
             <div>
-              <SectionTitle>Tides</SectionTitle>
-              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-                <TideChart tides={forecast.tides} selectedDate={activeDayData?.date} />
-              </div>
+              <SectionTitle>Live Buoy Data</SectionTitle>
+              <BuoyReadings buoy={forecast.buoy} buoyId={spot.noaaBuoyId} />
             </div>
           )}
           {activeDayData && (
@@ -415,30 +423,24 @@ export function SpotForecastView({ spot }: Props) {
           )}
         </div>
 
-        {/* Buoy + Gear + community in a grid */}
-        <div className="grid gap-5 lg:grid-cols-2">
-          {forecast?.buoy && spot.noaaBuoyId && (
+        {/* Gear recommendations — full width */}
+        {activeDayData && (() => {
+          const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
+          const avgWaterTempC = waterHours.length > 0
+            ? waterHours.reduce((sum, h) => sum + (h.waterTemp ?? 0), 0) / waterHours.length
+            : null
+          return (
             <div>
-              <SectionTitle>Live Buoy Data</SectionTitle>
-              <BuoyReadings buoy={forecast.buoy} buoyId={spot.noaaBuoyId} />
+              <SectionTitle>Gear Recommendations</SectionTitle>
+              <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
             </div>
-          )}
-          {activeDayData && (() => {
-            const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
-            const avgWaterTempC = waterHours.length > 0
-              ? waterHours.reduce((sum, h) => sum + (h.waterTemp ?? 0), 0) / waterHours.length
-              : null
-            return (
-              <div>
-                <SectionTitle>Gear Recommendations</SectionTitle>
-                <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
-              </div>
-            )
-          })()}
-          <div className="lg:col-span-2">
-            <SectionTitle>Community Reports</SectionTitle>
-            <SurfReports spotSlug={spot.slug} />
-          </div>
+          )
+        })()}
+
+        {/* Community reports */}
+        <div>
+          <SectionTitle>Community Reports</SectionTitle>
+          <SurfReports spotSlug={spot.slug} />
         </div>
 
         {/* Season Calendar */}

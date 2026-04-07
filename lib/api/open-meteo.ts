@@ -165,10 +165,12 @@ export async function fetchWindForecast(
   lat: number,
   lng: number
 ): Promise<OpenMeteoWindResponse> {
+  // Include uv_index in the same request — a separate fetch silently fails too
+  // often on Vercel (Cloudflare blocks), leaving uvIndex = 0 for every hour.
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lng.toString(),
-    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m',
+    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index',
     wind_speed_unit: 'kmh',
     forecast_days: '7',
     timezone: 'auto',
@@ -184,28 +186,6 @@ export async function fetchWindForecast(
 
     const text = await res.text()
     const data: OpenMeteoWindResponse = JSON.parse(text)
-
-    // UV index — optional, silently skipped if unavailable
-    try {
-      const uvParams = new URLSearchParams({
-        latitude: lat.toString(),
-        longitude: lng.toString(),
-        hourly: 'uv_index',
-        forecast_days: '7',
-        timezone: 'auto',
-      })
-      const uvRes = await fetch(`${WEATHER_BASE}?${uvParams}`, {
-        next: { revalidate: 3600 },
-        headers: HEADERS,
-      })
-      if (uvRes.ok) {
-        const uvText = await uvRes.text()
-        const uvData = JSON.parse(uvText)
-        if (Array.isArray(uvData?.hourly?.uv_index)) {
-          data.hourly.uv_index = uvData.hourly.uv_index
-        }
-      }
-    } catch { /* UV unavailable */ }
 
     return data
   } catch {
