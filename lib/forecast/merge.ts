@@ -25,11 +25,25 @@ export function mergeForecastData(
   w.time.forEach((t, i) => { uvMap.set(t, w.uv_index?.[i] ?? 0) })
 
   return m.time.map((time, i) => {
-    const windData = windMap.get(time) ?? { speed: 0, gust: 0, dir: 0 }
+    const rawWind = windMap.get(time) ?? { speed: 0, gust: 0, dir: 0 }
     const waveHeight = m.wave_height[i] ?? 0
     const swellHeight = m.swell_wave_height[i] ?? 0
     const swellPeriod = m.swell_wave_period[i] ?? 0
     const swellDirection = m.swell_wave_direction[i] ?? 0
+
+    // When the weather API is unavailable (all zeros), estimate wind speed from
+    // wind-wave height using empirical relationship: Hs_wind ≈ 0.0248 × U² (m/s)
+    const windWaveH = m.wind_wave_height[i] ?? 0
+    const windWaveDir = m.wind_wave_direction[i] ?? 0
+    const hasRealWind = rawWind.speed > 0
+    const estimatedSpeed = hasRealWind
+      ? rawWind.speed
+      : windWaveH > 0 ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6) : 0
+    const windData = {
+      speed: estimatedSpeed,
+      gust: rawWind.gust > 0 ? rawWind.gust : Math.round(estimatedSpeed * 1.25),
+      dir: hasRealWind ? rawWind.dir : windWaveDir,
+    }
 
     const { score, rating } = rateSurfConditions({
       waveHeight,
@@ -49,7 +63,7 @@ export function mergeForecastData(
       swellHeight,
       swellPeriod,
       swellDirection,
-      windWaveHeight: m.wind_wave_height[i] ?? 0,
+      windWaveHeight: windWaveH,
       wind: {
         speed: windData.speed,
         gust: windData.gust,
