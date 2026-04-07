@@ -138,7 +138,7 @@ export function BestTimePanel({ slots }: Props) {
 
                   {/* Stats row */}
                   <div className="flex flex-wrap items-center gap-3 mb-2">
-                    <Stat label="Waves" value={`${slot.avgWaveHeight}m / ${Math.round(slot.avgWaveHeight * 3.281)}ft`} />
+                    <WaveHeightTrend slot={slot} />
                     <Stat label="Period" value={`${slot.avgPeriod}s`} />
                     <Stat
                       label="Wind"
@@ -165,6 +165,39 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div>
       <span className="text-xs" style={{ color: 'var(--text-3)' }}>{label}: </span>
       <span className="text-xs font-medium" style={{ color: 'var(--text)' }}>{value}</span>
+    </div>
+  )
+}
+
+function WaveHeightTrend({ slot }: { slot: BestTimeSlot }) {
+  const hours = slot.hours
+  if (!hours.length) return null
+
+  const first = hours[0].waveHeight
+  const last  = hours[hours.length - 1].waveHeight
+  const diff  = last - first
+
+  // trend arrow + label
+  let arrow = '→'
+  let trendLabel = 'steady'
+  let trendColor = 'var(--text-3)'
+  if (diff > 0.1)  { arrow = '↑'; trendLabel = 'building'; trendColor = '#16a34a' }
+  if (diff < -0.1) { arrow = '↓'; trendLabel = 'dropping'; trendColor = '#ef4444' }
+
+  const startFt = Math.round(first * 3.281)
+  const endFt   = Math.round(last  * 3.281)
+  const heightStr = startFt === endFt
+    ? `${startFt}ft`
+    : `${startFt}–${endFt}ft`
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs" style={{ color: 'var(--text-3)' }}>Waves: </span>
+      <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{heightStr}</span>
+      <span className="text-xs font-bold" style={{ color: trendColor }} title={trendLabel}>
+        {arrow}
+      </span>
+      <span className="text-xs" style={{ color: trendColor }}>{trendLabel}</span>
     </div>
   )
 }

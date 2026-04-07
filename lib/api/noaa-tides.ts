@@ -20,9 +20,13 @@ function formatDate(d: Date): string {
 }
 
 export async function fetchTidePredictions(stationId: string): Promise<TidePoint[]> {
+  // Start 1 day before today so the server's UTC clock never misses the
+  // spot's local "today" (Vercel runs UTC; a California spot at 11pm is
+  // still "today" locally but "tomorrow" UTC).
   const today = new Date()
+  today.setDate(today.getDate() - 1)
   const end = new Date(today)
-  end.setDate(today.getDate() + 7)
+  end.setDate(today.getDate() + 8)
 
   // Fetch hourly predictions for 7 days — gives a smooth curve (168 points)
   // and enough data to filter by any day in the forecast window.
