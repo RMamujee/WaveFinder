@@ -74,7 +74,17 @@ export async function fetchCurrentConditions(
     if (!marineRes.ok) return null
 
     const marine = await marineRes.json()
-    const wind = windRes.ok ? await windRes.json() : null
+
+    // Parse wind separately — weather API may return HTML (Cloudflare block) even with 200 OK
+    let wind: { current?: { wind_speed_10m?: number; wind_direction_10m?: number } } | null = null
+    try {
+      if (windRes.ok) {
+        const windText = await windRes.text()
+        wind = JSON.parse(windText)
+      }
+    } catch {
+      // Weather API returned non-JSON (e.g. Cloudflare HTML) — fall back to marine wind fields
+    }
 
     const c = marine?.current
     if (!c) return null
