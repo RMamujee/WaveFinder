@@ -46,29 +46,25 @@ export async function fetchCurrentConditions(
   lng: number
 ): Promise<CurrentMarineConditions | null> {
   try {
-    const params = new URLSearchParams({
+    // Marine API only accepts marine variables — weather vars (wind_speed_10m etc.) cause 400
+    const marineParams = new URLSearchParams({
       latitude: lat.toString(),
       longitude: lng.toString(),
-      current: [
-        'wave_height',
-        'wave_period',
-        'swell_wave_direction',
-        'wind_speed_10m',
-        'wind_direction_10m',
-      ].join(','),
+      current: 'wave_height,wave_period,swell_wave_direction,wind_wave_height,wind_wave_direction',
+      timezone: 'auto',
+    })
+
+    const weatherParams = new URLSearchParams({
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      current: 'wind_speed_10m,wind_direction_10m',
       wind_speed_unit: 'kmh',
       timezone: 'auto',
     })
 
     const [marineRes, windRes] = await Promise.all([
-      fetch(`${MARINE_BASE}?${params}`, { next: { revalidate: 1800 }, headers: HEADERS }),
-      fetch(`${WEATHER_BASE}?${new URLSearchParams({
-        latitude: lat.toString(),
-        longitude: lng.toString(),
-        current: 'wind_speed_10m,wind_direction_10m',
-        wind_speed_unit: 'kmh',
-        timezone: 'auto',
-      })}`, { next: { revalidate: 1800 }, headers: HEADERS }),
+      fetch(`${MARINE_BASE}?${marineParams}`, { next: { revalidate: 1800 }, headers: HEADERS }),
+      fetch(`${WEATHER_BASE}?${weatherParams}`, { next: { revalidate: 1800 }, headers: HEADERS }),
     ])
 
     if (!marineRes.ok) return null
@@ -89,12 +85,18 @@ export async function fetchCurrentConditions(
     const c = marine?.current
     if (!c) return null
 
+    // Estimate wind speed from wind-wave height when weather API is unavailable
+    const windWaveH = c.wind_wave_height ?? 0
+    const estimatedWindSpeed = windWaveH > 0
+      ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
+      : 0
+
     return {
       waveHeight:     c.wave_height ?? 0,
       wavePeriod:     c.wave_period ?? 0,
       swellDirection: c.swell_wave_direction ?? 0,
-      windSpeed:      wind?.current?.wind_speed_10m ?? c.wind_speed_10m ?? 0,
-      windDirection:  wind?.current?.wind_direction_10m ?? c.wind_direction_10m ?? 0,
+      windSpeed:      wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
+      windDirection:  wind?.current?.wind_direction_10m ?? c.wind_wave_direction ?? 0,
     }
   } catch {
     return null
