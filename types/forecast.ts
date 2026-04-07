@@ -47,9 +47,9 @@ export interface TidePoint {
 
 export interface BuoyReading {
   time: string
-  waveHeight: number
-  dominantPeriod: number
-  averagePeriod: number
+  waveHeight: number | null   // null when WVHT sensor is offline/missing (MM)
+  dominantPeriod: number | null
+  averagePeriod: number | null
   meanDirection: number
   waterTemp: number | null
   airTemp: number | null
