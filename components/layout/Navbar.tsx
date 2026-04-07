@@ -122,7 +122,7 @@ export function Navbar() {
 
           {/* Mobile hamburger */}
           <button
-            className="flex items-center justify-center rounded-lg p-2 md:hidden"
+            className="flex items-center justify-center rounded-lg p-2.5 md:hidden"
             style={{ color: 'var(--text-2)' }}
             onClick={() => setMobileOpen((o) => !o)}
             aria-label="Toggle menu"

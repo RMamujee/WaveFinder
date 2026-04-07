@@ -392,10 +392,10 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
           {/* Section 1: Location & Date */}
           <div>
             <p style={sectionHeadingStyle()}>① Location &amp; Date</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
               {/* Spot autocomplete */}
-              <div style={{ gridColumn: '1 / -1' }} ref={comboboxRef}>
+              <div className="col-span-full" ref={comboboxRef}>
                 <label style={labelStyle()}>Spot name *</label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -565,7 +565,7 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
                 </button>
               ) : null}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label style={labelStyle()}>
                   Wave height (ft)
@@ -665,7 +665,7 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
           {/* Section 3: Equipment */}
           <div>
             <p style={sectionHeadingStyle()}>③ Equipment</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label style={labelStyle()}>Board type</label>
                 <select
