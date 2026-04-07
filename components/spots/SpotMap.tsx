@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import type { SurfSpot } from '@/types/spot'
+import type { SurfSpot, ParkingOption } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 
 interface SpotWithRating extends SurfSpot {
@@ -38,24 +38,45 @@ const DIFFICULTY_COLOR: Record<string, string> = {
   advanced:     '#b91c1c',
 }
 
-function markerHtml(spot: SpotWithRating): string {
-  const rating = spot.currentRating ?? 'unknown'
-  const colors = RATING_COLORS[rating]
-  const h = spot.currentWaveHeight
-  const hasWave = h !== null && h !== undefined && h >= 0
-  const label = !hasWave
-    ? '—'
-    : h === 0
-    ? 'Flat'
-    : `${Math.round(h * 3.281)}ft`
-  const fontSize = label.length > 4 ? '7px' : label.length > 3 ? '8px' : '9px'
+const PARKING_ZOOM_THRESHOLD = 13
 
-  return `<div title="${spot.name}" style="display:flex;flex-direction:column;align-items:center;cursor:pointer;">
-    <div style="background:${colors.bg};border:2.5px solid ${colors.border};border-radius:50%;
-      width:36px;height:36px;display:flex;align-items:center;justify-content:center;
-      font-family:'DM Sans',sans-serif;font-size:${fontSize};font-weight:800;color:${colors.text};
-      box-shadow:0 2px 8px rgba(0,0,0,0.15);letter-spacing:-0.3px;line-height:1;">${label}</div>
-    <div style="width:2px;height:6px;background:${colors.border};margin-top:1px;"></div>
+function parkingPriceLabel(p: ParkingOption): string {
+  if (p.isFree) return 'Free'
+  if (p.dailyMax && !p.pricePerHour) return `$${p.dailyMax}/day`
+  if (p.pricePerHour) {
+    const hr = `$${p.pricePerHour.toFixed(2).replace('.00', '')}/hr`
+    return p.dailyMax ? `${hr} (max $${p.dailyMax}/day)` : hr
+  }
+  return 'Paid'
+}
+
+function parkingPopupHtml(p: ParkingOption): string {
+  const typeLabel = p.type === 'lot' ? 'Parking Lot' : p.type === 'street' ? 'Street Parking' : p.type === 'structure' ? 'Parking Structure' : 'Roadside Pullout'
+  const priceColor = p.isFree ? '#15803d' : '#b45309'
+  const timeLimit = p.maxStayHours ? `${p.maxStayHours}hr max stay` : 'No time limit'
+
+  return `<div style="width:200px;padding:12px 14px;font-family:'DM Sans',sans-serif;">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <div style="background:#1e40af;border-radius:6px;width:26px;height:26px;display:flex;align-items:center;
+        justify-content:center;font-size:14px;font-weight:900;color:white;flex-shrink:0;">P</div>
+      <div style="font-size:13px;font-weight:700;color:#1a1a2e;line-height:1.2;">${p.name}</div>
+    </div>
+    <div style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${typeLabel}</div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:11px;color:#6b7280;">Price</span>
+        <span style="font-size:12px;font-weight:700;color:${priceColor};">${parkingPriceLabel(p)}</span>
+      </div>
+      ${p.hours ? `<div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:11px;color:#6b7280;">Hours</span>
+        <span style="font-size:11px;font-weight:600;color:#374151;">${p.hours}</span>
+      </div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:11px;color:#6b7280;">Time limit</span>
+        <span style="font-size:11px;font-weight:600;color:#374151;">${timeLimit}</span>
+      </div>
+    </div>
+    ${p.notes ? `<div style="font-size:10px;color:#6b7280;font-style:italic;border-top:1px solid #f3f4f6;padding-top:6px;">${p.notes}</div>` : ''}
   </div>`
 }
 
@@ -126,14 +147,59 @@ function popupHtml(spot: SpotWithRating): string {
 }
 
 export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 }: Props) {
-  const mapRef      = useRef<HTMLDivElement>(null)
-  const mapInstance = useRef<import('leaflet').Map | null>(null)
-  const clusterRef  = useRef<unknown>(null)
+  const mapRef         = useRef<HTMLDivElement>(null)
+  const mapInstance    = useRef<import('leaflet').Map | null>(null)
+  const clusterRef     = useRef<unknown>(null)
+  const parkingLayerRef = useRef<import('leaflet').LayerGroup | null>(null)
   // Always holds the latest spots so async Leaflet init reads enriched data
   // even when conditions arrive between when the effect was scheduled and when
   // the async Leaflet imports finish.
-  const spotsRef    = useRef<SpotWithRating[]>(spots)
-  spotsRef.current  = spots
+  const spotsRef       = useRef<SpotWithRating[]>(spots)
+  spotsRef.current     = spots
+
+  // Show or hide parking layer based on current zoom level
+  function syncParkingVisibility(map: import('leaflet').Map, L: typeof import('leaflet'), parkingLayer: import('leaflet').LayerGroup) {
+    if (map.getZoom() >= PARKING_ZOOM_THRESHOLD) {
+      if (!map.hasLayer(parkingLayer)) parkingLayer.addTo(map)
+    } else {
+      if (map.hasLayer(parkingLayer)) map.removeLayer(parkingLayer)
+    }
+  }
+
+  // Build parking layer from current spots data
+  function buildParkingLayer(
+    L: typeof import('leaflet'),
+    allSpots: SpotWithRating[]
+  ): import('leaflet').LayerGroup {
+    const layer = L.layerGroup()
+
+    for (const spot of allSpots) {
+      const options = spot.parkingOptions as ParkingOption[] | null | undefined
+      if (!options?.length) continue
+
+      for (const p of options) {
+        const isFree = p.isFree
+        const icon = L.divIcon({
+          className: '',
+          html: `<div title="${p.name}" style="
+            background:${isFree ? '#1e40af' : '#374151'};
+            border:2px solid ${isFree ? '#93c5fd' : '#9ca3af'};
+            border-radius:6px;width:22px;height:22px;
+            display:flex;align-items:center;justify-content:center;
+            font-family:'DM Sans',sans-serif;font-size:12px;font-weight:900;color:white;
+            box-shadow:0 1px 4px rgba(0,0,0,0.3);cursor:pointer;">P</div>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+          popupAnchor: [0, -14],
+        })
+        const marker = L.marker([p.lat, p.lng], { icon })
+        marker.bindPopup(parkingPopupHtml(p), { maxWidth: 220, minWidth: 200 })
+        layer.addLayer(marker)
+      }
+    }
+
+    return layer
+  }
 
   // Build / rebuild the cluster layer whenever spots data changes
   async function rebuildCluster(
@@ -146,6 +212,10 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
     // Remove old cluster group
     if (clusterRef.current) {
       map.removeLayer(clusterRef.current as import('leaflet').Layer)
+    }
+    // Remove old parking layer
+    if (parkingLayerRef.current) {
+      map.removeLayer(parkingLayerRef.current)
     }
 
     const group = new MCG({
@@ -214,6 +284,11 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
 
     group.addTo(map)
     clusterRef.current = group
+
+    // Build parking layer and sync visibility
+    const parkingLayer = buildParkingLayer(L, allSpots)
+    parkingLayerRef.current = parkingLayer
+    syncParkingVisibility(map, L, parkingLayer)
   }
 
   // Initial map setup
@@ -236,6 +311,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
         mapInstance.current.remove()
         mapInstance.current = null
         clusterRef.current = null
+        parkingLayerRef.current = null
       }
 
       const map = L.map(mapRef.current, {
@@ -255,6 +331,13 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
       // Use spotsRef so we get the most recent enriched data — conditions may
       // have arrived (synchronous cache hit) while we were awaiting Leaflet imports.
       await rebuildCluster(map, L, MarkerClusterGroup, spotsRef.current)
+
+      // Show/hide parking markers on zoom
+      map.on('zoomend', () => {
+        if (parkingLayerRef.current) {
+          syncParkingVisibility(map, L, parkingLayerRef.current)
+        }
+      })
     })().catch(console.error)
 
     return () => {
@@ -263,6 +346,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
         mapInstance.current.remove()
         mapInstance.current = null
         clusterRef.current = null
+        parkingLayerRef.current = null
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
