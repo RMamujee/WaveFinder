@@ -80,7 +80,7 @@ export async function GET(
   }
 
   // Step 1 — find BEACH program monitoring stations within 3 miles
-  const stationUrl = `https://www.waterqualitydata.us/data/Station/search?lat=${spot.lat}&long=${spot.lng}&within=3&characteristicName=Enterococcus&mimeType=csv`
+  const stationUrl = `https://www.waterqualitydata.us/data/Station/search?lat=${spot.lat}&long=${spot.lng}&within=20&characteristicName=Enterococcus&mimeType=csv`
   const stationCSV = await fetchText(stationUrl)
   if (!stationCSV) return NextResponse.json(noData)
 

@@ -284,12 +284,6 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         </div>
 
-        {/* Water Quality */}
-        <div>
-          <SectionTitle>Water Quality</SectionTitle>
-          <WaterQualityPanel spotSlug={spot.slug} />
-        </div>
-
         {/* Best time + hourly table */}
         {forecast?.forecast && activeDayData && (
           <div className="grid gap-4 lg:grid-cols-3">
@@ -487,6 +481,9 @@ export function SpotForecastView({ spot }: Props) {
           <SectionTitle>Best Season to Surf</SectionTitle>
           <SeasonCalendar region={spot.region} difficulty={spot.difficulty} />
         </div>
+
+        {/* Water Quality — only renders when USGS/EPA data exists within 20 miles */}
+        <WaterQualityPanel spotSlug={spot.slug} />
 
       </div>
     </div>
