@@ -37,6 +37,28 @@ function metersToFeet(m: number) {
   return `${ft}ft`
 }
 
+function getWaterQuality(windSpeedKmh: number, windDir: number, spotFacing: number): { label: string; color: string } {
+  const mph = windSpeedKmh * 0.621371
+  if (mph < 5) return { label: 'Glassy', color: '#16a34a' }
+  const diff = Math.abs(((windDir - spotFacing + 180) % 360) - 180)
+  const offshore = diff > 90
+  if (mph < 10) return offshore ? { label: 'Clean', color: '#0e7490' } : { label: 'Light Chop', color: '#b45309' }
+  if (mph < 18) return offshore ? { label: 'Offshore', color: '#0369a1' } : { label: 'Choppy', color: '#dc2626' }
+  return { label: 'Rough', color: '#9f1239' }
+}
+
+function StatBlock({ label, value, sub, valueColor }: { label: string; value: string; sub?: string; valueColor?: string }) {
+  return (
+    <div style={{ minWidth: '52px' }}>
+      <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{label}</p>
+      <p style={{ fontSize: '20px', fontWeight: 600, lineHeight: 1, color: valueColor ?? 'var(--text)', whiteSpace: 'nowrap' }}>
+        {value}
+      </p>
+      {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
+    </div>
+  )
+}
+
 const DIFFICULTY_STYLES = {
   beginner:     { color: '#15803d', bg: '#f0fdf4' },
   intermediate: { color: '#b45309', bg: '#fffbeb' },
@@ -121,55 +143,43 @@ export function SpotForecastView({ spot }: Props) {
               </p>
 
               {isLoading ? null : current ? (
-                <div className="flex flex-wrap items-end gap-4 sm:gap-6">
-                  {/* Wave height */}
-                  <div>
-                    <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-3)' }}>Wave Height</p>
-                    <div className="flex items-baseline gap-1.5">
-                      <span style={{ fontSize: '38px', fontWeight: 700, color: 'var(--text)', lineHeight: 1, fontFamily: 'Playfair Display, serif' }}>
-                        {metersToFeet(current.waveHeight)}
-                      </span>
-                      <span className="text-sm" style={{ color: 'var(--text-3)' }}>ft</span>
-                    </div>
+                <div className="flex flex-wrap items-start gap-5 sm:gap-7">
+                  {/* Wave height — hero stat, larger */}
+                  <div style={{ minWidth: '52px' }}>
+                    <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Height</p>
+                    <p style={{ fontSize: '34px', fontWeight: 700, lineHeight: 1, color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+                      {metersToFeet(current.waveHeight)}
+                    </p>
                   </div>
 
-                  {/* Period */}
-                  <div>
-                    <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-3)' }}>Period</p>
-                    <div className="flex items-baseline gap-1">
-                      <span style={{ fontSize: '28px', fontWeight: 600, color: 'var(--text)', lineHeight: 1 }}>
-                        {Math.round(current.swellPeriod)}s
-                      </span>
-                    </div>
-                  </div>
+                  <div className="self-stretch w-px" style={{ background: 'var(--border)', margin: '2px 0' }} />
 
-                  {/* Direction */}
-                  <div>
-                    <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-3)' }}>Swell</p>
-                    <div style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text)' }}>
-                      {degreesToCompass(current.swellDirection)}
-                    </div>
-                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{current.swellDirection}°</p>
-                  </div>
-
-                  {/* Wind */}
-                  <div>
-                    <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-3)' }}>Wind</p>
-                    <div style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text)' }}>
-                      {Math.round(current.wind.speed * 0.621371)} mph
-                    </div>
-                    <p className="text-xs" style={{ color: 'var(--text-3)' }}>{current.wind.directionLabel}</p>
-                  </div>
-
-                  {/* Wave Power */}
+                  <StatBlock
+                    label="Period"
+                    value={`${Math.round(current.swellPeriod)}s`}
+                  />
+                  <StatBlock
+                    label="Swell"
+                    value={degreesToCompass(current.swellDirection)}
+                    sub={`${current.swellDirection}°`}
+                  />
+                  <StatBlock
+                    label="Wind"
+                    value={`${Math.round(current.wind.speed * 0.621371)} mph`}
+                    sub={current.wind.directionLabel}
+                  />
+                  {(() => {
+                    const wq = getWaterQuality(current.wind.speed, current.wind.direction, spot.facingDirection)
+                    return <StatBlock label="Surface" value={wq.label} valueColor={wq.color} />
+                  })()}
+                  {current.waterTemp !== null && (
+                    <StatBlock
+                      label="Water"
+                      value={`${Math.round(current.waterTemp * 9/5 + 32)}°F`}
+                    />
+                  )}
                   {current.wavePower > 0 && (
-                    <div>
-                      <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-3)' }}>Power</p>
-                      <div style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text)' }}>
-                        {current.wavePower}
-                      </div>
-                      <p className="text-xs" style={{ color: 'var(--text-3)' }}>kW/m</p>
-                    </div>
+                    <StatBlock label="Power" value={`${current.wavePower}`} sub="kW/m" />
                   )}
                 </div>
               ) : error ? (
