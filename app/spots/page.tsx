@@ -59,7 +59,7 @@ export default function SpotsPage() {
   const { data: conditionData } = useQuery<SpotWithRating[]>({
     queryKey: ['spots-conditions', effectiveSearch, difficulty],
     queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => r.json()),
-    staleTime: 15 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
     enabled: baseSpots.length > 0,
   })
 

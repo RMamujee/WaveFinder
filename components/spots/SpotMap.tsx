@@ -129,6 +129,11 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
   const mapRef      = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<import('leaflet').Map | null>(null)
   const clusterRef  = useRef<unknown>(null)
+  // Always holds the latest spots so async Leaflet init reads enriched data
+  // even when conditions arrive between when the effect was scheduled and when
+  // the async Leaflet imports finish.
+  const spotsRef    = useRef<SpotWithRating[]>(spots)
+  spotsRef.current  = spots
 
   // Build / rebuild the cluster layer whenever spots data changes
   async function rebuildCluster(
@@ -247,7 +252,9 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
         maxZoom: 19,
       }).addTo(map)
 
-      await rebuildCluster(map, L, MarkerClusterGroup, spots)
+      // Use spotsRef so we get the most recent enriched data — conditions may
+      // have arrived (synchronous cache hit) while we were awaiting Leaflet imports.
+      await rebuildCluster(map, L, MarkerClusterGroup, spotsRef.current)
     })().catch(console.error)
 
     return () => {

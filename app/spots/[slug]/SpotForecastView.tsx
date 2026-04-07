@@ -7,6 +7,8 @@ import type { SpotForecast, ForecastDay, ConditionRating } from '@/types/forecas
 import { WaveChart } from '@/components/forecast/WaveChart'
 import { WindChart } from '@/components/forecast/WindChart'
 import { TideChart } from '@/components/forecast/TideChart'
+import { UVChart } from '@/components/forecast/UVChart'
+import { GearPanel } from '@/components/forecast/GearPanel'
 import { ForecastDayCard } from '@/components/forecast/ForecastDayCard'
 import { BuoyReadings } from '@/components/forecast/BuoyReadings'
 import { WebcamPanel } from '@/components/webcam/WebcamPanel'
@@ -55,8 +57,8 @@ export function SpotForecastView({ spot }: Props) {
 
   const bestTimes = useMemo(() => {
     if (!activeDayData?.hours.length) return []
-    return computeBestTimes(activeDayData.hours)
-  }, [activeDayData])
+    return computeBestTimes(activeDayData.hours, spot.facingDirection)
+  }, [activeDayData, spot.facingDirection])
 
   const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES]
 
@@ -285,7 +287,7 @@ export function SpotForecastView({ spot }: Props) {
             {/* Best Times */}
             <div>
               <SectionTitle>
-                Best Times Today
+                Best Times
                 <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-3)' }}>
                   {activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : ''}
                 </span>
@@ -370,9 +372,9 @@ export function SpotForecastView({ spot }: Props) {
           <div className="grid gap-5 lg:grid-cols-3">
             {/* Wave chart */}
             <div className="lg:col-span-2">
-              <SectionTitle>Wave Height — 7 Days</SectionTitle>
+              <SectionTitle>Wave Height</SectionTitle>
               <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-                <WaveChart days={forecast.forecast} />
+                <WaveChart days={forecast.forecast} activeDayData={activeDayData} />
                 <div className="flex items-center gap-4 mt-3">
                   <Legend color="#1b7fcb" label="Total wave height" />
                   <Legend color="#7c3aed" label="Swell height" />
@@ -390,17 +392,30 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         )}
 
-        {/* Tides */}
-        {forecast?.tides && forecast.tides.length > 0 && (
-          <div>
-            <SectionTitle>Tides</SectionTitle>
-            <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-              <TideChart tides={forecast.tides} selectedDate={activeDayData?.date} />
+        {/* Tides + UV side by side */}
+        <div className="grid gap-5 lg:grid-cols-2">
+          {forecast?.tides && forecast.tides.length > 0 && (
+            <div>
+              <SectionTitle>Tides</SectionTitle>
+              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+                <TideChart tides={forecast.tides} selectedDate={activeDayData?.date} />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+          {activeDayData && (
+            <div>
+              <SectionTitle>
+                UV Index —{' '}
+                <span style={{ fontWeight: 400 }}>{format(parseISO(activeDayData.date), 'EEE, MMM d')}</span>
+              </SectionTitle>
+              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+                <UVChart activeDayData={activeDayData} />
+              </div>
+            </div>
+          )}
+        </div>
 
-        {/* Buoy + UV & Water + community in a grid */}
+        {/* Buoy + Gear + community in a grid */}
         <div className="grid gap-5 lg:grid-cols-2">
           {forecast?.buoy && spot.noaaBuoyId && (
             <div>
@@ -408,13 +423,19 @@ export function SpotForecastView({ spot }: Props) {
               <BuoyReadings buoy={forecast.buoy} buoyId={spot.noaaBuoyId} />
             </div>
           )}
-          {activeDayData && (
-            <div>
-              <SectionTitle>UV &amp; Water</SectionTitle>
-              <UVWaterPanel activeDayData={activeDayData} />
-            </div>
-          )}
-          <div className={forecast?.buoy && spot.noaaBuoyId ? 'lg:col-span-2' : activeDayData ? 'lg:col-span-2' : 'lg:col-span-2'}>
+          {activeDayData && (() => {
+            const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
+            const avgWaterTempC = waterHours.length > 0
+              ? waterHours.reduce((sum, h) => sum + (h.waterTemp ?? 0), 0) / waterHours.length
+              : null
+            return (
+              <div>
+                <SectionTitle>Gear Recommendations</SectionTitle>
+                <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
+              </div>
+            )
+          })()}
+          <div className="lg:col-span-2">
             <SectionTitle>Community Reports</SectionTitle>
             <SurfReports spotSlug={spot.slug} />
           </div>
@@ -431,87 +452,6 @@ export function SpotForecastView({ spot }: Props) {
   )
 }
 
-function getUVLevel(uv: number): { label: string; color: string; bg: string } {
-  if (uv <= 2) return { label: 'Low', color: '#15803d', bg: '#f0fdf4' }
-  if (uv <= 5) return { label: 'Moderate', color: '#b45309', bg: '#fffbeb' }
-  if (uv <= 7) return { label: 'High', color: '#c2410c', bg: '#fff7ed' }
-  if (uv <= 10) return { label: 'Very High', color: '#b91c1c', bg: '#fef2f2' }
-  return { label: 'Extreme', color: '#7c3aed', bg: '#f5f3ff' }
-}
-
-function UVWaterPanel({ activeDayData }: { activeDayData: ForecastDay }) {
-  const peakUV = Math.max(...activeDayData.hours.map((h) => h.uvIndex))
-  const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
-  const avgWaterTempC = waterHours.length > 0
-    ? waterHours.reduce((sum, h) => sum + (h.waterTemp ?? 0), 0) / waterHours.length
-    : null
-  const avgWaterTempF = avgWaterTempC !== null ? (avgWaterTempC * 9) / 5 + 32 : null
-
-  const uvLevel = getUVLevel(peakUV)
-  const uvBarWidth = Math.min((peakUV / 11) * 100, 100)
-
-  return (
-    <div
-      className="rounded-2xl p-5 space-y-4"
-      style={{ background: 'white', border: '1px solid var(--border)' }}
-    >
-      {/* UV Index row */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>Peak UV Index</span>
-          <span
-            className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-            style={{ background: uvLevel.bg, color: uvLevel.color }}
-          >
-            {uvLevel.label}
-          </span>
-        </div>
-        <div className="flex items-baseline gap-2 mb-2">
-          <span style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text)', lineHeight: 1, fontFamily: 'Playfair Display, serif' }}>
-            {Math.round(peakUV)}
-          </span>
-          <span className="text-xs" style={{ color: 'var(--text-3)' }}>/ 11+</span>
-        </div>
-        {/* UV scale bar */}
-        <div className="relative h-2 rounded-full overflow-hidden" style={{ background: 'var(--sand-200)' }}>
-          <div
-            className="h-full rounded-full transition-all"
-            style={{
-              width: `${uvBarWidth}%`,
-              background: `linear-gradient(to right, #16a34a, #f59e0b, #f97316, #ef4444, #7c3aed)`,
-            }}
-          />
-        </div>
-        <div className="flex justify-between mt-1">
-          {['0', '3', '6', '8', '11+'].map((v) => (
-            <span key={v} className="text-xs" style={{ color: 'var(--text-3)', fontSize: '10px' }}>{v}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* Water temperature row */}
-      {avgWaterTempC !== null && (
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
-          <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Avg Water Temperature</p>
-          <div className="flex items-baseline gap-2">
-            <span style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text)', lineHeight: 1, fontFamily: 'Playfair Display, serif' }}>
-              {Math.round(avgWaterTempC)}°C
-            </span>
-            <span className="text-sm" style={{ color: 'var(--text-3)' }}>
-              {Math.round(avgWaterTempF ?? 0)}°F
-            </span>
-          </div>
-        </div>
-      )}
-
-      {avgWaterTempC === null && (
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
-          <p className="text-xs" style={{ color: 'var(--text-3)' }}>Water temperature not available</p>
-        </div>
-      )}
-    </div>
-  )
-}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (

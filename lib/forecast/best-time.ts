@@ -26,10 +26,16 @@ const WINDOWS: Record<SessionWindow, { label: string; start: number; end: number
   evening:   { label: 'Evening',     start: 18, end: 21, emoji: '🌇' },
 }
 
-function classifyWindQuality(avgWindSpeed: number, avgScore: number): BestTimeSlot['windQuality'] {
+function isOffshore(avgWindDir: number, spotFacing: number): boolean {
+  const offshoreDir = (spotFacing + 180) % 360
+  const diff = Math.abs(avgWindDir - offshoreDir) % 360
+  return (diff <= 90 || diff >= 270)
+}
+
+function classifyWindQuality(avgWindSpeed: number, avgWindDir: number, spotFacing: number): BestTimeSlot['windQuality'] {
   if (avgWindSpeed < 8) return 'glassy'
-  if (avgWindSpeed < 15 && avgScore >= 60) return 'light offshore'
-  if (avgWindSpeed < 20) return 'light onshore'
+  const offshore = isOffshore(avgWindDir, spotFacing)
+  if (avgWindSpeed < 15) return offshore ? 'light offshore' : 'light onshore'
   return 'choppy'
 }
 
@@ -59,7 +65,7 @@ function generateTip(
   return `Skip this window unless you're desperate for water time.`
 }
 
-export function computeBestTimes(todayHours: ForecastHour[]): BestTimeSlot[] {
+export function computeBestTimes(todayHours: ForecastHour[], spotFacing: number): BestTimeSlot[] {
   const slots: BestTimeSlot[] = []
 
   for (const [key, win] of Object.entries(WINDOWS) as [SessionWindow, typeof WINDOWS[SessionWindow]][]) {
@@ -74,6 +80,7 @@ export function computeBestTimes(todayHours: ForecastHour[]): BestTimeSlot[] {
     const avgWaveHeight = hours.reduce((s, h) => s + h.waveHeight, 0) / hours.length
     const avgPeriod = hours.reduce((s, h) => s + h.swellPeriod, 0) / hours.length
     const avgWindSpeed = hours.reduce((s, h) => s + h.wind.speed, 0) / hours.length
+    const avgWindDir = hours.reduce((s, h) => s + h.wind.direction, 0) / hours.length
 
     // Rating from avg score
     let rating: ConditionRating
@@ -82,7 +89,7 @@ export function computeBestTimes(todayHours: ForecastHour[]): BestTimeSlot[] {
     else if (avgScore >= 35) rating = 'fair'
     else rating = 'poor'
 
-    const windQuality = classifyWindQuality(avgWindSpeed, avgScore)
+    const windQuality = classifyWindQuality(avgWindSpeed, avgWindDir, spotFacing)
     const tip = generateTip(key, rating, avgWaveHeight, windQuality)
 
     const startHour = hours[0]
