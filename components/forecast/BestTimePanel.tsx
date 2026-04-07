@@ -1,10 +1,11 @@
 'use client'
 
 import type { BestTimeSlot } from '@/lib/forecast/best-time'
-import type { ConditionRating } from '@/types/forecast'
+import type { ConditionRating, TidePoint } from '@/types/forecast'
 
 interface Props {
   slots: BestTimeSlot[]
+  tides?: TidePoint[]
 }
 
 const WINDOW_ICONS: Record<string, string> = {
@@ -29,7 +30,7 @@ const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text:
   epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', bar: '#7c3aed' },
 }
 
-export function BestTimePanel({ slots }: Props) {
+export function BestTimePanel({ slots, tides }: Props) {
   if (!slots.length) return null
 
   const best = [...slots].sort((a, b) => b.avgScore - a.avgScore)[0]
@@ -139,6 +140,7 @@ export function BestTimePanel({ slots }: Props) {
                   {/* Stats row */}
                   <div className="flex flex-wrap items-center gap-3 mb-2">
                     <WaveHeightTrend slot={slot} />
+                    <TideTrend slot={slot} tides={tides} />
                     <Stat label="Period" value={`${slot.avgPeriod}s`} />
                     <Stat
                       label="Wind"
@@ -165,6 +167,44 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div>
       <span className="text-xs" style={{ color: 'var(--text-3)' }}>{label}: </span>
       <span className="text-xs font-medium" style={{ color: 'var(--text)' }}>{value}</span>
+    </div>
+  )
+}
+
+function TideTrend({ slot, tides }: { slot: BestTimeSlot; tides?: TidePoint[] }) {
+  if (!tides?.length || !slot.hours.length) return null
+
+  // Find tide points whose time falls within this slot's window
+  const startTime = slot.hours[0].time
+  const endTime   = slot.hours[slot.hours.length - 1].time
+
+  const slotTides = tides.filter((t) => t.time >= startTime && t.time <= endTime)
+  if (slotTides.length < 2) {
+    // Fall back: use closest tide points bracketing the window
+    const before = tides.filter((t) => t.time <= startTime).pop()
+    const after  = tides.find((t) => t.time >= endTime)
+    if (!before || !after) return null
+    slotTides.push(before, after)
+  }
+
+  const firstHeight = slotTides[0].height
+  const lastHeight  = slotTides[slotTides.length - 1].height
+  const diff = lastHeight - firstHeight
+
+  let arrow = '→'
+  let label = 'steady'
+  let color = 'var(--text-3)'
+  if (diff > 0.05)  { arrow = '↑'; label = 'rising';  color = '#1b7fcb' }
+  if (diff < -0.05) { arrow = '↓'; label = 'dropping'; color = '#c9a87c' }
+
+  const heightLabel = `${firstHeight.toFixed(1)}m`
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs" style={{ color: 'var(--text-3)' }}>Tide: </span>
+      <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{heightLabel}</span>
+      <span className="text-xs font-bold" style={{ color }} title={label}>{arrow}</span>
+      <span className="text-xs" style={{ color }}>{label}</span>
     </div>
   )
 }

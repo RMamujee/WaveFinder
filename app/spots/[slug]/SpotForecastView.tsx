@@ -293,7 +293,7 @@ export function SpotForecastView({ spot }: Props) {
                 </span>
               </SectionTitle>
               {bestTimes.length > 0 ? (
-                <BestTimePanel slots={bestTimes} />
+                <BestTimePanel slots={bestTimes} tides={forecast.tides} />
               ) : (
                 <div className="rounded-2xl p-8 text-center text-sm" style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
                   Loading time recommendations…
