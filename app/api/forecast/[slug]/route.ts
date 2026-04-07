@@ -36,7 +36,7 @@ export async function GET(
   // Wind data is best-effort — if unavailable, forecast still loads without wind ratings
   const windData = windResult.status === 'fulfilled'
     ? windResult.value
-    : { hourly: { time: [], wind_speed_10m: [], wind_direction_10m: [], wind_gusts_10m: [] } }
+    : { hourly: { time: [] as string[], wind_speed_10m: [] as number[], wind_direction_10m: [] as number[], wind_gusts_10m: [] as number[], temperature_2m: [] as number[], weather_code: [] as number[], precipitation_probability: [] as number[] } }
 
   const hours = mergeForecastData(
     marineResult.value,
