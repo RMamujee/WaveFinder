@@ -49,12 +49,14 @@ export function QuickLogModal({ open, onClose }: Props) {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [savedAsGuest, setSavedAsGuest] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Reset when closed
   useEffect(() => {
     if (!open) {
       setSaved(false)
+      setSavedAsGuest(false)
       setSpotName('')
       setSpotSlug('')
       setRegion('')
@@ -88,12 +90,26 @@ export function QuickLogModal({ open, onClose }: Props) {
     setShowSuggestions(false)
   }
 
+  const saveToLocalStorage = () => {
+    const existing: GuestSession[] = JSON.parse(localStorage.getItem('wavefinder_sessions') ?? '[]')
+    const entry: GuestSession = {
+      id: `guest-${Date.now()}`,
+      spotName, spotSlug: spotSlug || undefined, region: region || undefined,
+      sessionDate: date, duration: duration ? Number(duration) : undefined,
+      rating: rating || undefined, highlights: highlights || undefined,
+      boardType: boardType || undefined, wetsuitMm: wetsuitMm || undefined,
+      createdAt: new Date().toISOString(),
+      _guest: true,
+    }
+    localStorage.setItem('wavefinder_sessions', JSON.stringify([entry, ...existing]))
+  }
+
   const handleSave = async () => {
     if (!spotName || !date) return
     setSaving(true)
     try {
       if (isLoggedIn) {
-        await fetch('/api/sessions', {
+        const res = await fetch('/api/sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -103,22 +119,21 @@ export function QuickLogModal({ open, onClose }: Props) {
             boardType: boardType || undefined, wetsuitMm: wetsuitMm || undefined,
           }),
         })
-      } else {
-        // Guest: save to localStorage
-        const existing: GuestSession[] = JSON.parse(localStorage.getItem('wavefinder_sessions') ?? '[]')
-        const entry: GuestSession = {
-          id: `guest-${Date.now()}`,
-          spotName, spotSlug: spotSlug || undefined, region: region || undefined,
-          sessionDate: date, duration: duration ? Number(duration) : undefined,
-          rating: rating || undefined, highlights: highlights || undefined,
-          boardType: boardType || undefined, wetsuitMm: wetsuitMm || undefined,
-          createdAt: new Date().toISOString(),
-          _guest: true,
+        if (!res.ok) {
+          // Session expired or auth error — fall back to localStorage
+          saveToLocalStorage()
+          setSavedAsGuest(true)
         }
-        localStorage.setItem('wavefinder_sessions', JSON.stringify([entry, ...existing]))
+      } else {
+        saveToLocalStorage()
       }
       setSaved(true)
-    } catch { /* ignore */ } finally {
+    } catch {
+      // Network error — save locally as fallback
+      try { saveToLocalStorage() } catch { /* ignore */ }
+      setSaved(true)
+      setSavedAsGuest(true)
+    } finally {
       setSaving(false)
     }
   }
@@ -158,10 +173,14 @@ export function QuickLogModal({ open, onClose }: Props) {
             <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '20px', fontWeight: 700, color: 'var(--text)' }}>
               Session logged!
             </p>
-            {!isLoggedIn && (
+            {(!isLoggedIn || savedAsGuest) && (
               <p className="mt-2 text-sm" style={{ color: 'var(--text-3)' }}>
+                Saved to this device.{' '}
                 <a href="/signup" style={{ color: 'var(--ocean-600)', fontWeight: 600 }}>Create a free account</a>
-                {' '}to sync your sessions across devices and see your stats.
+                {' '}to sync across devices.
+                {savedAsGuest && isLoggedIn && (
+                  <span className="block mt-1 text-amber-600">Your session may have expired — try logging in again.</span>
+                )}
               </p>
             )}
             <div className="mt-5 flex gap-2 justify-center">

@@ -35,17 +35,26 @@ export async function GET(req: Request) {
 
   if (!withConditions) return NextResponse.json(spots)
 
-  // ── Stage 1: batch-fetch NOAA buoys ──────────────────────────────────────────
+  // ── Stage 1: batch-fetch unique NOAA buoys in parallel ───────────────────────
+  // With 15 unique buoy IDs across 134 spots, this is 15 parallel fetches.
+  // Each buoy response is cached 30 min by Next.js fetch cache.
   const uniqueBuoyIds = [...new Set(spots.filter((s) => s.noaaBuoyId).map((s) => s.noaaBuoyId!))]
-  const buoyResults = await Promise.allSettled(uniqueBuoyIds.map((id) => fetchBuoyData(id)))
+
+  // Race each buoy fetch against a 6s timeout so a slow/down buoy doesn't stall everything
+  const withTimeout = (p: Promise<unknown>, ms: number) =>
+    Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))])
+
+  const buoyResults = await Promise.all(
+    uniqueBuoyIds.map((id) => withTimeout(fetchBuoyData(id), 6000))
+  )
   const buoyMap = new Map<string, Awaited<ReturnType<typeof fetchBuoyData>>>()
   uniqueBuoyIds.forEach((id, i) => {
-    const r = buoyResults[i]
-    if (r.status === 'fulfilled') buoyMap.set(id, r.value)
+    buoyMap.set(id, buoyResults[i] as Awaited<ReturnType<typeof fetchBuoyData>>)
   })
 
-  // ── Stage 2: identify spots still missing a wave height ───────────────────────
-  // Build initial enrichment; collect spots that need an Open-Meteo fallback
+  // ── Stage 2: enrich each spot from its buoy reading ──────────────────────────
+  // Key rule: if a spot HAS a buoy ID, trust the buoy (even waveHeight = 0 means
+  // calm / flat). Only use Open-Meteo fallback for the rare spots with NO buoy ID.
   type EnrichedSpot = (typeof spots)[0] & {
     currentRating: string
     currentWaveHeight: number | null
@@ -56,62 +65,80 @@ export async function GET(req: Request) {
   }
 
   const enriched: EnrichedSpot[] = spots.map((spot) => {
-    const buoy = spot.noaaBuoyId ? buoyMap.get(spot.noaaBuoyId) ?? null : null
-    const hasValidBuoy = buoy !== null && buoy.waveHeight > 0
+    // Spots WITH a buoy ID — always use buoy data, never fall back to Open-Meteo
+    if (spot.noaaBuoyId) {
+      const buoy = buoyMap.get(spot.noaaBuoyId) ?? null
 
-    if (hasValidBuoy) {
-      const { rating } = rateSurfConditions({
-        waveHeight:     buoy!.waveHeight,
-        swellPeriod:    buoy!.dominantPeriod,
-        swellHeight:    buoy!.waveHeight * 0.75,
-        windSpeed:      buoy!.windSpeed ?? 10,
-        windDirection:  buoy!.windDirection ?? 0,
-        swellDirection: buoy!.meanDirection,
-        spotFacing:     spot.facingDirection,
-      })
+      if (buoy && buoy.waveHeight > 0) {
+        const { rating } = rateSurfConditions({
+          waveHeight:     buoy.waveHeight,
+          swellPeriod:    buoy.dominantPeriod,
+          swellHeight:    buoy.waveHeight * 0.75,
+          windSpeed:      buoy.windSpeed ?? 8,
+          windDirection:  buoy.windDirection ?? 0,
+          swellDirection: buoy.meanDirection,
+          spotFacing:     spot.facingDirection,
+        })
+        return {
+          ...spot,
+          currentRating: rating,
+          currentWaveHeight: buoy.waveHeight,
+          currentPeriod: buoy.dominantPeriod,
+          currentWindSpeed: buoy.windSpeed,
+          wavePower: computeWavePower(buoy.waveHeight, buoy.dominantPeriod),
+          _needsFallback: false,
+        }
+      }
+
+      // Buoy fetch failed or returned 0 — mark as poor/flat, no Open-Meteo needed
       return {
         ...spot,
-        currentRating: rating,
-        currentWaveHeight: buoy!.waveHeight,
-        currentPeriod: buoy!.dominantPeriod,
-        currentWindSpeed: buoy!.windSpeed,
-        wavePower: computeWavePower(buoy!.waveHeight, buoy!.dominantPeriod),
+        currentRating: buoy !== null ? 'poor' : 'unknown',
+        currentWaveHeight: buoy !== null ? 0 : null,
+        currentPeriod: null,
+        currentWindSpeed: null,
+        wavePower: null,
         _needsFallback: false,
       }
     }
 
-    return { ...spot, currentRating: 'unknown', currentWaveHeight: null, currentPeriod: null, currentWindSpeed: null, wavePower: null, _needsFallback: true }
+    // Spots with NO buoy ID — need Open-Meteo fallback
+    return {
+      ...spot,
+      currentRating: 'unknown',
+      currentWaveHeight: null,
+      currentPeriod: null,
+      currentWindSpeed: null,
+      wavePower: null,
+      _needsFallback: true,
+    }
   })
 
-  // ── Stage 3: Open-Meteo fallback for spots with no buoy reading ───────────────
+  // ── Stage 3: Open-Meteo only for the small number of no-buoy spots ────────────
   const needFallback = enriched.filter((s) => s._needsFallback)
 
   if (needFallback.length > 0) {
-    // De-duplicate by rounding lat/lng to 1 decimal (~11 km grid) to avoid redundant calls
+    // De-duplicate by rounding to 1 decimal degree (~11 km grid)
     const buckets = new Map<string, { lat: number; lng: number }>()
     for (const spot of needFallback) {
-      const key = `${(spot.lat).toFixed(1)},${(spot.lng).toFixed(1)}`
+      const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
       if (!buckets.has(key)) buckets.set(key, { lat: spot.lat, lng: spot.lng })
     }
 
-    // Fetch Open-Meteo for each unique bucket in parallel
     const bucketKeys = [...buckets.keys()]
-    const omResults = await Promise.allSettled(
-      bucketKeys.map((k) => {
-        const { lat, lng } = buckets.get(k)!
-        return fetchCurrentConditions(lat, lng)
-      })
+    const omResults = await Promise.all(
+      bucketKeys.map((k) =>
+        withTimeout(fetchCurrentConditions(buckets.get(k)!.lat, buckets.get(k)!.lng), 6000)
+      )
     )
     const omMap = new Map<string, Awaited<ReturnType<typeof fetchCurrentConditions>>>()
     bucketKeys.forEach((k, i) => {
-      const r = omResults[i]
-      if (r.status === 'fulfilled') omMap.set(k, r.value)
+      omMap.set(k, omResults[i] as Awaited<ReturnType<typeof fetchCurrentConditions>>)
     })
 
-    // Apply Open-Meteo data to fallback spots
     for (const spot of enriched) {
       if (!spot._needsFallback) continue
-      const key = `${(spot.lat).toFixed(1)},${(spot.lng).toFixed(1)}`
+      const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
       const om = omMap.get(key)
       if (om && om.waveHeight > 0) {
         const { rating } = rateSurfConditions({
@@ -132,7 +159,11 @@ export async function GET(req: Request) {
     }
   }
 
-  // Strip internal flag before returning
   const response = enriched.map(({ _needsFallback: _, ...rest }) => rest)
-  return NextResponse.json(response)
+  return NextResponse.json(response, {
+    headers: {
+      // Serve cached data immediately; refresh in background after 15 min
+      'Cache-Control': 's-maxage=900, stale-while-revalidate=900',
+    },
+  })
 }
