@@ -1029,6 +1029,7 @@ function SessionsPageInner() {
   const queryClient = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [successBanner, setSuccessBanner] = useState(false)
+  const [guestSessions, setGuestSessions] = useState<SurfSession[]>([])
 
   // Pre-fill from ?spot=&region=&slug= when coming from a spot page
   const prefill: Partial<FormState> = {
@@ -1038,21 +1039,51 @@ function SessionsPageInner() {
   const hasPrefill = !!searchParams.get('spot')
 
   useEffect(() => {
-    if (hasPrefill && !isPending && session?.user) setModalOpen(true)
-  }, [hasPrefill, isPending, session?.user])
+    if (hasPrefill && !isPending) setModalOpen(true)
+  }, [hasPrefill, isPending])
 
+  // Load guest sessions from localStorage when not logged in
   useEffect(() => {
-    if (!isPending && !session?.user) router.push('/login')
-  }, [session, isPending, router])
+    if (!isPending && !session?.user) {
+      try {
+        const stored = JSON.parse(localStorage.getItem('wavefinder_sessions') ?? '[]')
+        setGuestSessions(stored.map((s: Record<string, unknown>) => ({
+          ...s,
+          spotSlug: s.spotSlug ?? null,
+          region: s.region ?? null,
+          duration: s.duration ?? null,
+          waveHeightFt: s.waveHeightFt ?? null,
+          wavePeriod: null,
+          windSpeed: null,
+          windDir: null,
+          waterTempC: null,
+          boardType: s.boardType ?? null,
+          wetsuitMm: s.wetsuitMm ?? null,
+          rating: s.rating ?? null,
+          highlights: s.highlights ?? null,
+          buddies: null,
+          updatedAt: s.createdAt as string,
+        })))
+      } catch { /* ignore */ }
+    }
+  }, [isPending, session?.user])
 
-  const { data: sessions = [], isLoading } = useQuery<SurfSession[]>({
+  const { data: serverSessions = [], isLoading } = useQuery<SurfSession[]>({
     queryKey: ['surf-sessions'],
     queryFn: () => fetch('/api/sessions').then((r) => r.json()),
     enabled: !!session?.user,
   })
 
+  const sessions = session?.user ? serverSessions : guestSessions
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      if (id.startsWith('guest-')) {
+        const stored: SurfSession[] = JSON.parse(localStorage.getItem('wavefinder_sessions') ?? '[]')
+        localStorage.setItem('wavefinder_sessions', JSON.stringify(stored.filter((s) => s.id !== id)))
+        setGuestSessions((prev) => prev.filter((s) => s.id !== id))
+        return
+      }
       const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete')
     },
@@ -1091,8 +1122,6 @@ function SessionsPageInner() {
     )
   }
 
-  if (!session?.user) return null
-
   return (
     <>
       <style>{`
@@ -1103,6 +1132,17 @@ function SessionsPageInner() {
       `}</style>
 
       <div style={{ minHeight: '100vh', background: 'var(--sand-50)' }}>
+        {/* Guest banner */}
+        {!isPending && !session?.user && (
+          <div style={{ background: 'var(--ocean-600)', color: 'white', padding: '10px 20px', textAlign: 'center', fontSize: '13px' }}>
+            Sessions are saved on this device only.{' '}
+            <a href="/signup" style={{ color: 'white', fontWeight: 700, textDecoration: 'underline' }}>Create a free account</a>
+            {' '}or{' '}
+            <a href="/login" style={{ color: 'white', fontWeight: 700, textDecoration: 'underline' }}>log in</a>
+            {' '}to sync across devices.
+          </div>
+        )}
+
         {/* Success banner */}
         {successBanner && (
           <div
