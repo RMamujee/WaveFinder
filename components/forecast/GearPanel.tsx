@@ -26,43 +26,43 @@ function getWetsuitRec(tempC: number | null): Pick<Recommendation, 'wetsuit' | '
   }
   if (tempC >= 24) return {
     wetsuit: 'Board Shorts / Bikini',
-    wetsuitDetail: `${tempC.toFixed(1)}°C — No wetsuit needed. Rash guard optional for sun.`,
+    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — No wetsuit needed. Rash guard optional for sun.`,
     wetsuitColor: '#15803d',
     wetsuitBg: '#f0fdf4',
   }
   if (tempC >= 21) return {
     wetsuit: '2mm Shorty / Spring Suit',
-    wetsuitDetail: `${tempC.toFixed(1)}°C — Light suit for warmth. Keeps you comfortable without overheating.`,
+    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Light suit for warmth. Keeps you comfortable without overheating.`,
     wetsuitColor: '#0e9488',
     wetsuitBg: '#f0fdfa',
   }
   if (tempC >= 18) return {
     wetsuit: '2mm / 3/2mm Full Suit',
-    wetsuitDetail: `${tempC.toFixed(1)}°C — Light full suit. 3/2mm if surfing long sessions.`,
+    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Light full suit. 3/2mm if surfing long sessions.`,
     wetsuitColor: '#0369a1',
     wetsuitBg: '#f0f9ff',
   }
   if (tempC >= 15) return {
     wetsuit: '3/2mm Full Suit',
-    wetsuitDetail: `${tempC.toFixed(1)}°C — Standard California cold water suit. Sealed seams help.`,
+    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Standard California cold water suit. Sealed seams help.`,
     wetsuitColor: '#1d4ed8',
     wetsuitBg: '#eff6ff',
   }
   if (tempC >= 12) return {
     wetsuit: '4/3mm Full Suit + Boots',
-    wetsuitDetail: `${tempC.toFixed(1)}°C — Booties essential. Gloves optional for long sessions.`,
+    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Booties essential. Gloves optional for long sessions.`,
     wetsuitColor: '#6d28d9',
     wetsuitBg: '#f5f3ff',
   }
   if (tempC >= 9) return {
     wetsuit: '5/4mm + Boots + Gloves',
-    wetsuitDetail: `${tempC.toFixed(1)}°C — Cold. Hood recommended for sessions over an hour.`,
+    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Cold. Hood recommended for sessions over an hour.`,
     wetsuitColor: '#7c3aed',
     wetsuitBg: '#ede9fe',
   }
   return {
     wetsuit: '6/5mm or Drysuit + Hood',
-    wetsuitDetail: `${tempC.toFixed(1)}°C — Extreme cold. Full hood + boots + gloves required.`,
+    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Extreme cold. Full hood + boots + gloves required.`,
     wetsuitColor: '#be185d',
     wetsuitBg: '#fdf2f8',
   }

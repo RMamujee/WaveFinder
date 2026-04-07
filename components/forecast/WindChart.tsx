@@ -90,7 +90,7 @@ export function WindChart({ days, activeDayData }: Props) {
                 return (
                   <div className="rounded-xl p-3 text-xs shadow-lg" style={{ background: 'white', border: '1px solid #ede0cc' }}>
                     <p className="mb-1 font-medium" style={{ color: '#4a4a6a' }}>{label}</p>
-                    <p style={{ color: '#1a1a2e' }}>{payload[0]?.value} km/h {item?.dir}</p>
+                    <p style={{ color: '#1a1a2e' }}>{Math.round((payload[0]?.value as number ?? 0) * 0.621371)} mph {item?.dir}</p>
                   </div>
                 )
               }}

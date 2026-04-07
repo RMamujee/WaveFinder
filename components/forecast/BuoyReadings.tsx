@@ -29,17 +29,17 @@ export function BuoyReadings({ buoy, buoyId }: Props) {
         </div>
       </div>
       <div className="p-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <Stat label="Wave Height" value={`${buoy.waveHeight}m`} />
+        <Stat label="Wave Height" value={buoy.waveHeight != null ? `${(buoy.waveHeight * 3.281).toFixed(1)}ft` : '—'} />
         <Stat label="Dom. Period" value={`${buoy.dominantPeriod}s`} />
         <Stat label="Avg Period"  value={`${buoy.averagePeriod}s`} />
         <Stat label="Swell Dir"   value={degreesToCompass(buoy.meanDirection)} />
         {buoy.waterTemp !== null && (
-          <Stat label="Water Temp" value={`${buoy.waterTemp}°C`} />
+          <Stat label="Water Temp" value={`${Math.round(buoy.waterTemp * 9/5 + 32)}°F`} />
         )}
         {buoy.windSpeed !== null && (
           <Stat
             label="Wind (Buoy)"
-            value={`${buoy.windSpeed} m/s ${buoy.windDirection !== null ? degreesToCompass(buoy.windDirection) : ''}`}
+            value={`${Math.round(buoy.windSpeed * 2.237)} mph ${buoy.windDirection !== null ? degreesToCompass(buoy.windDirection) : ''}`}
           />
         )}
       </div>

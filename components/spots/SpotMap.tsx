@@ -104,7 +104,7 @@ function tooltipHtml(spot: SpotWithRating): string {
         <div style="font-size:10px;color:#8888aa;">kW/m</div></div>` : ''}
     </div>
     ${spot.currentWindSpeed != null ? `<div style="font-size:11px;color:#6b7280;margin-bottom:6px;">
-      💨 ${Math.round(spot.currentWindSpeed!)} km/h ${spot.currentWindDir ?? ''}</div>` : ''}
+      💨 ${Math.round(spot.currentWindSpeed! * 0.621371)} mph ${spot.currentWindDir ?? ''}</div>` : ''}
   ` : h === 0 ? `<div style="font-size:11px;color:#8888aa;margin:6px 0;font-style:italic;">Flat — no rideable waves today</div>`
     : `<div style="font-size:11px;color:#8888aa;margin:6px 0;font-style:italic;">No live data — click for forecast</div>`
 
