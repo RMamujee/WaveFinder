@@ -113,16 +113,16 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Sorted results — show all when query is empty, fuzzy-sorted when typing
+  // Sorted results — show all spots when query is empty, fuzzy-sorted when typing
   const results = useCallback((): SurfSpot[] => {
     if (!query.trim()) {
-      return spots.slice(0, 50)  // show first 50 when no query
+      return spots  // show all spots when no query
     }
     return spots
       .map((s) => ({ spot: s, score: fuzzyScore(query, s) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 12)
+      .slice(0, 20)
       .map((x) => x.spot)
   }, [query, spots])()
 
