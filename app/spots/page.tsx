@@ -64,8 +64,9 @@ export default function SpotsPage() {
   })
 
   // Merge: use base spots immediately, overlay conditions when available
+  // Guard against conditionData being an error object instead of an array
   const spots = useMemo(() => {
-    if (!conditionData) return baseSpots
+    if (!conditionData || !Array.isArray(conditionData)) return baseSpots
     const condMap = new Map(conditionData.map((s) => [s.id, s]))
     return baseSpots.map((s) => ({ ...s, ...condMap.get(s.id) }))
   }, [baseSpots, conditionData])
