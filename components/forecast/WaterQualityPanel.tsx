@@ -40,43 +40,11 @@ export function WaterQualityPanel({ spotSlug }: Props) {
     staleTime: 6 * 60 * 60 * 1000, // 6 hours
   })
 
-  if (isLoading) {
-    return (
-      <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <span style={{ fontSize: 18 }}>🧫</span>
-          <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Water Quality</h3>
-        </div>
-        <div className="h-20 animate-pulse rounded-xl" style={{ background: 'var(--sand-50)' }} />
-      </div>
-    )
-  }
+  // While loading, render nothing — section won't flash in then disappear
+  if (isLoading) return null
 
-  if (!data || data.source === 'none' || data.status === 'no_data' || !data.latestReading) {
-    return (
-      <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2 mb-3">
-          <span style={{ fontSize: 18 }}>🧫</span>
-          <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Water Quality</h3>
-        </div>
-        <div className="rounded-xl p-4 text-center" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
-          <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-2)' }}>No monitoring data</p>
-          <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-            No USGS/EPA BEACH program stations found within 3 miles of this spot.
-          </p>
-          <a
-            href="https://waterqualitydata.us"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs mt-2 inline-block"
-            style={{ color: 'var(--ocean-600)' }}
-          >
-            Search USGS Water Quality Portal →
-          </a>
-        </div>
-      </div>
-    )
-  }
+  // No data → hide the entire section (parent renders nothing)
+  if (!data || data.source === 'none' || data.status === 'no_data' || !data.latestReading) return null
 
   const { latestReading, history, beachName } = data
   const threshold = getThreshold(latestReading.value)
@@ -96,17 +64,26 @@ export function WaterQualityPanel({ spotSlug }: Props) {
   })
 
   return (
+    <div>
+      <h2
+        className="mb-2 font-semibold text-sm"
+        style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
+      >
+        Water Quality
+      </h2>
     <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div>
           <div className="flex items-center gap-2">
             <span style={{ fontSize: 18 }}>🧫</span>
-            <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Water Quality</h3>
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+              {beachName ?? 'Bacterial Monitoring'}
+            </h3>
           </div>
           {beachName && (
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-              Nearest station: {beachName}
+              Nearest BEACH station · ~20 mi radius
             </p>
           )}
         </div>
@@ -212,6 +189,7 @@ export function WaterQualityPanel({ spotSlug }: Props) {
           Source: USGS/EPA BEACH Program
         </a>
       </div>
+    </div>
     </div>
   )
 }
