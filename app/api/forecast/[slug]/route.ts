@@ -6,6 +6,7 @@ import { fetchBuoyData } from '@/lib/api/noaa-buoy'
 import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
 
 export const revalidate = 3600
+export const maxDuration = 60
 
 export async function GET(
   _req: Request,

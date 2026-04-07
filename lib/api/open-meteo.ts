@@ -1,6 +1,8 @@
 const MARINE_BASE = 'https://marine-api.open-meteo.com/v1/marine'
 const WEATHER_BASE = 'https://api.open-meteo.com/v1/forecast'
 
+const FETCH_TIMEOUT = 12000
+
 export interface OpenMeteoMarineResponse {
   hourly: {
     time: string[]
@@ -59,14 +61,20 @@ export async function fetchCurrentConditions(
     })
 
     const [marineRes, windRes] = await Promise.all([
-      fetch(`${MARINE_BASE}?${params}`, { next: { revalidate: 1800 } }),
+      fetch(`${MARINE_BASE}?${params}`, {
+        next: { revalidate: 1800 },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      }),
       fetch(`${WEATHER_BASE}?${new URLSearchParams({
         latitude: lat.toString(),
         longitude: lng.toString(),
         current: 'wind_speed_10m,wind_direction_10m',
         wind_speed_unit: 'kmh',
         timezone: 'auto',
-      })}`, { next: { revalidate: 1800 } }),
+      })}`, {
+        next: { revalidate: 1800 },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      }),
     ])
 
     if (!marineRes.ok) return null
@@ -78,11 +86,11 @@ export async function fetchCurrentConditions(
     if (!c) return null
 
     return {
-      waveHeight:    c.wave_height ?? 0,
-      wavePeriod:    c.wave_period ?? 0,
+      waveHeight:     c.wave_height ?? 0,
+      wavePeriod:     c.wave_period ?? 0,
       swellDirection: c.swell_wave_direction ?? 0,
-      windSpeed:     wind?.current?.wind_speed_10m ?? c.wind_speed_10m ?? 0,
-      windDirection: wind?.current?.wind_direction_10m ?? c.wind_direction_10m ?? 0,
+      windSpeed:      wind?.current?.wind_speed_10m ?? c.wind_speed_10m ?? 0,
+      windDirection:  wind?.current?.wind_direction_10m ?? c.wind_direction_10m ?? 0,
     }
   } catch {
     return null
@@ -93,7 +101,8 @@ export async function fetchMarineForecast(
   lat: number,
   lng: number
 ): Promise<OpenMeteoMarineResponse> {
-  const params = new URLSearchParams({
+  // Core wave params — always available
+  const coreParams = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lng.toString(),
     hourly: [
@@ -106,43 +115,95 @@ export async function fetchMarineForecast(
       'wind_wave_height',
       'wind_wave_direction',
       'wind_wave_period',
-      'sea_surface_temperature',
     ].join(','),
     forecast_days: '7',
     timezone: 'auto',
   })
 
-  const res = await fetch(`${MARINE_BASE}?${params}`, {
+  const res = await fetch(`${MARINE_BASE}?${coreParams}`, {
     next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT),
   })
 
   if (!res.ok) {
     throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
   }
 
-  return res.json()
+  const data: OpenMeteoMarineResponse = await res.json()
+
+  // Sea surface temperature — optional, not available at all coordinates
+  try {
+    const sstParams = new URLSearchParams({
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      hourly: 'sea_surface_temperature',
+      forecast_days: '7',
+      timezone: 'auto',
+    })
+    const sstRes = await fetch(`${MARINE_BASE}?${sstParams}`, {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (sstRes.ok) {
+      const sstData = await sstRes.json()
+      if (sstData?.hourly?.sea_surface_temperature) {
+        data.hourly.sea_surface_temperature = sstData.hourly.sea_surface_temperature
+      }
+    }
+  } catch {
+    // SST not available — UV & water panel will show "not available"
+  }
+
+  return data
 }
 
 export async function fetchWindForecast(
   lat: number,
   lng: number
 ): Promise<OpenMeteoWindResponse> {
-  const params = new URLSearchParams({
+  // Core wind params
+  const coreParams = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lng.toString(),
-    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index',
+    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m',
     wind_speed_unit: 'kmh',
     forecast_days: '7',
     timezone: 'auto',
   })
 
-  const res = await fetch(`${WEATHER_BASE}?${params}`, {
+  const res = await fetch(`${WEATHER_BASE}?${coreParams}`, {
     next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT),
   })
 
   if (!res.ok) {
     throw new Error(`Open-Meteo weather API error: ${res.status} ${res.statusText}`)
   }
 
-  return res.json()
+  const data: OpenMeteoWindResponse = await res.json()
+
+  // UV index — optional separate call
+  try {
+    const uvParams = new URLSearchParams({
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      hourly: 'uv_index',
+      forecast_days: '7',
+      timezone: 'auto',
+    })
+    const uvRes = await fetch(`${WEATHER_BASE}?${uvParams}`, {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (uvRes.ok) {
+      const uvData = await uvRes.json()
+      if (uvData?.hourly?.uv_index) {
+        data.hourly.uv_index = uvData.hourly.uv_index
+      }
+    }
+  } catch {
+    // UV not available for this location
+  }
+
+  return data
 }

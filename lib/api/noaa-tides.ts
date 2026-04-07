@@ -40,6 +40,7 @@ export async function fetchTidePredictions(stationId: string): Promise<TidePoint
 
   const res = await fetch(`${NOAA_TIDES_BASE}?${params}`, {
     next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(8000),
   })
 
   if (!res.ok) return []
