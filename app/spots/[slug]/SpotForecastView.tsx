@@ -91,7 +91,7 @@ export function SpotForecastView({ spot }: Props) {
             <span style={{ color: 'var(--text-2)' }}>{spot.name}</span>
           </div>
 
-          <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
             {/* Left: name + current reading */}
             <div>
               <div className="flex items-center gap-3 mb-1">
@@ -124,7 +124,7 @@ export function SpotForecastView({ spot }: Props) {
                   ))}
                 </div>
               ) : current ? (
-                <div className="flex flex-wrap items-end gap-6">
+                <div className="flex flex-wrap items-end gap-4 sm:gap-6">
                   {/* Wave height */}
                   <div>
                     <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-3)' }}>Wave Height</p>
@@ -252,7 +252,7 @@ export function SpotForecastView({ spot }: Props) {
                 ))}
               </div>
             ) : forecast?.forecast ? (
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
                 {forecast.forecast.map((day) => (
                   <ForecastDayCard
                     key={day.date}
@@ -283,7 +283,7 @@ export function SpotForecastView({ spot }: Props) {
 
         {/* Best time + hourly table */}
         {forecast?.forecast && activeDayData && (
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             {/* Best Times */}
             <div>
               <SectionTitle>
@@ -307,15 +307,16 @@ export function SpotForecastView({ spot }: Props) {
                 Hourly —{' '}
                 {format(parseISO(activeDayData.date), 'EEEE, MMM d')}
               </SectionTitle>
-              <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'white' }}>
-                <table className="w-full text-sm">
+              <div className="rounded-2xl overflow-hidden overflow-x-auto" style={{ border: '1px solid var(--border)', background: 'white' }}>
+                <table className="w-full text-sm" style={{ minWidth: '400px' }}>
                   <thead style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
                     <tr className="text-left">
-                      {['Time', 'Height', 'Period', 'Dir', 'Wind', 'Rating'].map((h) => (
-                        <th key={h} className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-                          {h}
-                        </th>
-                      ))}
+                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Time</th>
+                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Height</th>
+                      <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Period</th>
+                      <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Dir</th>
+                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Wind</th>
+                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Rating</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -331,27 +332,27 @@ export function SpotForecastView({ spot }: Props) {
                               background: h.ratingScore >= 60 ? rs.bg : 'white',
                             }}
                           >
-                            <td className="px-4 py-3 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
+                            <td className="px-4 py-3 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
                               {format(parseISO(h.time), 'ha')}
                             </td>
-                            <td className="px-4 py-3 font-semibold text-xs" style={{ color: 'var(--text)' }}>
+                            <td className="px-4 py-3 font-semibold text-xs whitespace-nowrap" style={{ color: 'var(--text)' }}>
                               {metersToFeet(h.waveHeight)}
-                              <span className="ml-1 font-normal" style={{ color: 'var(--text-3)', fontSize: '11px' }}>
+                              <span className="ml-1 font-normal hidden sm:inline" style={{ color: 'var(--text-3)', fontSize: '11px' }}>
                                 {h.waveHeight}m
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-xs" style={{ color: 'var(--text)' }}>
+                            <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text)' }}>
                               {Math.round(h.swellPeriod)}s
                             </td>
-                            <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-2)' }}>
+                            <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text-2)' }}>
                               {degreesToCompass(h.swellDirection)}
                             </td>
-                            <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-2)' }}>
+                            <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
                               {Math.round(h.wind.speed)} {h.wind.directionLabel}
                             </td>
                             <td className="px-4 py-3">
                               <span
-                                className="rounded-full px-2 py-0.5 text-xs font-semibold"
+                                className="rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
                                 style={{ background: rs.bg, color: rs.text, border: `1px solid ${rs.border}` }}
                               >
                                 {h.rating}

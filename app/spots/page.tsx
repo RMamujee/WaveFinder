@@ -100,9 +100,9 @@ export default function SpotsPage() {
         className="shrink-0 px-5 py-3"
         style={{ borderBottom: '1px solid var(--border)', background: 'white' }}
       >
-        <div className="mx-auto max-w-7xl flex flex-wrap items-center gap-3">
+        <div className="mx-auto max-w-7xl flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Search */}
-          <div className="relative flex-1 min-w-[160px] max-w-xs">
+          <div className="relative w-full sm:flex-1 sm:min-w-0 sm:max-w-xs">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2"
               width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -125,12 +125,12 @@ export default function SpotsPage() {
           </div>
 
           {/* Quick filters */}
-          <div className="flex items-center gap-1.5 overflow-x-auto">
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
             {QUICK_FILTERS.map((f) => (
               <button
                 key={f.label}
                 onClick={() => { setQuickSearch(f.q); setSearch('') }}
-                className="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-all"
+                className="shrink-0 rounded-full px-3 py-2 text-xs font-medium transition-all"
                 style={{
                   background: quickSearch === f.q && !search
                     ? 'var(--ocean-600)' : 'var(--sand-100)',
@@ -148,7 +148,7 @@ export default function SpotsPage() {
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value)}
-            className="rounded-lg px-3 py-2 text-xs font-medium focus:outline-none"
+            className="rounded-lg px-3 py-2 text-xs font-medium focus:outline-none h-9"
             style={{
               background: 'var(--sand-100)',
               border: '1px solid var(--border)',
@@ -170,7 +170,7 @@ export default function SpotsPage() {
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className="px-3 py-1.5 text-xs font-medium transition-colors capitalize"
+                className="px-3 py-2 text-xs font-medium transition-colors capitalize"
                 style={{
                   background: view === v ? 'var(--ocean-600)' : 'white',
                   color: view === v ? 'white' : 'var(--text-2)',
