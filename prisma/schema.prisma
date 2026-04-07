@@ -77,6 +77,7 @@ model SurfSpot {
   noaaBuoyId        String?
   webcamUrl         String?
   webcamType        String?
+  parkingOptions    Json?
   createdAt         DateTime     @default(now())
   savedBy           SavedSpot[]
   alerts            SpotAlert[]

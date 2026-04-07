@@ -1,5 +1,18 @@
 import type { ConditionRating } from './forecast'
 
+export interface ParkingOption {
+  name: string
+  lat: number
+  lng: number
+  type: 'lot' | 'street' | 'structure' | 'pullout'
+  isFree: boolean
+  pricePerHour?: number | null
+  dailyMax?: number | null
+  hours?: string
+  maxStayHours?: number | null
+  notes?: string
+}
+
 export interface SurfSpot {
   id: string
   slug: string
@@ -15,6 +28,7 @@ export interface SurfSpot {
   noaaBuoyId?: string | null
   webcamUrl?: string | null
   webcamType?: string | null
+  parkingOptions?: ParkingOption[] | null
 }
 
 export interface SurfSpotWithRating extends SurfSpot {

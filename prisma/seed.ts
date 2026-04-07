@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { SURF_SPOTS_SEED } from '../lib/spots-data'
+import { PARKING_DATA } from '../lib/parking-data'
 
 const prisma = new PrismaClient()
 
@@ -7,10 +8,12 @@ async function main() {
   console.log('Seeding surf spots...')
 
   for (const spot of SURF_SPOTS_SEED) {
+    const parkingOptions = PARKING_DATA[spot.slug] ?? null
+    const data = { ...spot, parkingOptions: parkingOptions ?? undefined }
     await prisma.surfSpot.upsert({
       where: { slug: spot.slug },
-      update: spot,
-      create: spot,
+      update: data,
+      create: data,
     })
     console.log(`  ✓ ${spot.name}`)
   }
