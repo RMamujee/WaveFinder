@@ -29,7 +29,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-xl text-left transition-all overflow-hidden"
+      className="w-full h-full rounded-xl text-left transition-all overflow-hidden flex flex-col"
       style={{
         background: isSelected ? styles.bg : 'white',
         border: `1.5px solid ${isSelected ? styles.border : 'var(--border)'}`,
@@ -68,7 +68,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
       )}
 
       {/* Main content */}
-      <div style={{ padding: '10px 10px 10px' }}>
+      <div style={{ padding: '10px 10px 10px' }} className="flex-1 flex flex-col">
         {/* Day / date */}
         <p className="text-xs font-semibold" style={{ color: isSelected ? styles.text : 'var(--text-2)' }}>
           {isToday ? 'Today' : format(date, 'EEE')}
@@ -84,10 +84,6 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         >
           {metersToFeet(day.maxWaveHeight)}
         </p>
-        <p className="text-xs mb-2" style={{ color: 'var(--text-3)' }}>
-          {day.maxWaveHeight}m
-        </p>
-
         {/* Surf rating */}
         <div className="flex items-center gap-1 mb-1">
           <div className="h-2 w-2 rounded-full shrink-0" style={{ background: styles.dot }} />
@@ -100,6 +96,18 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         <p className="text-xs" style={{ color: 'var(--text-3)' }}>
           {Math.round(day.avgPeriod)}s {day.hours[0] ? degreesToCompass(day.hours[0].swellDirection) : ''}
         </p>
+
+        {/* Wind avg */}
+        {(() => {
+          const avgWind = day.hours.length > 0
+            ? Math.round(day.hours.reduce((s, h) => s + h.wind.speed, 0) / day.hours.length * 0.621371)
+            : null
+          return avgWind !== null ? (
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+              💨 {avgWind} mph
+            </p>
+          ) : null
+        })()}
 
         {/* Rain chance */}
         {day.maxPrecipProb !== null && day.maxPrecipProb >= 20 && (

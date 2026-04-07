@@ -16,6 +16,7 @@ import { WebcamPanel } from '@/components/webcam/WebcamPanel'
 import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
 import { SurfReports } from '@/components/forecast/SurfReports'
 import { BestTimePanel } from '@/components/forecast/BestTimePanel'
+import { BeachSafetyPanel } from '@/components/forecast/BeachSafetyPanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
@@ -246,15 +247,15 @@ export function SpotForecastView({ spot }: Props) {
 
       {/* Body */}
       {isLoading && <WaveLoader label="Fetching forecast…" />}
-      <div className="mx-auto max-w-7xl px-5 py-6 space-y-5" style={{ display: isLoading ? 'none' : undefined }}>
+      <div className="mx-auto max-w-7xl px-5 py-4 space-y-4" style={{ display: isLoading ? 'none' : undefined }}>
 
         {/* 7-day strip + webcam */}
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3 items-stretch">
           {/* 7-day strip */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 flex flex-col">
             <SectionTitle>7-Day Forecast</SectionTitle>
             {forecast?.forecast ? (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
+              <div className="flex-1 grid grid-cols-3 gap-2 sm:grid-cols-7">
                 {forecast.forecast.map((day) => (
                   <ForecastDayCard
                     key={day.date}
@@ -283,9 +284,22 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         </div>
 
+        {/* Beach Safety */}
+        {(current || activeDayData) && (
+          <div>
+            <SectionTitle>Beach Safety</SectionTitle>
+            <BeachSafetyPanel
+              current={current ?? null}
+              activeDayData={activeDayData}
+              spotLat={spot.lat}
+              spotLng={spot.lng}
+            />
+          </div>
+        )}
+
         {/* Best time + hourly table */}
         {forecast?.forecast && activeDayData && (
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-3">
             {/* Best Times */}
             <div>
               <SectionTitle>
@@ -304,7 +318,7 @@ export function SpotForecastView({ spot }: Props) {
             </div>
 
             {/* Hourly breakdown */}
-            <div>
+            <div className="lg:col-span-2">
               <SectionTitle>
                 Hourly —{' '}
                 {format(parseISO(activeDayData.date), 'EEEE, MMM d')}
@@ -389,7 +403,7 @@ export function SpotForecastView({ spot }: Props) {
 
         {/* Charts */}
         {forecast?.forecast && (
-          <div className="grid gap-5 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3">
             {/* Wave chart */}
             <div className="lg:col-span-2">
               <SectionTitle>Wave Height</SectionTitle>
@@ -423,7 +437,7 @@ export function SpotForecastView({ spot }: Props) {
         )}
 
         {/* Swell + Buoy + UV — swell is the anchor */}
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {/* Swell panel — always shown when current conditions available */}
           {current && (
             <div className="md:row-span-1">
@@ -455,24 +469,24 @@ export function SpotForecastView({ spot }: Props) {
           )}
         </div>
 
-        {/* Gear recommendations — full width */}
-        {activeDayData && (() => {
-          const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
-          const avgWaterTempC = waterHours.length > 0
-            ? waterHours.reduce((sum, h) => sum + (h.waterTemp ?? 0), 0) / waterHours.length
-            : null
-          return (
-            <div>
-              <SectionTitle>Gear Recommendations</SectionTitle>
-              <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
-            </div>
-          )
-        })()}
-
-        {/* Community reports */}
-        <div>
-          <SectionTitle>Community Reports</SectionTitle>
-          <SurfReports spotSlug={spot.slug} />
+        {/* Gear + Community Reports — side by side */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {activeDayData && (() => {
+            const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
+            const avgWaterTempC = waterHours.length > 0
+              ? waterHours.reduce((sum, h) => sum + (h.waterTemp ?? 0), 0) / waterHours.length
+              : null
+            return (
+              <div>
+                <SectionTitle>Gear Recommendations</SectionTitle>
+                <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
+              </div>
+            )
+          })()}
+          <div>
+            <SectionTitle>Community Reports</SectionTitle>
+            <SurfReports spotSlug={spot.slug} />
+          </div>
         </div>
 
         {/* Season Calendar */}
@@ -490,7 +504,7 @@ export function SpotForecastView({ spot }: Props) {
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2
-      className="mb-3 font-semibold text-sm"
+      className="mb-2 font-semibold text-sm"
       style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
     >
       {children}
