@@ -1,41 +1,65 @@
-import { betterAuth } from 'better-auth'
-import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { prisma } from './prisma'
+import { cookies } from 'next/headers'
+import crypto from 'crypto'
 
-// Build the list of trusted origins from all possible deployment URLs.
-// Vercel auto-provides VERCEL_URL (deployment URL) and
-// VERCEL_PROJECT_PRODUCTION_URL (production domain) at runtime.
-const origins = [
-  'http://localhost:3000',
-  process.env.NEXT_PUBLIC_APP_URL,
-  process.env.BETTER_AUTH_URL,
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
-  process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : null,
-].filter(Boolean) as string[]
+export const SESSION_COOKIE = 'wf_session'
+const SESSION_DURATION_S = 60 * 60 * 24 * 7 // 7 days
 
-// The server base URL — used by better-auth to generate callback URLs.
-const baseURL =
-  process.env.BETTER_AUTH_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000')
+export type SessionUser = {
+  id: string
+  name: string
+  email: string
+  emailVerified: boolean
+  createdAt: Date
+  updatedAt: Date
+}
 
-export const auth = betterAuth({
-  baseURL,
-  database: prismaAdapter(prisma, {
-    provider: 'postgresql',
-  }),
-  emailAndPassword: {
-    enabled: true,
-    minPasswordLength: 8,
-  },
-  session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24,
-  },
-  trustedOrigins: origins,
-})
+/**
+ * Read the session cookie and return the authenticated user, or null.
+ * Use in server components and API route handlers.
+ */
+export async function getSession(): Promise<{ user: SessionUser } | null> {
+  const cookieStore = await cookies()
+  const token = cookieStore.get(SESSION_COOKIE)?.value
+  if (!token) return null
+
+  const session = await prisma.session.findUnique({
+    where: { token },
+    include: { user: true },
+  })
+
+  if (!session || session.expiresAt < new Date()) {
+    if (session) {
+      await prisma.session.delete({ where: { token } }).catch(() => {})
+    }
+    return null
+  }
+
+  return { user: session.user }
+}
+
+/** Create a new session row and return the token. */
+export async function createSessionToken(userId: string): Promise<string> {
+  const token = crypto.randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_S * 1000)
+  await prisma.session.create({ data: { userId, token, expiresAt } })
+  return token
+}
+
+/** Delete a session by token. */
+export async function deleteSessionToken(token: string): Promise<void> {
+  await prisma.session.deleteMany({ where: { token } })
+}
+
+/** Returns the cookie options object for setting the session cookie. */
+export function sessionCookieOptions(token: string) {
+  return {
+    name: SESSION_COOKIE,
+    value: token,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge: SESSION_DURATION_S,
+  }
+}
