@@ -284,15 +284,14 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         </div>
 
-        {/* Best time + hourly table */}
+        {/* Row 2: Best Times | Wind Speed | UV Index */}
         {forecast?.forecast && activeDayData && (
           <div className="grid gap-4 lg:grid-cols-3">
-            {/* Best Times */}
             <div>
               <SectionTitle>
                 Best Times
                 <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-3)' }}>
-                  {activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : ''}
+                  {format(parseISO(activeDayData.date), 'EEE, MMM d')}
                 </span>
               </SectionTitle>
               {bestTimes.length > 0 ? (
@@ -304,146 +303,13 @@ export function SpotForecastView({ spot }: Props) {
               )}
             </div>
 
-            {/* Hourly breakdown */}
-            <div className="lg:col-span-2">
-              <SectionTitle>
-                Hourly —{' '}
-                {format(parseISO(activeDayData.date), 'EEEE, MMM d')}
-              </SectionTitle>
-              <div className="rounded-2xl overflow-hidden overflow-x-auto" style={{ border: '1px solid var(--border)', background: 'white' }}>
-                <table className="w-full text-sm" style={{ minWidth: '480px' }}>
-                  <thead style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
-                    <tr className="text-left">
-                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Time</th>
-                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Height</th>
-                      <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Period</th>
-                      <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Dir</th>
-                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Wind</th>
-                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Weather</th>
-                      <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Temp</th>
-                      <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Rating</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeDayData.hours
-                      .filter((_, i) => i % 3 === 0)
-                      .map((h, i) => {
-                        const rs = RATING_STYLES[h.rating]
-                        return (
-                          <tr
-                            key={h.time}
-                            style={{
-                              borderTop: i > 0 ? '1px solid var(--border)' : undefined,
-                              background: h.ratingScore >= 60 ? rs.bg : 'white',
-                            }}
-                          >
-                            <td className="px-4 py-3 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                              {format(parseISO(h.time), 'ha')}
-                            </td>
-                            <td className="px-4 py-3 font-semibold text-xs whitespace-nowrap" style={{ color: 'var(--text)' }}>
-                              {metersToFeet(h.waveHeight)}
-                              <span className="ml-1 font-normal hidden sm:inline" style={{ color: 'var(--text-3)', fontSize: '11px' }}>
-                                ft
-                              </span>
-                            </td>
-                            <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text)' }}>
-                              {Math.round(h.swellPeriod)}s
-                            </td>
-                            <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text-2)' }}>
-                              {degreesToCompass(h.swellDirection)}
-                            </td>
-                            <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                              {Math.round(h.wind.speed * 0.621371)} mph {h.wind.directionLabel}
-                            </td>
-                            {/* Weather */}
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <span title={weatherLabel(h.weatherCode)} style={{ fontSize: 16, lineHeight: 1 }}>
-                                {h.weatherCode !== null ? weatherIcon(h.weatherCode) : '—'}
-                              </span>
-                              {h.precipProb !== null && h.precipProb >= 20 && (
-                                <span className="ml-1 text-xs" style={{ color: '#1b7fcb' }}>
-                                  {h.precipProb}%
-                                </span>
-                              )}
-                            </td>
-                            {/* Temp */}
-                            <td className="hidden sm:table-cell px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                              {tempF(h.airTempC)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span
-                                className="rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
-                                style={{ background: rs.bg, color: rs.text, border: `1px solid ${rs.border}` }}
-                              >
-                                {h.rating}
-                              </span>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Charts */}
-        {forecast?.forecast && (
-          <div className="grid gap-4 lg:grid-cols-3">
-            {/* Wave chart */}
-            <div className="lg:col-span-2">
-              <SectionTitle>Wave Height</SectionTitle>
-              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-                <WaveChart days={forecast.forecast} activeDayData={activeDayData} />
-                <div className="flex items-center gap-4 mt-3">
-                  <Legend color="#1b7fcb" label="Total wave height" />
-                  <Legend color="#7c3aed" label="Swell height" />
-                </div>
-              </div>
-            </div>
-
-            {/* Wind chart */}
             <div>
               <SectionTitle>Wind Speed</SectionTitle>
               <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
                 <WindChart days={forecast.forecast} activeDayData={activeDayData} />
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Tides — full width */}
-        {forecast?.tides && forecast.tides.length > 0 && (
-          <div>
-            <SectionTitle>Tides</SectionTitle>
-            <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-              <TideChart tides={forecast.tides} selectedDate={activeDayData?.date} />
-            </div>
-          </div>
-        )}
-
-        {/* Swell + Buoy + UV — swell is the anchor */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {/* Swell panel — always shown when current conditions available */}
-          {current && (
-            <div className="md:row-span-1">
-              <SectionTitle>
-                Swell —{' '}
-                <span style={{ fontWeight: 400 }}>{activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : 'Now'}</span>
-              </SectionTitle>
-              <SwellPanel current={current} activeDayData={activeDayData} />
-            </div>
-          )}
-
-          {forecast?.buoy && spot.noaaBuoyId && (
-            <div>
-              <SectionTitle>Live Buoy Data</SectionTitle>
-              <BuoyReadings buoy={forecast.buoy} buoyId={spot.noaaBuoyId} />
-            </div>
-          )}
-
-          {activeDayData && (
             <div>
               <SectionTitle>
                 UV Index —{' '}
@@ -453,11 +319,126 @@ export function SpotForecastView({ spot }: Props) {
                 <UVChart activeDayData={activeDayData} />
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Gear + Community Reports — side by side */}
+        {/* Row 3: Hourly table — full width */}
+        {forecast?.forecast && activeDayData && (
+          <div>
+            <SectionTitle>
+              Hourly —{' '}
+              {format(parseISO(activeDayData.date), 'EEEE, MMM d')}
+            </SectionTitle>
+            <div className="rounded-2xl overflow-hidden overflow-x-auto" style={{ border: '1px solid var(--border)', background: 'white' }}>
+              <table className="w-full text-sm" style={{ minWidth: '480px' }}>
+                <thead style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
+                  <tr className="text-left">
+                    <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Time</th>
+                    <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Height</th>
+                    <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Period</th>
+                    <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Dir</th>
+                    <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Wind</th>
+                    <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Weather</th>
+                    <th className="hidden sm:table-cell px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Temp</th>
+                    <th className="px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>Rating</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeDayData.hours
+                    .filter((_, i) => i % 3 === 0)
+                    .map((h, i) => {
+                      const rs = RATING_STYLES[h.rating]
+                      return (
+                        <tr
+                          key={h.time}
+                          style={{
+                            borderTop: i > 0 ? '1px solid var(--border)' : undefined,
+                            background: h.ratingScore >= 60 ? rs.bg : 'white',
+                          }}
+                        >
+                          <td className="px-4 py-3 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {format(parseISO(h.time), 'ha')}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-xs whitespace-nowrap" style={{ color: 'var(--text)' }}>
+                            {metersToFeet(h.waveHeight)}
+                            <span className="ml-1 font-normal hidden sm:inline" style={{ color: 'var(--text-3)', fontSize: '11px' }}>
+                              ft
+                            </span>
+                          </td>
+                          <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text)' }}>
+                            {Math.round(h.swellPeriod)}s
+                          </td>
+                          <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text-2)' }}>
+                            {degreesToCompass(h.swellDirection)}
+                          </td>
+                          <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {Math.round(h.wind.speed * 0.621371)} mph {h.wind.directionLabel}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span title={weatherLabel(h.weatherCode)} style={{ fontSize: 16, lineHeight: 1 }}>
+                              {h.weatherCode !== null ? weatherIcon(h.weatherCode) : '—'}
+                            </span>
+                            {h.precipProb !== null && h.precipProb >= 20 && (
+                              <span className="ml-1 text-xs" style={{ color: '#1b7fcb' }}>
+                                {h.precipProb}%
+                              </span>
+                            )}
+                          </td>
+                          <td className="hidden sm:table-cell px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                            {tempF(h.airTempC)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className="rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
+                              style={{ background: rs.bg, color: rs.text, border: `1px solid ${rs.border}` }}
+                            >
+                              {h.rating}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Row 4: Wave Height — full width (matches Tides) */}
+        {forecast?.forecast && (
+          <div>
+            <SectionTitle>Wave Height</SectionTitle>
+            <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+              <WaveChart days={forecast.forecast} activeDayData={activeDayData} />
+              <div className="flex items-center gap-4 mt-3">
+                <Legend color="#1b7fcb" label="Total wave height" />
+                <Legend color="#7c3aed" label="Swell height" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Row 5: Tides — full width */}
+        {forecast?.tides && forecast.tides.length > 0 && (
+          <div>
+            <SectionTitle>Tides</SectionTitle>
+            <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+              <TideChart tides={forecast.tides} selectedDate={activeDayData?.date} />
+            </div>
+          </div>
+        )}
+
+        {/* Row 6: Swell | Gear Recommendations — same y-axis, equal widths */}
         <div className="grid gap-4 md:grid-cols-2">
+          {current && (
+            <div>
+              <SectionTitle>
+                Swell —{' '}
+                <span style={{ fontWeight: 400 }}>{activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : 'Now'}</span>
+              </SectionTitle>
+              <SwellPanel current={current} activeDayData={activeDayData} />
+            </div>
+          )}
           {activeDayData && (() => {
             const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
             const avgWaterTempC = waterHours.length > 0
@@ -470,6 +451,16 @@ export function SpotForecastView({ spot }: Props) {
               </div>
             )
           })()}
+        </div>
+
+        {/* Row 7: Live Buoy Data | Community Reports — same y-axis below Row 6 */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {forecast?.buoy && spot.noaaBuoyId && (
+            <div>
+              <SectionTitle>Live Buoy Data</SectionTitle>
+              <BuoyReadings buoy={forecast.buoy} buoyId={spot.noaaBuoyId} />
+            </div>
+          )}
           <div>
             <SectionTitle>Community Reports</SectionTitle>
             <SurfReports spotSlug={spot.slug} />
