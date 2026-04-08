@@ -117,8 +117,11 @@ export function LiveMapHero({ spotCount }: Props) {
           </Link>
         </div>
 
-        {/* Mobile: Browse Spots CTA */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 lg:hidden">
+        {/* Mobile: bottom overlay — Browse Spots + credits */}
+        <div
+          className="absolute bottom-0 left-0 right-0 z-10 lg:hidden flex flex-col items-center gap-3 px-5 pb-6 pt-12"
+          style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.32) 0%, transparent 100%)' }}
+        >
           <Link
             href="/spots"
             className="inline-flex items-center gap-2 rounded-2xl px-7 py-3.5 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
@@ -129,6 +132,25 @@ export function LiveMapHero({ spotCount }: Props) {
             </svg>
             Browse Spots
           </Link>
+
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-0.5">
+            {['📡 NOAA NDBC', '🌊 Open-Meteo', '🌊 NOAA Tides', '🗺️ OpenStreetMap'].map((s) => (
+              <span key={s} className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>{s}</span>
+            ))}
+          </div>
+
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            Made by{' '}
+            <a
+              href="https://www.linkedin.com/in/rmamujee"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold"
+              style={{ color: 'rgba(255,255,255,0.9)' }}
+            >
+              Rahil Mamujee
+            </a>
+          </p>
         </div>
 
         <SpotMap
