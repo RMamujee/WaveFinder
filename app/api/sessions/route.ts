@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       spotName: body.spotName,
       spotSlug: body.spotSlug || null,
       region: body.region || null,
-      sessionDate: new Date(body.sessionDate),
+      sessionDate: new Date(body.sessionDate + 'T12:00:00'),
       duration: body.duration ? parseInt(body.duration) : null,
       waveHeightFt: body.waveHeightFt ? parseFloat(body.waveHeightFt) : null,
       wavePeriod: body.wavePeriod ? parseInt(body.wavePeriod) : null,

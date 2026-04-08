@@ -1,4 +1,4 @@
-import type { ForecastHour, ConditionRating } from '@/types/forecast'
+import type { ForecastHour, ConditionRating, TidePoint } from '@/types/forecast'
 import { format, parseISO, getHours } from 'date-fns'
 
 export type SessionWindow = 'dawn' | 'morning' | 'midday' | 'afternoon' | 'evening'
@@ -65,7 +65,17 @@ function generateTip(
   return `Skip this window unless you're desperate for water time.`
 }
 
-export function computeBestTimes(todayHours: ForecastHour[], spotFacing: number): BestTimeSlot[] {
+function getTideNote(startTime: string, endTime: string, tides: TidePoint[]): string {
+  const before = [...tides].filter((t) => t.time <= startTime).pop()
+  const after  = tides.find((t) => t.time >= endTime)
+  if (!before || !after) return ''
+  const diff = after.height - before.height
+  if (diff > 0.1) return ' Tide rising through this window.'
+  if (diff < -0.1) return ' Tide dropping through this window.'
+  return ''
+}
+
+export function computeBestTimes(todayHours: ForecastHour[], spotFacing: number, tides?: TidePoint[]): BestTimeSlot[] {
   const slots: BestTimeSlot[] = []
 
   for (const [key, win] of Object.entries(WINDOWS) as [SessionWindow, typeof WINDOWS[SessionWindow]][]) {
@@ -90,7 +100,10 @@ export function computeBestTimes(todayHours: ForecastHour[], spotFacing: number)
     else rating = 'poor'
 
     const windQuality = classifyWindQuality(avgWindSpeed, avgWindDir, spotFacing)
-    const tip = generateTip(key, rating, avgWaveHeight, windQuality)
+    const tideNote = tides?.length
+      ? getTideNote(hours[0].time, hours[hours.length - 1].time, tides)
+      : ''
+    const tip = generateTip(key, rating, avgWaveHeight, windQuality) + tideNote
 
     const startHour = hours[0]
     const endHour = hours[hours.length - 1]

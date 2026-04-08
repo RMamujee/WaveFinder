@@ -109,6 +109,8 @@ export async function fetchMarineForecast(
   lat: number,
   lng: number
 ): Promise<OpenMeteoMarineResponse> {
+  // SST is included in the main request — it returns null values (not an error)
+  // for locations where the model has no ocean coverage, so it's safe to bundle.
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lng.toString(),
@@ -122,6 +124,7 @@ export async function fetchMarineForecast(
       'wind_wave_height',
       'wind_wave_direction',
       'wind_wave_period',
+      'sea_surface_temperature',
     ].join(','),
     forecast_days: '7',
     timezone: 'auto',
@@ -136,31 +139,7 @@ export async function fetchMarineForecast(
     throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
   }
 
-  const data: OpenMeteoMarineResponse = await res.json()
-
-  // Sea surface temperature — optional, silently skipped if unavailable
-  try {
-    const sstParams = new URLSearchParams({
-      latitude: lat.toString(),
-      longitude: lng.toString(),
-      hourly: 'sea_surface_temperature',
-      forecast_days: '7',
-      timezone: 'auto',
-    })
-    const sstRes = await fetch(`${MARINE_BASE}?${sstParams}`, {
-      next: { revalidate: 3600 },
-    })
-    if (sstRes.ok) {
-      const sstData = await sstRes.json()
-      if (Array.isArray(sstData?.hourly?.sea_surface_temperature)) {
-        data.hourly.sea_surface_temperature = sstData.hourly.sea_surface_temperature
-      }
-    }
-  } catch {
-    // SST unavailable for this location — water temp panel will show "not available"
-  }
-
-  return data
+  return await res.json() as OpenMeteoMarineResponse
 }
 
 export async function fetchWindForecast(
