@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
-import { fetchTidePredictions } from '@/lib/api/noaa-tides'
+import { fetchTidePredictions, fetchCoastalWind } from '@/lib/api/noaa-tides'
 import { fetchBuoyData } from '@/lib/api/noaa-buoy'
 import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
 
@@ -19,11 +19,12 @@ export async function GET(
     return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
   }
 
-  const [marineResult, windResult, tidesResult, buoyResult] = await Promise.allSettled([
+  const [marineResult, windResult, tidesResult, buoyResult, coastalWindResult] = await Promise.allSettled([
     fetchMarineForecast(spot.lat, spot.lng),
     fetchWindForecast(spot.lat, spot.lng),
     spot.noaaTideStationId ? fetchTidePredictions(spot.noaaTideStationId) : Promise.resolve([]),
     spot.noaaBuoyId ? fetchBuoyData(spot.noaaBuoyId) : Promise.resolve(null),
+    spot.noaaTideStationId ? fetchCoastalWind(spot.noaaTideStationId) : Promise.resolve(null),
   ])
 
   if (marineResult.status === 'rejected') {
@@ -48,6 +49,7 @@ export async function GET(
   const forecast = groupHoursByDay(hours)
   const tides = tidesResult.status === 'fulfilled' ? tidesResult.value : []
   const buoy = buoyResult.status === 'fulfilled' ? buoyResult.value : null
+  const coastalWind = coastalWindResult.status === 'fulfilled' ? coastalWindResult.value : null
   const currentCondition = findNearestFutureHour(hours)
 
   return NextResponse.json(
@@ -58,6 +60,7 @@ export async function GET(
       tides,
       buoy,
       currentCondition,
+      coastalWind,
     },
     {
       headers: {

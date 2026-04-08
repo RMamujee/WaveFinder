@@ -64,6 +64,14 @@ export interface BuoyReading {
   windDirection: number | null
 }
 
+export interface CoastalWindReading {
+  time: string         // "YYYY-MM-DD HH:MM" local time
+  speedMps: number     // m/s
+  directionDeg: number // degrees true, meteorological (FROM)
+  gustMps: number | null
+  stationId: string
+}
+
 export interface SpotForecast {
   spotId: string
   fetchedAt: string
@@ -71,4 +79,5 @@ export interface SpotForecast {
   tides: TidePoint[]
   buoy: BuoyReading | null
   currentCondition: ForecastHour | null
+  coastalWind: CoastalWindReading | null
 }

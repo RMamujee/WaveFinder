@@ -1,4 +1,4 @@
-import type { TidePoint } from '@/types/forecast'
+import type { TidePoint, CoastalWindReading } from '@/types/forecast'
 
 const NOAA_TIDES_BASE = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter'
 
@@ -69,4 +69,40 @@ export async function fetchTidePredictions(stationId: string): Promise<TidePoint
   }
 
   return raw
+}
+
+// ── Observed coastal wind from NOAA CO-OPS (same station as tides) ───────────
+// Not all tide stations have wind sensors — returns null gracefully when missing.
+export async function fetchCoastalWind(stationId: string): Promise<CoastalWindReading | null> {
+  const params = new URLSearchParams({
+    station:     stationId,
+    product:     'wind',
+    date:        'latest',
+    time_zone:   'lst_ldt',
+    units:       'metric',
+    application: 'surf_forecast_app',
+    format:      'json',
+  })
+  try {
+    const res = await fetch(`${NOAA_TIDES_BASE}?${params}`, {
+      next: { revalidate: 600 },        // 10-min cache; CO-OPS updates every 6 min
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    if (json?.error || !Array.isArray(json?.data) || json.data.length === 0) return null
+    const row = json.data[0]
+    const speed = parseFloat(row?.s)
+    const dir   = parseFloat(row?.d)
+    if (isNaN(speed) || isNaN(dir)) return null
+    return {
+      time:         row.t as string,
+      speedMps:     speed,
+      directionDeg: dir,
+      gustMps:      row.g ? parseFloat(row.g) : null,
+      stationId,
+    }
+  } catch {
+    return null
+  }
 }

@@ -17,6 +17,7 @@ import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
 import { SurfReports } from '@/components/forecast/SurfReports'
 import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
+import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
@@ -282,6 +283,17 @@ export function SpotForecastView({ spot }: Props) {
               lng={spot.lng}
             />
           </div>
+        </div>
+
+        {/* Ideal Conditions + Current Break Character */}
+        <div>
+          <SectionTitle>Ideal Conditions</SectionTitle>
+          <IdealConditionsPanel
+            spot={spot}
+            current={current ?? null}
+            buoy={forecast?.buoy}
+            coastalWind={forecast?.coastalWind}
+          />
         </div>
 
         {/* Row 2: Best Times | Wind Speed | UV Index */}
