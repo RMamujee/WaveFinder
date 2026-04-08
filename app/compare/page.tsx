@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ConditionRating, ForecastDay } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
+import { weatherIcon, tempF } from '@/lib/forecast/weather-code'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 
 // ── Fuzzy search ──────────────────────────────────────────────────────────────
@@ -491,7 +492,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                       <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
-                            {['Time', 'Waves', 'Period', 'Wind', 'Rating'].map((h) => (
+                            {['Time', 'Waves', 'Period', 'Wind', 'Wthr', 'Temp', 'Rating'].map((h) => (
                               <th key={h} className="px-2 py-1.5 text-left font-semibold" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{h}</th>
                             ))}
                           </tr>
@@ -511,6 +512,12 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                                   <td className="px-2 py-2 font-bold" style={{ color: 'var(--text)' }}>{metersToFeet(h.waveHeight)}</td>
                                   <td className="px-2 py-2" style={{ color: 'var(--text-2)' }}>{Math.round(h.swellPeriod)}s</td>
                                   <td className="px-2 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{Math.round(h.wind.speed)} {h.wind.directionLabel}</td>
+                                  <td className="px-2 py-2" style={{ fontSize: 14, lineHeight: 1 }}>
+                                    {h.weatherCode !== null ? weatherIcon(h.weatherCode) : '—'}
+                                  </td>
+                                  <td className="px-2 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
+                                    {tempF(h.airTempC)}
+                                  </td>
                                   <td className="px-2 py-2">
                                     <span className="rounded-full px-2 py-0.5 text-xs font-semibold capitalize" style={{ background: rs.bg, color: rs.text, border: `1px solid ${rs.border}` }}>
                                       {h.rating}

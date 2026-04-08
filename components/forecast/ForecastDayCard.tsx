@@ -26,6 +26,15 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
   const styles = RATING_STYLES[day.dominantRating]
   const hasWeather = day.weatherCode !== null || day.maxTempC !== null
 
+  // Computed from hours
+  const waterTemps = day.hours.filter((h) => h.waterTemp != null).map((h) => h.waterTemp!)
+  const avgWaterTempF = waterTemps.length > 0
+    ? Math.round((waterTemps.reduce((a, b) => a + b, 0) / waterTemps.length) * 9 / 5 + 32)
+    : null
+  const powers = day.hours.filter((h) => h.wavePower > 0).map((h) => h.wavePower)
+  const avgPower = powers.length > 0 ? Math.round(powers.reduce((a, b) => a + b, 0) / powers.length) : null
+  const minWaveHeight = day.hours.length > 0 ? Math.min(...day.hours.map((h) => h.waveHeight)) : null
+
   return (
     <button
       onClick={onClick}
@@ -77,12 +86,14 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
           {format(date, 'M/d')}
         </p>
 
-        {/* Wave height */}
+        {/* Wave height — min–max range */}
         <p
           className="font-bold"
           style={{ fontSize: '16px', color: 'var(--text)', fontFamily: 'Playfair Display, serif', lineHeight: 1 }}
         >
-          {metersToFeet(day.maxWaveHeight)}
+          {minWaveHeight != null && Math.round(minWaveHeight * 3.281) < Math.round(day.maxWaveHeight * 3.281)
+            ? `${Math.round(minWaveHeight * 3.281)}–${metersToFeet(day.maxWaveHeight)}`
+            : metersToFeet(day.maxWaveHeight)}
         </p>
         {/* Surf rating */}
         <div className="flex items-center gap-1 mb-1">
@@ -92,7 +103,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
           </p>
         </div>
 
-        {/* Swell */}
+        {/* Swell period + direction */}
         <p className="text-xs" style={{ color: 'var(--text-3)' }}>
           {Math.round(day.avgPeriod)}s {day.hours[0] ? degreesToCompass(day.hours[0].swellDirection) : ''}
         </p>
@@ -109,9 +120,23 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
           ) : null
         })()}
 
+        {/* Wave power */}
+        {avgPower !== null && (
+          <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+            ⚡ {avgPower} kW/m
+          </p>
+        )}
+
+        {/* Water temp */}
+        {avgWaterTempF !== null && (
+          <p className="text-xs mt-1" style={{ color: '#0e7490' }}>
+            🌊 {avgWaterTempF}°F
+          </p>
+        )}
+
         {/* Rain chance */}
         {day.maxPrecipProb !== null && day.maxPrecipProb >= 20 && (
-          <p className="text-xs mt-1.5 font-medium" style={{ color: '#1b7fcb' }}>
+          <p className="text-xs mt-1 font-medium" style={{ color: '#1b7fcb' }}>
             💧 {day.maxPrecipProb}%
           </p>
         )}

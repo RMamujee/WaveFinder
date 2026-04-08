@@ -273,13 +273,16 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
         popupAnchor: [0, -48],
       })
 
-      const marker = L.marker([spot.lat, spot.lng], { icon })
-      marker.bindTooltip(tooltipHtml(spot), {
-        permanent: false, sticky: false, direction: 'top',
-        offset: [0, -48], opacity: 1, className: 'spot-hover-tooltip',
-      })
-      marker.bindPopup(popupHtml(spot), { maxWidth: 230, minWidth: 210 })
-      group.addLayer(marker)
+      // Place markers at canonical position + ±360° world copies so they appear on all map copies
+      for (const lngOffset of [0, 360, -360]) {
+        const marker = L.marker([spot.lat, spot.lng + lngOffset], { icon })
+        marker.bindTooltip(tooltipHtml(spot), {
+          permanent: false, sticky: false, direction: 'top',
+          offset: [0, -48], opacity: 1, className: 'spot-hover-tooltip',
+        })
+        marker.bindPopup(popupHtml(spot), { maxWidth: 230, minWidth: 210 })
+        group.addLayer(marker)
+      }
     }
 
     group.addTo(map)
