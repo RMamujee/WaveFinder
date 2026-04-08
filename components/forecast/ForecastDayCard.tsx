@@ -9,134 +9,142 @@ interface Props {
   onClick?: () => void
 }
 
-const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; dot: string }> = {
-  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af' },
-  fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', dot: '#f59e0b' },
-  good:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', dot: '#16a34a' },
-  epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', dot: '#7c3aed' },
+const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; dot: string; bar: string }> = {
+  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af', bar: '#d1d5db' },
+  fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', dot: '#f59e0b', bar: '#fbbf24' },
+  good:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', dot: '#16a34a', bar: '#22c55e' },
+  epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', dot: '#7c3aed', bar: '#8b5cf6' },
 }
 
 function metersToFeet(m: number) {
-  return `${Math.round(m * 3.281)}ft`
+  return `${Math.round(m * 3.281)}`
 }
 
 export function ForecastDayCard({ day, isSelected, onClick }: Props) {
   const date = parseISO(day.date)
   const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
   const styles = RATING_STYLES[day.dominantRating]
-  const hasWeather = day.weatherCode !== null || day.maxTempC !== null
 
-  // Computed from hours
   const waterTemps = day.hours.filter((h) => h.waterTemp != null).map((h) => h.waterTemp!)
   const avgWaterTempF = waterTemps.length > 0
     ? Math.round((waterTemps.reduce((a, b) => a + b, 0) / waterTemps.length) * 9 / 5 + 32)
     : null
-  const powers = day.hours.filter((h) => h.wavePower > 0).map((h) => h.wavePower)
-  const avgPower = powers.length > 0 ? Math.round(powers.reduce((a, b) => a + b, 0) / powers.length) : null
-  const minWaveHeight = day.hours.length > 0 ? Math.min(...day.hours.map((h) => h.waveHeight)) : null
+  const minWaveHeight = day.hours.length > 0 ? Math.min(...day.hours.map((h) => h.waveHeight)) : 0
+  const maxFt = Math.round(day.maxWaveHeight * 3.281)
+  const minFt = Math.round(minWaveHeight * 3.281)
+  const waveRange = minFt < maxFt ? `${minFt}–${maxFt}` : `${maxFt}`
+
+  const avgWind = day.hours.length > 0
+    ? Math.round(day.hours.reduce((s, h) => s + h.wind.speed, 0) / day.hours.length * 0.621371)
+    : null
 
   return (
     <button
       onClick={onClick}
-      className="w-full h-full rounded-xl text-left transition-all overflow-hidden flex flex-col"
+      className="w-full h-full rounded-2xl text-left transition-all overflow-hidden flex flex-col"
       style={{
         background: isSelected ? styles.bg : 'white',
-        border: `1.5px solid ${isSelected ? styles.border : 'var(--border)'}`,
-        boxShadow: isSelected ? `0 0 0 1px ${styles.border}` : 'none',
+        border: `1.5px solid ${isSelected ? styles.bar : 'var(--border)'}`,
+        boxShadow: isSelected
+          ? `0 2px 8px 0 ${styles.bar}44`
+          : '0 1px 3px 0 rgba(0,0,0,0.04)',
       }}
     >
-      {/* Weather strip — top of card */}
-      {hasWeather && (
-        <div
-          style={{
-            background: isSelected ? `${styles.border}55` : 'var(--sand-50)',
-            borderBottom: `1px solid ${isSelected ? styles.border : 'var(--border)'}`,
-            padding: '6px 10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 4,
-          }}
+      {/* Rating color bar — top accent */}
+      <div style={{ height: 3, background: isSelected ? styles.bar : 'var(--border)', borderRadius: '4px 4px 0 0' }} />
+
+      {/* Weather row */}
+      <div
+        style={{
+          padding: '8px 10px 6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: `1px solid ${isSelected ? styles.border : 'var(--border)'}`,
+          background: isSelected ? `${styles.bar}18` : 'var(--sand-50)',
+        }}
+      >
+        <span
+          title={day.weatherCode != null ? weatherLabel(day.weatherCode) : undefined}
+          style={{ fontSize: 20, lineHeight: 1 }}
         >
-          <span style={{ fontSize: 16, lineHeight: 1 }}>
-            {weatherIcon(day.weatherCode)}
-          </span>
-          <div style={{ textAlign: 'right' }}>
-            {day.maxTempC !== null && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)' }}>
-                {tempF(day.maxTempC)}
-              </span>
-            )}
-            {day.minTempC !== null && day.maxTempC !== null && (
-              <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 2 }}>
-                / {tempF(day.minTempC)}
-              </span>
-            )}
-          </div>
+          {day.weatherCode != null ? weatherIcon(day.weatherCode) : '🌊'}
+        </span>
+        <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
+          {day.maxTempC !== null && (
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
+              {tempF(day.maxTempC)}
+            </div>
+          )}
+          {day.minTempC !== null && (
+            <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+              {tempF(day.minTempC)}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Main content */}
-      <div style={{ padding: '10px 10px 10px' }} className="flex-1 flex flex-col">
+      <div style={{ padding: '10px 10px 12px' }} className="flex-1 flex flex-col">
         {/* Day / date */}
-        <p className="text-xs font-semibold" style={{ color: isSelected ? styles.text : 'var(--text-2)' }}>
+        <p
+          className="font-bold text-xs"
+          style={{ color: isSelected ? styles.text : 'var(--text-2)', marginBottom: 1 }}
+        >
           {isToday ? 'Today' : format(date, 'EEE')}
         </p>
-        <p className="text-xs mb-2" style={{ color: 'var(--text-3)' }}>
+        <p style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 8 }}>
           {format(date, 'M/d')}
         </p>
 
-        {/* Wave height — min–max range */}
+        {/* Wave height */}
         <p
-          className="font-bold"
-          style={{ fontSize: '16px', color: 'var(--text)', fontFamily: 'Playfair Display, serif', lineHeight: 1 }}
+          style={{
+            fontFamily: 'Playfair Display, serif',
+            fontSize: 22,
+            fontWeight: 700,
+            lineHeight: 1,
+            color: 'var(--text)',
+            marginBottom: 4,
+          }}
         >
-          {minWaveHeight != null && Math.round(minWaveHeight * 3.281) < Math.round(day.maxWaveHeight * 3.281)
-            ? `${Math.round(minWaveHeight * 3.281)}–${metersToFeet(day.maxWaveHeight)}`
-            : metersToFeet(day.maxWaveHeight)}
+          {waveRange}
+          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-3)', marginLeft: 2 }}>ft</span>
         </p>
-        {/* Surf rating */}
-        <div className="flex items-center gap-1 mb-1">
-          <div className="h-2 w-2 rounded-full shrink-0" style={{ background: styles.dot }} />
-          <p className="text-xs font-semibold capitalize" style={{ color: styles.text }}>
+
+        {/* Rating badge */}
+        <div
+          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 mb-2 self-start"
+          style={{ background: styles.bg, border: `1px solid ${styles.border}` }}
+        >
+          <div className="h-1.5 w-1.5 rounded-full" style={{ background: styles.dot }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: styles.text, textTransform: 'capitalize' }}>
             {day.dominantRating}
-          </p>
+          </span>
         </div>
 
-        {/* Swell period + direction */}
-        <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+        {/* Swell */}
+        <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 3 }}>
           {Math.round(day.avgPeriod)}s {day.hours[0] ? degreesToCompass(day.hours[0].swellDirection) : ''}
         </p>
 
-        {/* Wind avg */}
-        {(() => {
-          const avgWind = day.hours.length > 0
-            ? Math.round(day.hours.reduce((s, h) => s + h.wind.speed, 0) / day.hours.length * 0.621371)
-            : null
-          return avgWind !== null ? (
-            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-              💨 {avgWind} mph
-            </p>
-          ) : null
-        })()}
-
-        {/* Wave power */}
-        {avgPower !== null && (
-          <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-            ⚡ {avgPower} kW/m
+        {/* Wind */}
+        {avgWind !== null && (
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>
+            💨 {avgWind} mph
           </p>
         )}
 
         {/* Water temp */}
         {avgWaterTempF !== null && (
-          <p className="text-xs mt-1" style={{ color: '#0e7490' }}>
+          <p style={{ fontSize: 11, color: '#0e7490', marginBottom: 2 }}>
             🌊 {avgWaterTempF}°F
           </p>
         )}
 
         {/* Rain chance */}
         {day.maxPrecipProb !== null && day.maxPrecipProb >= 20 && (
-          <p className="text-xs mt-1 font-medium" style={{ color: '#1b7fcb' }}>
+          <p style={{ fontSize: 11, color: '#1b7fcb', fontWeight: 600 }}>
             💧 {day.maxPrecipProb}%
           </p>
         )}

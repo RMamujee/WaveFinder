@@ -12,14 +12,23 @@ export function mergeForecastData(
   const { hourly: m } = marine
   const { hourly: w } = wind
 
-  // Build wind map by time for fast lookup
+  // Build lookup maps by time for all wind/weather fields.
+  // Using time-keyed maps (not raw index) ensures correct alignment even when
+  // the marine and weather API caches were last refreshed at different hours.
   const windMap = new Map<string, { speed: number; gust: number; dir: number }>()
+  const tempMap = new Map<string, number>()
+  const weatherCodeMap = new Map<string, number>()
+  const precipProbMap = new Map<string, number>()
+
   w.time.forEach((t, i) => {
     windMap.set(t, {
       speed: w.wind_speed_10m[i] ?? 0,
       gust: w.wind_gusts_10m[i] ?? 0,
       dir: w.wind_direction_10m[i] ?? 0,
     })
+    if (w.temperature_2m?.[i] != null) tempMap.set(t, w.temperature_2m[i])
+    if (w.weather_code?.[i] != null) weatherCodeMap.set(t, w.weather_code[i])
+    if (w.precipitation_probability?.[i] != null) precipProbMap.set(t, w.precipitation_probability[i])
   })
 
   return m.time.map((time, i) => {
@@ -73,9 +82,9 @@ export function mergeForecastData(
       wavePower: computeWavePower(waveHeight, swellPeriod),
       uvIndex: computeUVIndex(lat, time),
       waterTemp: m.sea_surface_temperature?.[i] ?? null,
-      airTempC: w.temperature_2m?.[i] ?? null,
-      weatherCode: w.weather_code?.[i] ?? null,
-      precipProb: w.precipitation_probability?.[i] ?? null,
+      airTempC: tempMap.get(time) ?? null,
+      weatherCode: weatherCodeMap.get(time) ?? null,
+      precipProb: precipProbMap.get(time) ?? null,
     }
   })
 }
