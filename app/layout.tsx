@@ -3,6 +3,7 @@ import './globals.css'
 import { Providers } from '@/components/layout/Providers'
 import { Navbar } from '@/components/layout/Navbar'
 import { PWAInit } from '@/components/layout/PWAInit'
+import { InstallPrompt } from '@/components/layout/InstallPrompt'
 
 export const metadata: Metadata = {
   title: 'WaveFinder – Free Surf Forecast',
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Navbar />
           <main className="flex-1">{children}</main>
           <PWAInit />
+          <InstallPrompt />
         </Providers>
       </body>
     </html>
