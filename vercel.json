@@ -1,11 +1,5 @@
 {
-  "buildCommand": "prisma generate && prisma db push && next build",
+  "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build",
   "installCommand": "npm install",
-  "framework": "nextjs",
-  "crons": [
-    {
-      "path": "/api/cron/check-alerts",
-      "schedule": "0 7 * * *"
-    }
-  ]
+  "framework": "nextjs"
 }
