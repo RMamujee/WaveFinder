@@ -18,6 +18,7 @@ import { SurfReports } from '@/components/forecast/SurfReports'
 import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
 import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
+import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
@@ -250,39 +251,24 @@ export function SpotForecastView({ spot }: Props) {
       {isLoading && <WaveLoader label="Fetching forecast…" />}
       <div className="mx-auto max-w-7xl px-5 py-4 space-y-4" style={{ display: isLoading ? 'none' : undefined }}>
 
-        {/* 7-day strip + webcam */}
-        <div className="grid gap-4 lg:grid-cols-3 items-stretch">
-          {/* 7-day strip */}
-          <div className="lg:col-span-2 flex flex-col">
-            <SectionTitle>7-Day Forecast</SectionTitle>
-            {forecast?.forecast ? (
-              <div className="flex-1 grid grid-cols-3 gap-2 sm:grid-cols-7">
-                {forecast.forecast.map((day) => (
-                  <ForecastDayCard
-                    key={day.date}
-                    day={day}
-                    isSelected={
-                      selectedDay === day.date ||
-                      (!selectedDay && day === forecast.forecast[0])
-                    }
-                    onClick={() => setSelectedDay(day.date)}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          {/* Webcam */}
-          <div>
-            <SectionTitle>Live View</SectionTitle>
-            <WebcamPanel
-              webcamUrl={spot.webcamUrl}
-              webcamType={spot.webcamType}
-              spotName={spot.name}
-              lat={spot.lat}
-              lng={spot.lng}
-            />
-          </div>
+        {/* 7-day strip — full width */}
+        <div>
+          <SectionTitle>7-Day Forecast</SectionTitle>
+          {forecast?.forecast ? (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
+              {forecast.forecast.map((day) => (
+                <ForecastDayCard
+                  key={day.date}
+                  day={day}
+                  isSelected={
+                    selectedDay === day.date ||
+                    (!selectedDay && day === forecast.forecast[0])
+                  }
+                  onClick={() => setSelectedDay(day.date)}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {/* Ideal Conditions + Current Break Character */}
@@ -333,6 +319,41 @@ export function SpotForecastView({ spot }: Props) {
             </div>
           </div>
         )}
+
+        {/* Satellite map + optional live cam — below Wind/UV */}
+        {(() => {
+          const hasWebcam = spot.webcamType !== 'none' && !!spot.webcamUrl
+          return (
+            <div className={hasWebcam ? 'grid gap-4 md:grid-cols-2' : undefined}>
+              <div>
+                <SectionTitle>Satellite View</SectionTitle>
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{ border: '1px solid var(--border)', aspectRatio: '16/9' }}
+                >
+                  <SpotSatelliteMap
+                    lat={spot.lat}
+                    lng={spot.lng}
+                    spotName={spot.name}
+                    facingDirection={spot.facingDirection}
+                  />
+                </div>
+              </div>
+              {hasWebcam && (
+                <div>
+                  <SectionTitle>Live Cam</SectionTitle>
+                  <WebcamPanel
+                    webcamUrl={spot.webcamUrl}
+                    webcamType={spot.webcamType}
+                    spotName={spot.name}
+                    lat={spot.lat}
+                    lng={spot.lng}
+                  />
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Row 3: Hourly table — full width */}
         {forecast?.forecast && activeDayData && (
