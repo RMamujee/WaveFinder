@@ -85,17 +85,24 @@ export function rateSurfConditions(input: {
   const windScore      = scoreWind(input.windSpeed, input.windDirection, input.spotFacing)
   const directionScore = scoreDirection(input.swellDirection, input.spotFacing)
 
-  const score = Math.round(
+  const rawScore = Math.round(
     heightScore    * 0.25 +
     periodScore    * 0.30 +
     windScore      * 0.30 +
     directionScore * 0.15
   )
 
+  // Hard caps: calm wind + long period can otherwise push tiny waves to "epic".
+  // A wave must be overhead+ (≥1.5m / ~5ft) to ever achieve epic.
+  let score = rawScore
+  if (input.waveHeight < 0.4)      score = Math.min(rawScore, 29)  // knee-high: always poor
+  else if (input.waveHeight < 0.7) score = Math.min(rawScore, 49)  // waist-high: fair at best
+  else if (input.waveHeight < 1.5) score = Math.min(rawScore, 72)  // chest-to-head: good at best
+
   let rating: ConditionRating
   if (score >= 80)      rating = 'epic'
-  else if (score >= 60) rating = 'good'
-  else if (score >= 35) rating = 'fair'
+  else if (score >= 55) rating = 'good'
+  else if (score >= 30) rating = 'fair'
   else                  rating = 'poor'
 
   return { score, rating }

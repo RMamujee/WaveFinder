@@ -237,8 +237,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
                 <button
                   key={spot.slug}
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); handleSelect(spot) }}
-                  onTouchEnd={(e) => { e.preventDefault(); handleSelect(spot) }}
+                  onPointerDown={(e) => { e.preventDefault(); handleSelect(spot) }}
                   onMouseEnter={() => setHighlighted(i)}
                   className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors"
                   style={{
