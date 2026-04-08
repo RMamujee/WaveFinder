@@ -92,6 +92,38 @@ export function LiveMapHero({ spotCount }: Props) {
           </svg>
           Browse spots
         </Link>
+
+        {/* Trusted sources + credit */}
+        <div className="mt-8 pt-7 border-t" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+            Trusted Data Sources
+          </p>
+          <div className="flex flex-col gap-1.5 mb-5">
+            {[
+              { name: 'NOAA NDBC Buoys', icon: '📡' },
+              { name: 'Open-Meteo Marine API', icon: '🌊' },
+              { name: 'NOAA CO-OPS Tides', icon: '🌊' },
+              { name: 'OpenStreetMap', icon: '🗺️' },
+            ].map((s) => (
+              <span key={s.name} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
+                <span>{s.icon}</span>
+                <span>{s.name}</span>
+              </span>
+            ))}
+          </div>
+          <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+            Made by{' '}
+            <a
+              href="https://www.linkedin.com/in/rmamujee"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold hover:underline"
+              style={{ color: 'var(--ocean-600)' }}
+            >
+              Rahil Mamujee
+            </a>
+          </p>
+        </div>
       </div>
 
       {/* ── Map ───────────────────────────────────────────────────────── */}
