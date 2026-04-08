@@ -2,11 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { signUp } from '@/lib/auth-client'
 
 export default function SignupPage() {
-  const router = useRouter()
   const [name, setName]         = useState('')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -17,12 +15,12 @@ export default function SignupPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const result = await signUp.email({ name, email, password, callbackURL: '/dashboard' })
+    const result = await signUp.email({ name, email, password })
     if (result.error) {
       setError(result.error.message ?? 'Failed to create account')
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
     }
   }
 
