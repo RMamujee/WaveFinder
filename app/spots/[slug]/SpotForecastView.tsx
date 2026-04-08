@@ -71,10 +71,15 @@ const DIFFICULTY_STYLES = {
 export function SpotForecastView({ spot }: Props) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
-  const { data: forecast, isLoading, error } = useQuery<SpotForecast>({
+  const { data: forecast, isPending, error } = useQuery<SpotForecast>({
     queryKey: ['forecast', spot.slug],
-    queryFn: () => fetch(`/api/forecast/${spot.slug}`).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/forecast/${spot.slug}`)
+      if (!r.ok) throw new Error(`forecast-${r.status}`)
+      return r.json() as Promise<SpotForecast>
+    },
     staleTime: 60 * 60 * 1000,
+    retry: 1,
   })
 
   const activeDayData: ForecastDay | undefined =
@@ -145,7 +150,7 @@ export function SpotForecastView({ spot }: Props) {
                 {spot.region}, {spot.country}
               </p>
 
-              {isLoading ? null : current ? (
+              {isPending ? null : current ? (
                 <div className="flex flex-wrap items-start gap-5 sm:gap-7">
                   {/* Wave height — hero stat, larger */}
                   <div style={{ minWidth: '52px' }}>
@@ -248,8 +253,8 @@ export function SpotForecastView({ spot }: Props) {
       )}
 
       {/* Body */}
-      {isLoading && <WaveLoader label="Fetching forecast…" />}
-      {error && !isLoading && (
+      {isPending && <WaveLoader label="Fetching forecast…" />}
+      {error && !isPending && (
         <div className="mx-auto max-w-7xl px-5 pt-4">
           <div className="rounded-2xl p-6 text-center" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
             <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>Failed to load forecast data.</p>
@@ -257,7 +262,7 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         </div>
       )}
-      <div className="mx-auto max-w-7xl px-5 py-4 space-y-4" style={{ display: isLoading ? 'none' : undefined }}>
+      <div className="mx-auto max-w-7xl px-5 py-4 space-y-4" style={{ display: isPending ? 'none' : undefined }}>
 
         {/* 7-day strip — full width */}
         <div>
@@ -303,7 +308,7 @@ export function SpotForecastView({ spot }: Props) {
               </SectionTitle>
               {bestTimes.length > 0 ? (
                 <BestTimePanel slots={bestTimes} tides={forecast.tides} />
-              ) : isLoading ? (
+              ) : isPending ? (
                 <div className="rounded-2xl p-8 text-center text-sm" style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
                   Loading time recommendations…
                 </div>
