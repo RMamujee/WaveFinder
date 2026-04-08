@@ -628,7 +628,7 @@ export default function ComparePage() {
     <div className="min-h-screen" style={{ background: 'var(--sand-50)' }}>
       {/* Page header */}
       <div
-        className="sm:sticky top-[57px] z-40 border-b"
+        className="sticky top-[57px] z-40 border-b"
         style={{
           background: 'rgba(253,250,245,0.95)',
           backdropFilter: 'blur(12px)',
@@ -653,16 +653,17 @@ export default function ComparePage() {
             </div>
 
             {/* Spot selectors */}
-            <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
               {Array.from({ length: MAX_SPOTS }).map((_, i) => (
-                <SpotSearchInput
-                  key={i}
-                  index={i}
-                  value={selectedSlugs[i]}
-                  spots={spots}
-                  onChange={(slug) => handleSlugChange(i, slug)}
-                  isLoading={spotsLoading}
-                />
+                <div key={i} className={i === MAX_SPOTS - 1 ? 'col-span-2 sm:col-span-1' : ''}>
+                  <SpotSearchInput
+                    index={i}
+                    value={selectedSlugs[i]}
+                    spots={spots}
+                    onChange={(slug) => handleSlugChange(i, slug)}
+                    isLoading={spotsLoading}
+                  />
+                </div>
               ))}
             </div>
           </div>

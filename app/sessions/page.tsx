@@ -171,9 +171,10 @@ interface LogSessionModalProps {
   onClose: () => void
   onSuccess: () => void
   initialData?: Partial<FormState>
+  initialSlug?: string
 }
 
-function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalProps) {
+function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSessionModalProps) {
   const now = new Date()
   const defaultTime = `${String(now.getHours()).padStart(2, '0')}:00`
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, sessionTime: defaultTime, ...initialData })
@@ -182,7 +183,7 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
   // Autocomplete state
   const [suggestions, setSuggestions] = useState<SpotSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(initialSlug ?? null)
   const [isSearching, setIsSearching] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const comboboxRef = useRef<HTMLDivElement>(null)
@@ -1098,11 +1099,12 @@ function SessionsPageInner() {
   const [modalOpen, setModalOpen] = useState(false)
   const [successBanner, setSuccessBanner] = useState(false)
 
-  // Pre-fill from ?spot=&region= when coming from a spot page
+  // Pre-fill from ?spot=&region=&slug= when coming from a spot page
   const prefill: Partial<FormState> = {
     spotName: searchParams.get('spot') ?? '',
     region: searchParams.get('region') ?? '',
   }
+  const prefillSlug = searchParams.get('slug') ?? undefined
   const hasPrefill = !!searchParams.get('spot')
 
   useEffect(() => {
@@ -1383,6 +1385,7 @@ function SessionsPageInner() {
           onClose={() => setModalOpen(false)}
           onSuccess={handleLogSuccess}
           initialData={prefill}
+          initialSlug={prefillSlug}
         />
       )}
     </>
