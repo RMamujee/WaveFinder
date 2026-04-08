@@ -102,19 +102,17 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   const inputRef   = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Close on outside click/tap
+  // Close on outside click/tap (pointer events cover mouse + touch + stylus uniformly)
   useEffect(() => {
-    const handler = (e: MouseEvent | TouchEvent) => {
+    const handler = (e: PointerEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false)
         setQuery('')
       }
     }
-    document.addEventListener('mousedown', handler)
-    document.addEventListener('touchstart', handler as EventListener)
+    document.addEventListener('pointerdown', handler)
     return () => {
-      document.removeEventListener('mousedown', handler)
-      document.removeEventListener('touchstart', handler as EventListener)
+      document.removeEventListener('pointerdown', handler)
     }
   }, [])
 
@@ -237,8 +235,8 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
                 <button
                   key={spot.slug}
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); handleSelect(spot) }}
-                  onTouchStart={(e) => { e.preventDefault(); handleSelect(spot) }}
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => handleSelect(spot)}
                   onMouseEnter={() => setHighlighted(i)}
                   className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors"
                   style={{
