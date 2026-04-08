@@ -13,9 +13,6 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'WaveFinder',
   },
-  icons: {
-    apple: '/apple-icon',
-  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
