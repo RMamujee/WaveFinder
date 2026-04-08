@@ -35,14 +35,26 @@ const RATING_CONFIG: Record<string, { bg: string; text: string; label: string; t
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function toDateString(date: Date): string {
-  return date.toISOString().slice(0, 10)
+/** Local-date string (YYYY-MM-DD) offset by `offset` days — matches BestSpotsView */
+function getLocalDateStr(offset = 0): string {
+  const d = new Date()
+  d.setDate(d.getDate() + offset)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
-function dayLabel(date: Date, idx: number): string {
+/** Extract hour (0-23) from an ISO time string like "2026-04-08T14:00" */
+function hourFromTimeStr(time: string): number {
+  return parseInt(time.slice(11, 13), 10)
+}
+
+function dayLabel(dateStr: string, idx: number): string {
   if (idx === 0) return 'Today'
   if (idx === 1) return 'Tomorrow'
-  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const d = new Date(dateStr + 'T12:00:00')
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 function hourLabel(h: number): string {
@@ -255,13 +267,8 @@ export default function TimelinePage() {
   const [dayIdx, setDayIdx] = useState(0)
   const [hour, setHour] = useState(8)
 
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() + i)
-    return d
-  })
-
-  const selectedDate = toDateString(days[dayIdx])
+  const dates = Array.from({ length: 7 }, (_, i) => getLocalDateStr(i))
+  const selectedDate = dates[dayIdx]
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['timeline', region, selectedDate],
@@ -277,20 +284,27 @@ export default function TimelinePage() {
   const spots: SpotEntry[] = data?.spots ?? []
   const regionalSwell: SwellHour[] = data?.regionalSwell ?? []
 
-  // Ranked spots for selected hour
+  // Ranked spots for selected hour — match by time string, not array index
   const rankedSpots = spots
-    .map((s) => ({ ...s, hourData: s.hours[hour] }))
+    .map((s) => ({
+      ...s,
+      hourData: s.hours.find((h) => hourFromTimeStr(h.time) === hour) ?? s.hours[0],
+    }))
     .filter((s) => s.hourData != null)
     .sort((a, b) => b.hourData.ratingScore - a.hourData.ratingScore) as (SpotEntry & { hourData: SpotHour })[]
 
-  // Heatmap: average score across all spots for each hour (24 buckets)
+  // Heatmap: average score per hour of day across all spots
   const heatmap: number[] = Array.from({ length: 24 }, (_, h) => {
     if (!spots.length) return 0
-    const scores = spots.map((s) => s.hours[h]?.ratingScore ?? 0)
+    const scores = spots.map(
+      (s) => s.hours.find((e) => hourFromTimeStr(e.time) === h)?.ratingScore ?? 0
+    )
     return scores.reduce((a, b) => a + b, 0) / scores.length
   })
 
-  const swellNow: SwellHour | undefined = regionalSwell[hour]
+  // Regional swell — match by time string
+  const swellNow: SwellHour | undefined =
+    regionalSwell.find((s) => hourFromTimeStr(s.time) === hour) ?? regionalSwell[0]
   const topRating = rankedSpots[0]?.hourData?.rating
   const topRc = topRating ? (RATING_CONFIG[topRating] ?? RATING_CONFIG.poor) : null
 
@@ -352,9 +366,9 @@ export default function TimelinePage() {
               Day
             </label>
             <div className="flex gap-2 flex-wrap">
-              {days.map((d, i) => (
+              {dates.map((dateStr, i) => (
                 <button
-                  key={i}
+                  key={dateStr}
                   onClick={() => setDayIdx(i)}
                   className="rounded-xl px-3.5 py-2 text-xs font-semibold transition-all"
                   style={{
@@ -363,7 +377,7 @@ export default function TimelinePage() {
                     border: `1px solid ${dayIdx === i ? 'var(--ocean-600)' : 'var(--border)'}`,
                   }}
                 >
-                  {dayLabel(d, i)}
+                  {dayLabel(dateStr, i)}
                 </button>
               ))}
             </div>
@@ -385,7 +399,7 @@ export default function TimelinePage() {
                 {hourLabel(hour)}
               </span>
               <span className="text-sm" style={{ color: 'var(--text-3)' }}>
-                {days[dayIdx].toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </span>
               {topRc && (
                 <span
