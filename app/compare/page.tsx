@@ -419,6 +419,28 @@ function SpotColumn({ spot, forecast, isLoading, isError }: SpotColumnProps) {
                   </p>
                 </div>
               </div>
+
+              {/* Water temperature */}
+              <div className="col-span-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
+                <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Water Temp</p>
+                {(() => {
+                  const tempC = current.waterTemp ?? forecast?.buoy?.waterTemp ?? null
+                  if (tempC == null) {
+                    return <p className="font-bold text-lg" style={{ color: 'var(--text-3)', lineHeight: 1 }}>—</p>
+                  }
+                  const tempF = (tempC * 9) / 5 + 32
+                  return (
+                    <div className="flex items-baseline gap-2">
+                      <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>
+                        {Math.round(tempF)}°F
+                      </p>
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
+                        {Math.round(tempC)}°C
+                      </p>
+                    </div>
+                  )
+                })()}
+              </div>
             </div>
 
             {/* 7-day mini strip */}
@@ -467,9 +489,24 @@ function ConnectedSpotColumn({ slug, spots }: { slug: string; spots: SurfSpot[] 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const MAX_SPOTS = 3
+const STORAGE_KEY = 'wavefinder-compare-slugs'
 
 export default function ComparePage() {
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>(['', '', ''])
+
+  // Restore from localStorage after hydration (useState initializer runs on server
+  // where window is undefined, so we must use useEffect to read client storage)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length === MAX_SPOTS) {
+          setSelectedSlugs(parsed)
+        }
+      }
+    } catch { /* ignore */ }
+  }, [])
 
   const { data: spots = [], isLoading: spotsLoading } = useQuery<SurfSpot[]>({
     queryKey: ['spots-all'],
@@ -484,6 +521,7 @@ export default function ComparePage() {
     setSelectedSlugs((prev) => {
       const next = [...prev]
       next[index] = slug
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
       return next
     })
   }

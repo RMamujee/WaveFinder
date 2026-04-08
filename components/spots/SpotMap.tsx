@@ -319,6 +319,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
         zoom,
         zoomControl: true,
         scrollWheelZoom: true,
+        worldCopyJump: true,
       })
       mapInstance.current = map
 

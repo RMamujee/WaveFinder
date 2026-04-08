@@ -7,6 +7,11 @@ import { SpotCard } from '@/components/spots/SpotCard'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
+import {
+  getStatesForCountry,
+  getRegionsForState,
+  getAllRegionsForCountry,
+} from '@/lib/region-hierarchy'
 
 interface SpotWithRating extends SurfSpot {
   currentRating?: ConditionRating | 'unknown'
@@ -21,79 +26,124 @@ const SpotMap = dynamic(
   { ssr: false, loading: () => <div className="h-full w-full flex items-center justify-center" style={{ background: 'var(--sand-50)' }}><WaveLoader compact label="Loading map…" /></div> }
 )
 
-const QUICK_FILTERS = [
-  { label: 'All CA', q: '' },
-  { label: 'San Diego', q: 'San Diego' },
-  { label: 'OC', q: 'Orange County' },
-  { label: 'Los Angeles', q: 'Los Angeles' },
-  { label: 'Ventura', q: 'Ventura' },
-  { label: 'Santa Barbara', q: 'Santa Barbara' },
-  { label: 'Central Coast', q: 'Central Coast' },
-  { label: 'Monterey Bay', q: 'Monterey' },
-  { label: 'NorCal', q: 'NorCal' },
-]
-
 type ViewMode = 'map' | 'list'
 
+// ── Region map centers ────────────────────────────────────────────────────────
+
+const REGION_MAP_CENTERS: Record<string, { lat: number; lng: number; zoom: number }> = {
+  'San Diego':     { lat: 32.85, lng: -117.27, zoom: 11 },
+  'Orange County': { lat: 33.55, lng: -117.75, zoom: 11 },
+  'Los Angeles':   { lat: 33.95, lng: -118.42, zoom: 11 },
+  'Ventura':       { lat: 34.25, lng: -119.25, zoom: 10 },
+  'Santa Barbara': { lat: 34.42, lng: -119.70, zoom: 11 },
+  'Central Coast': { lat: 35.30, lng: -120.80, zoom: 10 },
+  'Monterey':      { lat: 36.85, lng: -121.95, zoom: 10 },
+  'NorCal':        { lat: 38.50, lng: -123.00, zoom: 8  },
+}
+
+const COUNTRY_MAP_CENTERS: Record<string, { lat: number; lng: number; zoom: number }> = {
+  'United States':  { lat: 37.0,  lng: -119.5, zoom: 5 },
+  'Australia':      { lat: -27.0, lng: 133.0,  zoom: 4 },
+  'Indonesia':      { lat: -4.0,  lng: 117.0,  zoom: 5 },
+  'Portugal':       { lat: 39.5,  lng: -8.0,   zoom: 6 },
+  'Spain':          { lat: 40.0,  lng: -3.5,   zoom: 5 },
+  'France':         { lat: 46.0,  lng: 2.0,    zoom: 6 },
+  'South Africa':   { lat: -29.0, lng: 26.0,   zoom: 5 },
+  'Brazil':         { lat: -14.0, lng: -51.0,  zoom: 4 },
+  'Japan':          { lat: 36.0,  lng: 138.0,  zoom: 5 },
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function SpotsPage() {
-  const [search, setSearch] = useState('')
-  const [difficulty, setDifficulty] = useState('')
-  const [quickSearch, setQuickSearch] = useState('')
+  const [search, setSearch]           = useState('')
+  const [difficulty, setDifficulty]   = useState('')
+  const [selectedCountry, setSelectedCountry] = useState('')
+  const [selectedState, setSelectedState]     = useState('')
+  const [selectedRegion, setSelectedRegion]   = useState('')
   const [view, setView] = useState<ViewMode>('map')
 
-  // Pre-populate region filter from ?region= URL param (from /regions page links)
+  // Pre-populate from ?region= URL param (from /regions page links)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const region = params.get('region')
     if (region) {
-      setQuickSearch(decodeURIComponent(region))
+      setSelectedRegion(decodeURIComponent(region))
       setView('list')
     }
+    const country = params.get('country')
+    if (country) setSelectedCountry(decodeURIComponent(country))
   }, [])
 
-  const effectiveSearch = search || quickSearch
+  // Fetch distinct countries from DB
+  const { data: metaData } = useQuery<{ countries: string[] }>({
+    queryKey: ['spots-meta-countries'],
+    queryFn: () => fetch('/api/spots/meta').then((r) => r.json()),
+    staleTime: 60 * 60 * 1000,
+  })
+  const dbCountries = metaData?.countries ?? []
 
-  const baseParams = new URLSearchParams()
-  if (effectiveSearch) baseParams.set('q', effectiveSearch)
-  if (difficulty) baseParams.set('difficulty', difficulty)
+  // Derived state/region options from hierarchy
+  const availableStates  = selectedCountry ? getStatesForCountry(selectedCountry) : []
+  const availableRegions = selectedState
+    ? getRegionsForState(selectedCountry, selectedState)
+    : selectedCountry
+      ? getAllRegionsForCountry(selectedCountry)
+      : []
 
-  // Stage 1: load spots from DB instantly (no external API calls)
+  // Reset dependent selectors when parent changes
+  const handleCountryChange = (c: string) => {
+    setSelectedCountry(c)
+    setSelectedState('')
+    setSelectedRegion('')
+    setSearch('')
+  }
+  const handleStateChange = (s: string) => {
+    setSelectedState(s)
+    setSelectedRegion('')
+    setSearch('')
+  }
+  const handleRegionChange = (r: string) => {
+    setSelectedRegion(r)
+    setSearch('')
+  }
+
+  // Build API params
+  const apiParams = new URLSearchParams()
+  const effectiveSearch = search || selectedRegion
+  if (effectiveSearch)    apiParams.set('q', effectiveSearch)
+  if (difficulty)         apiParams.set('difficulty', difficulty)
+  if (selectedCountry)    apiParams.set('country', selectedCountry)
+
+  // Stage 1: base spots
   const { data: baseSpots = [], isLoading } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots', effectiveSearch, difficulty],
-    queryFn: () => fetch(`/api/spots?${baseParams}`).then((r) => r.json()),
+    queryKey: ['spots', effectiveSearch, difficulty, selectedCountry],
+    queryFn: () => fetch(`/api/spots?${apiParams}`).then((r) => r.json()),
     staleTime: 30 * 60 * 1000,
   })
 
-  // Stage 2: enrich with live conditions in background (separate slower request)
-  const condParams = new URLSearchParams(baseParams)
+  // Stage 2: live conditions
+  const condParams = new URLSearchParams(apiParams)
   condParams.set('withConditions', 'true')
   const { data: conditionData } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots-conditions', effectiveSearch, difficulty],
+    queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry],
     queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => r.json()),
     staleTime: 30 * 60 * 1000,
     enabled: baseSpots.length > 0,
   })
 
-  // Merge: use base spots immediately, overlay conditions when available
-  // Guard against conditionData being an error object instead of an array
   const spots = useMemo(() => {
     if (!conditionData || !Array.isArray(conditionData)) return baseSpots
     const condMap = new Map(conditionData.map((s) => [s.id, s]))
     return baseSpots.map((s) => ({ ...s, ...condMap.get(s.id) }))
   }, [baseSpots, conditionData])
 
-  // Center map on filtered region
+  // Map center
   const mapCenter = useMemo(() => {
-    if (quickSearch.includes('San Diego'))     return { lat: 32.85, lng: -117.27, zoom: 11 }
-    if (quickSearch.includes('Orange County')) return { lat: 33.55, lng: -117.75, zoom: 11 }
-    if (quickSearch.includes('Los Angeles'))   return { lat: 33.95, lng: -118.42, zoom: 11 }
-    if (quickSearch.includes('Ventura'))       return { lat: 34.25, lng: -119.25, zoom: 10 }
-    if (quickSearch.includes('Santa Barbara')) return { lat: 34.42, lng: -119.70, zoom: 11 }
-    if (quickSearch.includes('Central Coast')) return { lat: 35.30, lng: -120.80, zoom: 10 }
-    if (quickSearch.includes('Monterey'))      return { lat: 36.85, lng: -121.95, zoom: 10 }
-    if (quickSearch.includes('NorCal'))        return { lat: 38.50, lng: -123.00, zoom: 8  }
-    return { lat: 36.5, lng: -120.5, zoom: 7 } // Full California view
-  }, [quickSearch])
+    if (selectedRegion && REGION_MAP_CENTERS[selectedRegion]) return REGION_MAP_CENTERS[selectedRegion]
+    if (selectedCountry && COUNTRY_MAP_CENTERS[selectedCountry]) return COUNTRY_MAP_CENTERS[selectedCountry]
+    return { lat: 36.5, lng: -120.5, zoom: 7 }
+  }, [selectedRegion, selectedCountry])
 
   const conditionsSummary = useMemo(() => {
     if (!spots.length) return null
@@ -104,6 +154,8 @@ export default function SpotsPage() {
     return counts
   }, [spots])
 
+  const hasFilter = !!(selectedCountry || selectedState || selectedRegion || search)
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 57px)' }}>
       {/* Top bar */}
@@ -113,7 +165,7 @@ export default function SpotsPage() {
       >
         <div className="mx-auto max-w-7xl flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Search */}
-          <div className="relative w-full sm:flex-1 sm:min-w-0 sm:max-w-xs">
+          <div className="relative w-full sm:flex-1 sm:min-w-0 sm:max-w-[180px]">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2"
               width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -125,52 +177,96 @@ export default function SpotsPage() {
               type="text"
               placeholder="Search spots..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setQuickSearch('') }}
+              onChange={(e) => { setSearch(e.target.value); setSelectedCountry(''); setSelectedState(''); setSelectedRegion('') }}
               className="w-full rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none"
-              style={{
-                background: 'var(--sand-100)',
-                border: '1px solid var(--border)',
-                color: 'var(--text)',
-              }}
+              style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text)' }}
             />
           </div>
 
-          {/* Quick filters */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {QUICK_FILTERS.map((f) => (
-              <button
-                key={f.label}
-                onClick={() => { setQuickSearch(f.q); setSearch('') }}
-                className="shrink-0 rounded-full px-3 py-2 text-xs font-medium transition-all"
-                style={{
-                  background: quickSearch === f.q && !search
-                    ? 'var(--ocean-600)' : 'var(--sand-100)',
-                  color: quickSearch === f.q && !search
-                    ? 'white' : 'var(--text-2)',
-                  border: `1px solid ${quickSearch === f.q && !search ? 'var(--ocean-600)' : 'var(--border)'}`,
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
+          {/* Country dropdown */}
+          <div className="relative">
+            <select
+              value={selectedCountry}
+              onChange={(e) => handleCountryChange(e.target.value)}
+              className="rounded-lg pl-3 pr-7 py-2 text-xs font-medium focus:outline-none h-9 appearance-none cursor-pointer"
+              style={{
+                background: selectedCountry ? 'var(--ocean-600)' : 'var(--sand-100)',
+                border: `1px solid ${selectedCountry ? 'var(--ocean-600)' : 'var(--border)'}`,
+                color: selectedCountry ? 'white' : 'var(--text-2)',
+              }}
+            >
+              <option value="">Country</option>
+              {dbCountries.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={selectedCountry ? 'white' : 'var(--text-3)'} strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
           </div>
 
+          {/* State/Province dropdown — only when country has states */}
+          {availableStates.length > 0 && (
+            <div className="relative">
+              <select
+                value={selectedState}
+                onChange={(e) => handleStateChange(e.target.value)}
+                className="rounded-lg pl-3 pr-7 py-2 text-xs font-medium focus:outline-none h-9 appearance-none cursor-pointer"
+                style={{
+                  background: selectedState ? 'var(--ocean-500)' : 'var(--sand-100)',
+                  border: `1px solid ${selectedState ? 'var(--ocean-500)' : 'var(--border)'}`,
+                  color: selectedState ? 'white' : 'var(--text-2)',
+                }}
+              >
+                <option value="">State / Province</option>
+                {availableStates.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={selectedState ? 'white' : 'var(--text-3)'} strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+          )}
+
+          {/* Region dropdown — shown when state or country is selected */}
+          {availableRegions.length > 0 && (
+            <div className="relative">
+              <select
+                value={selectedRegion}
+                onChange={(e) => handleRegionChange(e.target.value)}
+                className="rounded-lg pl-3 pr-7 py-2 text-xs font-medium focus:outline-none h-9 appearance-none cursor-pointer"
+                style={{
+                  background: selectedRegion ? 'var(--ocean-400)' : 'var(--sand-100)',
+                  border: `1px solid ${selectedRegion ? 'var(--ocean-400)' : 'var(--border)'}`,
+                  color: selectedRegion ? 'white' : 'var(--text-2)',
+                }}
+              >
+                <option value="">Region</option>
+                {availableRegions.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={selectedRegion ? 'white' : 'var(--text-3)'} strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+          )}
+
+          {/* Clear filters */}
+          {hasFilter && (
+            <button
+              onClick={() => { setSelectedCountry(''); setSelectedState(''); setSelectedRegion(''); setSearch('') }}
+              className="rounded-lg px-3 py-2 text-xs font-medium transition-colors h-9"
+              style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-3)' }}
+            >
+              ✕ Clear
+            </button>
+          )}
+
           {/* Difficulty */}
-          <select
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-            className="rounded-lg px-3 py-2 text-xs font-medium focus:outline-none h-9"
-            style={{
-              background: 'var(--sand-100)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-2)',
-            }}
-          >
-            <option value="">All levels</option>
-            <option value="beginner">Beginner</option>
-            <option value="intermediate">Intermediate</option>
-            <option value="advanced">Advanced</option>
-          </select>
+          <div className="relative">
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value)}
+              className="rounded-lg pl-3 pr-7 py-2 text-xs font-medium focus:outline-none h-9 appearance-none cursor-pointer"
+              style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+            >
+              <option value="">All levels</option>
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
 
           {/* View toggle */}
           <div
@@ -201,7 +297,6 @@ export default function SpotsPage() {
 
       {/* Main content */}
       {view === 'map' ? (
-        /* Map view — full height */
         <div className="flex-1 relative overflow-hidden">
           <SpotMap
             spots={spots}
@@ -301,7 +396,14 @@ export default function SpotsPage() {
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {spots.map((spot) => <SpotCard key={spot.id} spot={spot} />)}
+                {spots.map((spot) => (
+                  <SpotCard
+                    key={spot.id}
+                    spot={spot}
+                    rating={spot.currentRating && spot.currentRating !== 'unknown' ? spot.currentRating as ConditionRating : undefined}
+                    waveHeight={spot.currentWaveHeight ?? undefined}
+                  />
+                ))}
               </div>
             )}
           </div>

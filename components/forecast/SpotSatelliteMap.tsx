@@ -37,19 +37,25 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
       })
       mapInstance.current = map
 
+      // Force correct sizing after container renders
+      setTimeout(() => map.invalidateSize(), 100)
+
       // ── Esri World Imagery (satellite) — free, no API key ──────────────────
       L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         {
           attribution: '© Esri, Maxar, Earthstar Geographics',
           maxZoom: 19,
+          maxNativeZoom: 18,
+          tileSize: 256,
+          crossOrigin: true,
         }
       ).addTo(map)
 
       // ── Subtle labels overlay (roads/place names over satellite) ───────────
       L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-        { maxZoom: 19, opacity: 0.7 }
+        { maxZoom: 19, maxNativeZoom: 18, opacity: 0.75, crossOrigin: true }
       ).addTo(map)
 
       // ── Nudge marker ~40 m toward shore (opposite of facingDirection) ──────
