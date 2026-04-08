@@ -8,6 +8,14 @@ export const metadata: Metadata = {
   title: 'WaveFinder – Free Surf Forecast',
   description: 'Real-time surf forecasts powered by NOAA buoys and Open-Meteo. Wave height, swell period, wind, tides, and live conditions for every California surf spot — free forever.',
   themeColor: '#0e4d88',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'WaveFinder',
+  },
+  icons: {
+    apple: '/apple-icon',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -645,29 +645,28 @@ export default function ComparePage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1
-                  className="text-2xl font-bold leading-tight"
+                  className="text-xl sm:text-2xl font-bold leading-tight"
                   style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}
                 >
                   Compare Spots
                 </h1>
-                <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
+                <p className="hidden sm:block text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
                   Compare conditions across multiple breaks
                 </p>
               </div>
             </div>
 
-            {/* Spot selectors — scrollable row on mobile, grid on sm+ */}
-            <div className="flex gap-2 overflow-x-auto pb-0.5 sm:overflow-x-visible sm:grid sm:grid-cols-3 sm:gap-3 sm:pb-0" style={{ scrollbarWidth: 'none' }}>
+            {/* Spot selectors — stacked on mobile (full-width = dropdown works), grid on sm+ */}
+            <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
               {Array.from({ length: MAX_SPOTS }).map((_, i) => (
-                <div key={i} className="min-w-[240px] flex-shrink-0 sm:min-w-0 sm:flex-shrink">
-                  <SpotSearchInput
-                    index={i}
-                    value={selectedSlugs[i]}
-                    spots={spots}
-                    onChange={(slug) => handleSlugChange(i, slug)}
-                    isLoading={spotsLoading}
-                  />
-                </div>
+                <SpotSearchInput
+                  key={i}
+                  index={i}
+                  value={selectedSlugs[i]}
+                  spots={spots}
+                  onChange={(slug) => handleSlugChange(i, slug)}
+                  isLoading={spotsLoading}
+                />
               ))}
             </div>
           </div>
