@@ -102,16 +102,20 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   const inputRef   = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Close on outside click
+  // Close on outside click/tap
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const handler = (e: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false)
         setQuery('')
       }
     }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler as EventListener)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler as EventListener)
+    }
   }, [])
 
   // Sorted results — show all spots when query is empty, fuzzy-sorted when typing
@@ -179,7 +183,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           autoComplete="off"
-          className="w-full rounded-xl pl-9 pr-9 py-3 text-sm font-medium focus:outline-none transition-all"
+          className="w-full rounded-xl pl-9 pr-7 py-2.5 sm:py-3 text-xs sm:text-sm font-medium focus:outline-none transition-all truncate"
           style={{
             background: isSelected && !open ? 'var(--ocean-50)' : 'var(--sand-100)',
             border: `1.5px solid ${isSelected ? 'var(--ocean-300)' : open ? 'var(--ocean-400)' : 'var(--border)'}`,
@@ -275,7 +279,7 @@ function MiniDayCard({ day, isSelected, onClick }: MiniDayCardProps) {
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-center rounded-xl py-2 px-1.5 min-w-0 transition-all"
+      className="flex flex-col items-center rounded-xl py-2 px-1.5 shrink-0 w-[50px] transition-all"
       style={{
         background: isSelected ? accent : rs.bg,
         border: `1.5px solid ${isSelected ? accent : rs.border}`,
@@ -395,7 +399,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
       {days.length > 0 && (
         <div className="px-4 pt-3 pb-2" style={{ borderBottom: '1px solid var(--sand-100)' }}>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>Select day</p>
-          <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
+          <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
             {days.map((day) => (
               <MiniDayCard
                 key={day.date}
@@ -651,7 +655,7 @@ export default function ComparePage() {
             </div>
 
             {/* Spot selectors */}
-            <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="w-full grid grid-cols-3 gap-2">
               {Array.from({ length: MAX_SPOTS }).map((_, i) => (
                 <SpotSearchInput
                   key={i}

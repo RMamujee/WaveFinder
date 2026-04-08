@@ -10,8 +10,8 @@ export default async function HomePage() {
       {/* ── Hero: live map ────────────────────────────────────────────── */}
       <LiveMapHero spotCount={spotCount} />
 
-      {/* ── Data sources + credits ────────────────────────────────────── */}
-      <section className="py-10 px-5" style={{ background: 'white', borderTop: '1px solid var(--border)' }}>
+      {/* ── Data sources + credits (desktop only — mobile shows in map overlay) ── */}
+      <section className="hidden lg:block py-10 px-5" style={{ background: 'white', borderTop: '1px solid var(--border)' }}>
         <div className="mx-auto max-w-4xl text-center">
           <p className="text-xs font-semibold uppercase tracking-widest mb-5" style={{ color: 'var(--text-3)' }}>
             Trusted Data Sources
