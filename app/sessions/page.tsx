@@ -1,11 +1,39 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useSession } from '@/lib/auth-client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useMutation } from '@tanstack/react-query'
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { format, parseISO } from 'date-fns'
-import { WaveLoader } from '@/components/layout/WaveLoader'
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+
+const SESSIONS_KEY = 'wavefinder_sessions'
+
+function getSessions(): SurfSession[] {
+  try {
+    const raw: Record<string, unknown>[] = JSON.parse(localStorage.getItem(SESSIONS_KEY) ?? '[]')
+    return raw.map((s) => ({
+      id: String(s.id ?? `session-${Date.now()}`),
+      spotName: String(s.spotName ?? ''),
+      spotSlug: (s.spotSlug ?? null) as string | null,
+      region: (s.region ?? null) as string | null,
+      sessionDate: String(s.sessionDate ?? ''),
+      duration: (s.duration ?? null) as number | null,
+      waveHeightFt: (s.waveHeightFt ?? null) as number | null,
+      wavePeriod: (s.wavePeriod ?? null) as number | null,
+      windSpeed: (s.windSpeed ?? null) as number | null,
+      windDir: (s.windDir ?? null) as string | null,
+      waterTempC: (s.waterTempC ?? null) as number | null,
+      boardType: (s.boardType ?? null) as string | null,
+      wetsuitMm: (s.wetsuitMm ?? null) as string | null,
+      rating: (s.rating ?? null) as number | null,
+      highlights: (s.highlights ?? null) as string | null,
+      buddies: (s.buddies ?? null) as string | null,
+      createdAt: String(s.createdAt ?? new Date().toISOString()),
+      updatedAt: String(s.updatedAt ?? s.createdAt ?? new Date().toISOString()),
+    }))
+  } catch { return [] }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -146,7 +174,6 @@ interface LogSessionModalProps {
 }
 
 function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalProps) {
-  const queryClient = useQueryClient()
   const now = new Date()
   const defaultTime = `${String(now.getHours()).padStart(2, '0')}:00`
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, sessionTime: defaultTime, ...initialData })
@@ -260,19 +287,32 @@ function LogSessionModal({ onClose, onSuccess, initialData }: LogSessionModalPro
 
   const mutation = useMutation({
     mutationFn: async (data: FormState) => {
-      const res = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error ?? 'Failed to log session')
+      const stored = getSessions()
+      const entry: SurfSession = {
+        id: `session-${Date.now()}`,
+        spotName: data.spotName,
+        spotSlug: selectedSlug ?? null,
+        region: data.region || null,
+        sessionDate: data.sessionDate,
+        duration: data.duration ? parseInt(data.duration) : null,
+        waveHeightFt: data.waveHeightFt ? parseFloat(data.waveHeightFt) : null,
+        wavePeriod: data.wavePeriod ? parseInt(data.wavePeriod) : null,
+        windSpeed: data.windSpeed ? parseFloat(data.windSpeed) : null,
+        windDir: data.windDir || null,
+        waterTempC: data.waterTempC ? parseFloat(data.waterTempC) : null,
+        boardType: data.boardType || null,
+        wetsuitMm: data.wetsuitMm || null,
+        rating: data.rating || null,
+        highlights: data.highlights || null,
+        buddies: data.buddies || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       }
-      return res.json()
+      localStorage.setItem(SESSIONS_KEY, JSON.stringify([entry, ...stored]))
+      window.dispatchEvent(new Event('storage'))
+      return entry
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['surf-sessions'] })
       onSuccess()
       onClose()
     },
@@ -1053,15 +1093,12 @@ function Chip({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function SessionsPageInner() {
-  const { data: session, isPending } = useSession()
-  const router = useRouter()
   const searchParams = useSearchParams()
-  const queryClient = useQueryClient()
+  const [sessions, setSessions] = useState<SurfSession[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [successBanner, setSuccessBanner] = useState(false)
-  const [guestSessions, setGuestSessions] = useState<SurfSession[]>([])
 
-  // Pre-fill from ?spot=&region=&slug= when coming from a spot page
+  // Pre-fill from ?spot=&region= when coming from a spot page
   const prefill: Partial<FormState> = {
     spotName: searchParams.get('spot') ?? '',
     region: searchParams.get('region') ?? '',
@@ -1069,87 +1106,30 @@ function SessionsPageInner() {
   const hasPrefill = !!searchParams.get('spot')
 
   useEffect(() => {
-    if (hasPrefill && !isPending) setModalOpen(true)
-  }, [hasPrefill, isPending])
+    if (hasPrefill) setModalOpen(true)
+  }, [hasPrefill])
 
-  // Load guest sessions from localStorage when not logged in
+  // Load & sync from localStorage
   useEffect(() => {
-    if (!isPending && !session?.user) {
-      try {
-        const stored = JSON.parse(localStorage.getItem('wavefinder_sessions') ?? '[]')
-        setGuestSessions(stored.map((s: Record<string, unknown>) => ({
-          ...s,
-          spotSlug: s.spotSlug ?? null,
-          region: s.region ?? null,
-          duration: s.duration ?? null,
-          waveHeightFt: s.waveHeightFt ?? null,
-          wavePeriod: null,
-          windSpeed: null,
-          windDir: null,
-          waterTempC: null,
-          boardType: s.boardType ?? null,
-          wetsuitMm: s.wetsuitMm ?? null,
-          rating: s.rating ?? null,
-          highlights: s.highlights ?? null,
-          buddies: null,
-          updatedAt: s.createdAt as string,
-        })))
-      } catch { /* ignore */ }
-    }
-  }, [isPending, session?.user])
-
-  const { data: serverSessions = [], isLoading } = useQuery<SurfSession[]>({
-    queryKey: ['surf-sessions'],
-    queryFn: () => fetch('/api/sessions').then((r) => r.json()),
-    enabled: !!session?.user,
-  })
-
-  const sessions = session?.user ? serverSessions : guestSessions
+    setSessions(getSessions())
+    const handler = () => setSessions(getSessions())
+    window.addEventListener('storage', handler)
+    return () => window.removeEventListener('storage', handler)
+  }, [])
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (id.startsWith('guest-')) {
-        const stored: SurfSession[] = JSON.parse(localStorage.getItem('wavefinder_sessions') ?? '[]')
-        localStorage.setItem('wavefinder_sessions', JSON.stringify(stored.filter((s) => s.id !== id)))
-        setGuestSessions((prev) => prev.filter((s) => s.id !== id))
-        return
-      }
-      const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Failed to delete')
+      const updated = getSessions().filter((s) => s.id !== id)
+      localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated))
+      window.dispatchEvent(new Event('storage'))
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['surf-sessions'] })
-    },
+    onSuccess: () => setSessions(getSessions()),
   })
 
   const handleLogSuccess = () => {
+    setSessions(getSessions())
     setSuccessBanner(true)
     setTimeout(() => setSuccessBanner(false), 3000)
-  }
-
-  if (isPending) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          height: '64px',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--sand-50)',
-        }}
-      >
-        <div
-          style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '50%',
-            border: '2px solid var(--ocean-500)',
-            borderTopColor: 'transparent',
-            animation: 'spin 0.7s linear infinite',
-          }}
-        />
-      </div>
-    )
   }
 
   return (
@@ -1162,16 +1142,6 @@ function SessionsPageInner() {
       `}</style>
 
       <div style={{ minHeight: '100vh', background: 'var(--sand-50)' }}>
-        {/* Guest banner */}
-        {!isPending && !session?.user && (
-          <div style={{ background: 'var(--ocean-600)', color: 'white', padding: '10px 20px', textAlign: 'center', fontSize: '13px' }}>
-            Sessions are saved on this device only.{' '}
-            <a href="/signup" style={{ color: 'white', fontWeight: 700, textDecoration: 'underline' }}>Create a free account</a>
-            {' '}or{' '}
-            <a href="/login" style={{ color: 'white', fontWeight: 700, textDecoration: 'underline' }}>log in</a>
-            {' '}to sync across devices.
-          </div>
-        )}
 
         {/* Success banner */}
         {successBanner && (
@@ -1255,9 +1225,7 @@ function SessionsPageInner() {
 
         {/* Content */}
         <div style={{ maxWidth: '720px', margin: '0 auto', padding: '24px 20px' }}>
-          {isLoading ? (
-            <WaveLoader compact label="Loading your log…" />
-          ) : sessions.length === 0 ? (
+          {sessions.length === 0 ? (
             // Empty state
             <div
               style={{

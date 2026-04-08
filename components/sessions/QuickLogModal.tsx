@@ -1,23 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useSession } from '@/lib/auth-client'
 
-interface GuestSession {
-  id: string
-  spotName: string
-  spotSlug?: string
-  region?: string
-  sessionDate: string
-  duration?: number
-  waveHeightFt?: number
-  rating?: number
-  highlights?: string
-  boardType?: string
-  wetsuitMm?: string
-  createdAt: string
-  _guest: true
-}
+const SESSIONS_KEY = 'wavefinder_sessions'
 
 interface SpotSuggestion {
   id: string
@@ -32,9 +17,6 @@ interface Props {
 }
 
 export function QuickLogModal({ open, onClose }: Props) {
-  const { data: session } = useSession()
-  const isLoggedIn = !!session?.user
-
   const [spotName, setSpotName] = useState('')
   const [spotSlug, setSpotSlug] = useState('')
   const [region, setRegion] = useState('')
@@ -49,14 +31,12 @@ export function QuickLogModal({ open, onClose }: Props) {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [savedAsGuest, setSavedAsGuest] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Reset when closed
   useEffect(() => {
     if (!open) {
       setSaved(false)
-      setSavedAsGuest(false)
       setSpotName('')
       setSpotSlug('')
       setRegion('')
@@ -90,49 +70,34 @@ export function QuickLogModal({ open, onClose }: Props) {
     setShowSuggestions(false)
   }
 
-  const saveToLocalStorage = () => {
-    const existing: GuestSession[] = JSON.parse(localStorage.getItem('wavefinder_sessions') ?? '[]')
-    const entry: GuestSession = {
-      id: `guest-${Date.now()}`,
-      spotName, spotSlug: spotSlug || undefined, region: region || undefined,
-      sessionDate: date, duration: duration ? Number(duration) : undefined,
-      rating: rating || undefined, highlights: highlights || undefined,
-      boardType: boardType || undefined, wetsuitMm: wetsuitMm || undefined,
-      createdAt: new Date().toISOString(),
-      _guest: true,
-    }
-    localStorage.setItem('wavefinder_sessions', JSON.stringify([entry, ...existing]))
-  }
-
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!spotSlug || !date) return
     setSaving(true)
     try {
-      if (isLoggedIn) {
-        const res = await fetch('/api/sessions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            spotName, spotSlug: spotSlug || undefined, region: region || undefined,
-            sessionDate: date, duration: duration || undefined,
-            rating: rating || undefined, highlights: highlights || undefined,
-            boardType: boardType || undefined, wetsuitMm: wetsuitMm || undefined,
-          }),
-        })
-        if (!res.ok) {
-          // Session expired or auth error — fall back to localStorage
-          saveToLocalStorage()
-          setSavedAsGuest(true)
-        }
-      } else {
-        saveToLocalStorage()
+      const existing = JSON.parse(localStorage.getItem(SESSIONS_KEY) ?? '[]')
+      const entry = {
+        id: `session-${Date.now()}`,
+        spotName,
+        spotSlug: spotSlug || null,
+        region: region || null,
+        sessionDate: date,
+        duration: duration ? Number(duration) : null,
+        waveHeightFt: null,
+        wavePeriod: null,
+        windSpeed: null,
+        windDir: null,
+        waterTempC: null,
+        boardType: boardType || null,
+        wetsuitMm: wetsuitMm || null,
+        rating: rating || null,
+        highlights: highlights || null,
+        buddies: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       }
+      localStorage.setItem(SESSIONS_KEY, JSON.stringify([entry, ...existing]))
+      window.dispatchEvent(new Event('storage'))
       setSaved(true)
-    } catch {
-      // Network error — save locally as fallback
-      try { saveToLocalStorage() } catch { /* ignore */ }
-      setSaved(true)
-      setSavedAsGuest(true)
     } finally {
       setSaving(false)
     }
@@ -146,19 +111,14 @@ export function QuickLogModal({ open, onClose }: Props) {
       style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div
-        className="w-full max-w-md rounded-2xl"
-        style={{ background: 'white', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}
-      >
+      <div className="w-full max-w-md rounded-2xl" style={{ background: 'white', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
             <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>
               Log a Session
             </h2>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-              {isLoggedIn ? `Saving to your account` : 'Saved locally — sign up to sync across devices'}
-            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Saved to this device</p>
           </div>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-gray-100 transition-colors">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2.5">
@@ -173,29 +133,11 @@ export function QuickLogModal({ open, onClose }: Props) {
             <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '20px', fontWeight: 700, color: 'var(--text)' }}>
               Session logged!
             </p>
-            {(!isLoggedIn || savedAsGuest) && (
-              <p className="mt-2 text-sm" style={{ color: 'var(--text-3)' }}>
-                Saved to this device.{' '}
-                <a href="/signup" style={{ color: 'var(--ocean-600)', fontWeight: 600 }}>Create a free account</a>
-                {' '}to sync across devices.
-                {savedAsGuest && isLoggedIn && (
-                  <span className="block mt-1 text-amber-600">Your session may have expired — try logging in again.</span>
-                )}
-              </p>
-            )}
             <div className="mt-5 flex gap-2 justify-center">
-              <a
-                href="/sessions"
-                className="rounded-xl px-5 py-2 text-sm font-semibold text-white"
-                style={{ background: 'var(--ocean-600)' }}
-              >
+              <a href="/sessions" className="rounded-xl px-5 py-2 text-sm font-semibold text-white" style={{ background: 'var(--ocean-600)' }}>
                 View all sessions
               </a>
-              <button
-                onClick={onClose}
-                className="rounded-xl px-5 py-2 text-sm font-medium"
-                style={{ background: 'var(--sand-100)', color: 'var(--text-2)' }}
-              >
+              <button onClick={onClose} className="rounded-xl px-5 py-2 text-sm font-medium" style={{ background: 'var(--sand-100)', color: 'var(--text-2)' }}>
                 Close
               </button>
             </div>
@@ -214,36 +156,18 @@ export function QuickLogModal({ open, onClose }: Props) {
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => {
                   setTimeout(() => {
-                    if (!spotSlug && spotName.trim()) {
-                      setSpotName('')
-                      setSuggestions([])
-                    }
+                    if (!spotSlug && spotName.trim()) { setSpotName(''); setSuggestions([]) }
                     setShowSuggestions(false)
                   }, 200)
                 }}
                 placeholder="Search WaveFinder spots…"
                 className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none"
-                style={{
-                  background: 'var(--sand-50)',
-                  border: spotSlug ? '1.5px solid var(--ocean-600)' : '1.5px solid var(--border)',
-                  color: 'var(--text)',
-                }}
+                style={{ background: 'var(--sand-50)', border: spotSlug ? '1.5px solid var(--ocean-600)' : '1.5px solid var(--border)', color: 'var(--text)' }}
               />
               {showSuggestions && suggestions.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999,
-                    marginTop: '4px', borderRadius: '12px', overflow: 'hidden',
-                    background: 'white', border: '1px solid var(--border)',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-                  }}
-                >
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, marginTop: '4px', borderRadius: '12px', overflow: 'hidden', background: 'white', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
                   {suggestions.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => handleSpotSelect(s)}
-                      className="w-full text-left px-4 py-2.5 hover:bg-[var(--sand-50)] transition-colors"
-                    >
+                    <button key={s.id} onClick={() => handleSpotSelect(s)} className="w-full text-left px-4 py-2.5 hover:bg-[var(--sand-50)] transition-colors">
                       <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{s.name}</span>
                       <span className="text-xs ml-2" style={{ color: 'var(--text-3)' }}>{s.region}</span>
                     </button>
@@ -255,28 +179,12 @@ export function QuickLogModal({ open, onClose }: Props) {
             {/* Date + Duration */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>
-                  Date <span style={{ color: 'var(--coral)' }}>*</span>
-                </label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
-                  style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text)' }}
-                />
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>Date <span style={{ color: 'var(--coral)' }}>*</span></label>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none" style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text)' }} />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>Duration (min)</label>
-                <input
-                  type="number"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  placeholder="90"
-                  min={0}
-                  className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
-                  style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text)' }}
-                />
+                <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="90" min={0} className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none" style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text)' }} />
               </div>
             </div>
 
@@ -285,16 +193,8 @@ export function QuickLogModal({ open, onClose }: Props) {
               <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-2)' }}>Session rating</label>
               <div className="flex gap-1.5">
                 {[1,2,3,4,5].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setRating(rating === n ? 0 : n)}
-                    className="rounded-lg px-3 py-1.5 text-sm font-bold transition-all"
-                    style={{
-                      background: n <= rating ? 'var(--ocean-600)' : 'var(--sand-100)',
-                      color: n <= rating ? 'white' : 'var(--text-3)',
-                      border: `1.5px solid ${n <= rating ? 'var(--ocean-600)' : 'var(--border)'}`,
-                    }}
-                  >
+                  <button key={n} onClick={() => setRating(rating === n ? 0 : n)} className="rounded-lg px-3 py-1.5 text-sm font-bold transition-all"
+                    style={{ background: n <= rating ? 'var(--ocean-600)' : 'var(--sand-100)', color: n <= rating ? 'white' : 'var(--text-3)', border: `1.5px solid ${n <= rating ? 'var(--ocean-600)' : 'var(--border)'}` }}>
                     {n}
                   </button>
                 ))}
@@ -308,37 +208,16 @@ export function QuickLogModal({ open, onClose }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>Board</label>
-                <select
-                  value={boardType}
-                  onChange={(e) => setBoardType(e.target.value)}
-                  className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
-                  style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text-2)' }}
-                >
+                <select value={boardType} onChange={(e) => setBoardType(e.target.value)} className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none" style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text-2)' }}>
                   <option value="">— optional</option>
-                  <option value="shortboard">Shortboard</option>
-                  <option value="longboard">Longboard</option>
-                  <option value="mid-length">Mid-length</option>
-                  <option value="fish">Fish</option>
-                  <option value="funboard">Funboard</option>
-                  <option value="sup">SUP</option>
-                  <option value="foil">Foil</option>
+                  {['Shortboard','Longboard','Mid-length','Fish','Funboard','SUP','Foil'].map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>Wetsuit</label>
-                <select
-                  value={wetsuitMm}
-                  onChange={(e) => setWetsuitMm(e.target.value)}
-                  className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none"
-                  style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text-2)' }}
-                >
+                <select value={wetsuitMm} onChange={(e) => setWetsuitMm(e.target.value)} className="w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none" style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text-2)' }}>
                   <option value="">— optional</option>
-                  <option value="boardshorts">Boardshorts</option>
-                  <option value="2mm">2mm</option>
-                  <option value="3/2mm">3/2mm</option>
-                  <option value="4/3mm">4/3mm</option>
-                  <option value="5/4mm">5/4mm</option>
-                  <option value="6/5mm">6/5mm</option>
+                  {['Boardshorts','2mm','3/2mm','4/3mm','5/4mm','6/5mm'].map(w => <option key={w} value={w}>{w}</option>)}
                 </select>
               </div>
             </div>
@@ -346,36 +225,18 @@ export function QuickLogModal({ open, onClose }: Props) {
             {/* Notes */}
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>Notes</label>
-              <textarea
-                value={highlights}
-                onChange={(e) => setHighlights(e.target.value)}
-                placeholder="How was it? Waves, crowds, highlights…"
-                rows={2}
-                className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none resize-none"
-                style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text)' }}
-              />
+              <textarea value={highlights} onChange={(e) => setHighlights(e.target.value)} placeholder="How was it? Waves, crowds, highlights…" rows={2} className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none resize-none" style={{ background: 'var(--sand-50)', border: '1.5px solid var(--border)', color: 'var(--text)' }} />
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={handleSave}
-                disabled={!spotSlug || !date || saving}
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-40"
-                style={{ background: 'var(--ocean-600)' }}
-              >
-                {saving ? 'Saving…' : 'Save session'}
-              </button>
-              {!isLoggedIn && (
-                <a
-                  href="/login"
-                  className="rounded-xl px-4 py-2.5 text-sm font-medium text-center"
-                  style={{ background: 'var(--sand-100)', color: 'var(--text-2)', border: '1px solid var(--border)', whiteSpace: 'nowrap' }}
-                >
-                  Log in
-                </a>
-              )}
-            </div>
+            {/* Save */}
+            <button
+              onClick={handleSave}
+              disabled={!spotSlug || !date || saving}
+              className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-40"
+              style={{ background: 'var(--ocean-600)' }}
+            >
+              {saving ? 'Saving…' : 'Save session'}
+            </button>
           </div>
         )}
       </div>
