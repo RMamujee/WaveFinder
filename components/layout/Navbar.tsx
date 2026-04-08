@@ -47,6 +47,17 @@ export function Navbar() {
           ))}
         </div>
 
+        {/* Mobile: Made by credit */}
+        <a
+          href="https://www.linkedin.com/in/rmamujee"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="md:hidden text-xs font-medium"
+          style={{ color: 'var(--text-3)' }}
+        >
+          by Rahil Mamujee
+        </a>
+
         {/* Mobile hamburger */}
         <button
           className="flex items-center justify-center rounded-lg p-2.5 md:hidden"
