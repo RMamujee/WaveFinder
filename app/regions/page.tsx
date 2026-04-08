@@ -268,7 +268,11 @@ export default function RegionsPage() {
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {regionsInState.map((region, idx) => {
               const style = getCardStyle(idx)
-              const hasData = dbRegions.includes(region)
+              // DB regions are stored as "City, RegionName" so check if any DB region contains the local region name
+              const hasData = dbRegions.some((r) =>
+                r.toLowerCase().includes(region.toLowerCase()) ||
+                region.toLowerCase().includes(r.toLowerCase())
+              )
               return (
                 <RegionCard
                   key={region}
@@ -277,9 +281,8 @@ export default function RegionsPage() {
                   color={hasData ? '#1b7fcb' : style.color}
                   bg={hasData ? '#eff6ff' : style.bg}
                   border={hasData ? '#bfdbfe' : style.border}
-                  description={hasData ? 'Live conditions available' : 'Coming soon'}
-                  href={hasData ? `/spots?country=${encodeURIComponent(selectedCountry)}&region=${encodeURIComponent(region)}` : undefined}
-                  onClick={hasData ? undefined : () => {}}
+                  description={hasData ? 'Live conditions available' : 'Explore spots'}
+                  href={`/spots?country=${encodeURIComponent(selectedCountry)}&region=${encodeURIComponent(region)}`}
                 />
               )
             })}
