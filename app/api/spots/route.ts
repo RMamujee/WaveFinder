@@ -18,10 +18,12 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const search     = searchParams.get('q') ?? ''
-  const difficulty = searchParams.get('difficulty') ?? ''
-  const country    = searchParams.get('country') ?? ''
-  const ids        = searchParams.get('ids')?.split(',').filter(Boolean) ?? []
+  const search     = (searchParams.get('q') ?? '').slice(0, 200)
+  const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced'])
+  const rawDiff    = searchParams.get('difficulty') ?? ''
+  const difficulty = VALID_DIFFICULTIES.has(rawDiff) ? rawDiff : ''
+  const country    = (searchParams.get('country') ?? '').slice(0, 100)
+  const ids        = (searchParams.get('ids') ?? '').split(',').filter(Boolean).slice(0, 50)
   const withConditions = searchParams.get('withConditions') === 'true'
 
   const spots = await prisma.surfSpot.findMany({

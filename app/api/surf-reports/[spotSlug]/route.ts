@@ -71,6 +71,9 @@ export async function GET(
   { params }: { params: Promise<{ spotSlug: string }> }
 ) {
   const { spotSlug } = await params
+  if (!/^[a-z0-9-]{1,120}$/.test(spotSlug)) {
+    return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
+  }
 
   const spot = await prisma.surfSpot.findUnique({ where: { slug: spotSlug } })
 
