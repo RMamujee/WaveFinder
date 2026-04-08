@@ -28,6 +28,24 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
         mapInstance.current = null
       }
 
+      // facingDirection = the direction the beach faces toward the ocean.
+      // Shore (land) is in the OPPOSITE direction: (facingDirection + 180) % 360.
+      const metersPerDeg = 111_320
+      const shoreRad = ((facingDirection + 180) % 360) * (Math.PI / 180)
+      const cosLat   = Math.cos(lat * Math.PI / 180)
+
+      // Nudge the MAP CENTER 150 m toward shore so the beach/waterline is
+      // always centered rather than the offshore break.
+      const centerNudgeM = 150
+      const centerLat = lat + (centerNudgeM / metersPerDeg) * Math.cos(shoreRad)
+      const centerLng = lng + (centerNudgeM / (metersPerDeg * cosLat)) * Math.sin(shoreRad)
+
+      // Nudge the MARKER 30 m toward shore — keeps it at the break, just
+      // pulled slightly off the open ocean.
+      const markerNudgeM = 30
+      const shLat = lat + (markerNudgeM / metersPerDeg) * Math.cos(shoreRad)
+      const shLng = lng + (markerNudgeM / (metersPerDeg * cosLat)) * Math.sin(shoreRad)
+
       const map = L.map(mapRef.current, {
         center: [centerLat, centerLng],
         zoom: zoom + 1,   // one level tighter now that center is on the beach
@@ -57,24 +75,6 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
         'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
         { maxZoom: 19, maxNativeZoom: 18, opacity: 0.75, crossOrigin: true }
       ).addTo(map)
-
-      // facingDirection = the direction the beach faces toward the ocean.
-      // Shore (land) is in the OPPOSITE direction: (facingDirection + 180) % 360.
-      const metersPerDeg = 111_320
-      const shoreRad = ((facingDirection + 180) % 360) * (Math.PI / 180)
-      const cosLat   = Math.cos(lat * Math.PI / 180)
-
-      // Nudge the MAP CENTER 150 m toward shore so the beach/waterline is
-      // always centered rather than the offshore break.
-      const centerNudgeM = 150
-      const centerLat = lat + (centerNudgeM / metersPerDeg) * Math.cos(shoreRad)
-      const centerLng = lng + (centerNudgeM / (metersPerDeg * cosLat)) * Math.sin(shoreRad)
-
-      // Nudge the MARKER 30 m toward shore — keeps it at the break, just
-      // pulled slightly off the open ocean.
-      const markerNudgeM = 30
-      const shLat = lat + (markerNudgeM / metersPerDeg) * Math.cos(shoreRad)
-      const shLng = lng + (markerNudgeM / (metersPerDeg * cosLat)) * Math.sin(shoreRad)
 
       // ── Custom surf-pin marker ─────────────────────────────────────────────
       const icon = L.divIcon({
