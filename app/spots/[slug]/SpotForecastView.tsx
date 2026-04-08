@@ -282,10 +282,11 @@ export function SpotForecastView({ spot }: Props) {
           />
         </div>
 
-        {/* Row 2: Best Times | Wind Speed | UV Index */}
+        {/* Row 2: Best Times (left, spans 2 rows) | Wind / UV (top-right) | Map (bottom-right) */}
         {forecast?.forecast && activeDayData && (
           <div className="grid gap-4 lg:grid-cols-3">
-            <div>
+            {/* Best Times — left column, spans Wind+UV row AND map row */}
+            <div className="lg:row-span-2">
               <SectionTitle>
                 Best Times
                 <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-3)' }}>
@@ -301,6 +302,7 @@ export function SpotForecastView({ spot }: Props) {
               )}
             </div>
 
+            {/* Wind Speed — top-right col 2 */}
             <div>
               <SectionTitle>Wind Speed</SectionTitle>
               <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
@@ -308,6 +310,7 @@ export function SpotForecastView({ spot }: Props) {
               </div>
             </div>
 
+            {/* UV Index — top-right col 3 */}
             <div>
               <SectionTitle>
                 UV Index —{' '}
@@ -317,43 +320,38 @@ export function SpotForecastView({ spot }: Props) {
                 <UVChart activeDayData={activeDayData} />
               </div>
             </div>
+
+            {/* Satellite Map — bottom-right, spans cols 2+3 */}
+            <div className="lg:col-span-2">
+              <SectionTitle>Satellite View</SectionTitle>
+              <div
+                className="rounded-2xl overflow-hidden"
+                style={{ border: '1px solid var(--border)', aspectRatio: '16/9' }}
+              >
+                <SpotSatelliteMap
+                  lat={spot.lat}
+                  lng={spot.lng}
+                  spotName={spot.name}
+                  facingDirection={spot.facingDirection}
+                />
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Satellite map + optional live cam — below Wind/UV */}
-        {(() => {
-          const hasWebcam = spot.webcamType !== 'none' && !!spot.webcamUrl
-          return (
-            <div className={hasWebcam ? 'grid gap-4 md:grid-cols-2' : undefined}>
-              <div>
-                <SectionTitle>Satellite View</SectionTitle>
-                <div
-                  className="rounded-2xl overflow-hidden"
-                  style={{ border: '1px solid var(--border)', aspectRatio: '16/9' }}
-                >
-                  <SpotSatelliteMap
-                    lat={spot.lat}
-                    lng={spot.lng}
-                    spotName={spot.name}
-                    facingDirection={spot.facingDirection}
-                  />
-                </div>
-              </div>
-              {hasWebcam && (
-                <div>
-                  <SectionTitle>Live Cam</SectionTitle>
-                  <WebcamPanel
-                    webcamUrl={spot.webcamUrl}
-                    webcamType={spot.webcamType}
-                    spotName={spot.name}
-                    lat={spot.lat}
-                    lng={spot.lng}
-                  />
-                </div>
-              )}
-            </div>
-          )
-        })()}
+        {/* Live cam — only shown when the spot has a webcam URL */}
+        {spot.webcamType !== 'none' && !!spot.webcamUrl && (
+          <div>
+            <SectionTitle>Live Cam</SectionTitle>
+            <WebcamPanel
+              webcamUrl={spot.webcamUrl}
+              webcamType={spot.webcamType}
+              spotName={spot.name}
+              lat={spot.lat}
+              lng={spot.lng}
+            />
+          </div>
+        )}
 
         {/* Row 3: Hourly table — full width */}
         {forecast?.forecast && activeDayData && (
