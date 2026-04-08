@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 
@@ -11,11 +12,13 @@ export function Navbar() {
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   const navLinks = [
-    { href: '/spots',     label: 'Browse Spots' },
-    { href: '/regions',   label: 'Regions' },
-    { href: '/compare',   label: 'Compare' },
-    { href: '/sessions',  label: 'My Log' },
-    { href: '/dashboard', label: 'My Spots' },
+    { href: '/spots',       label: 'Browse Spots' },
+    { href: '/best-spots',  label: 'Best Spots' },
+    { href: '/timeline',    label: 'Timeline' },
+    { href: '/regions',     label: 'Regions' },
+    { href: '/compare',     label: 'Compare' },
+    { href: '/sessions',    label: 'My Log' },
+    { href: '/dashboard',   label: 'My Spots' },
   ]
 
   return (
@@ -26,7 +29,7 @@ export function Navbar() {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group" onClick={() => setMobileOpen(false)}>
-          <WaveFinderLogo />
+          <Image src="/logo.png" alt="WaveFinder" width={36} height={36} className="rounded-lg" />
           <span className="text-lg font-bold tracking-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ocean-700)' }}>
             Wave<span style={{ color: 'var(--seafoam)', fontStyle: 'italic' }}>Finder</span>
           </span>
@@ -99,19 +102,5 @@ export function Navbar() {
         </div>
       )}
     </nav>
-  )
-}
-
-function WaveFinderLogo() {
-  return (
-    <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M2 14 C5 9 8 7.5 11 10 C14 12.5 16 8 19 7 C22 6 25 8 28 10 C30 11.2 32 12 34 12"
-        stroke="var(--ocean-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 20 C5 16 8 15 11 17 C14 19 16 15.5 19 14.5 C22 13.5 25 15.5 28 17 C30 18 32 18.5 34 18.5"
-        stroke="var(--seafoam)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.75" />
-      <path d="M22 10 L20 16" stroke="var(--ocean-400)" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
-      <circle cx="34" cy="7" r="3" fill="var(--coral)" opacity="0.9" />
-      <circle cx="34" cy="7" r="1.5" fill="white" />
-    </svg>
   )
 }
