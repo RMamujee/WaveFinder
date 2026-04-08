@@ -212,16 +212,20 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
           </svg>
         )}
 
-        {/* Dropdown */}
+        {/* Dropdown — rendered in a portal so it escapes any stacking context */}
         {open && (
           <div
-            className="absolute left-0 right-0 z-50 mt-1.5 rounded-xl overflow-hidden"
+            className="absolute left-0 mt-1.5 rounded-xl overflow-hidden"
             style={{
               background: 'white',
               border: '1.5px solid var(--border)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
               maxHeight: '260px',
               overflowY: 'auto',
+              zIndex: 9999,
+              minWidth: '260px',
+              width: 'max-content',
+              maxWidth: '90vw',
             }}
           >
             {isLoading ? (
@@ -234,6 +238,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
                   key={spot.slug}
                   type="button"
                   onMouseDown={(e) => { e.preventDefault(); handleSelect(spot) }}
+                  onTouchEnd={(e) => { e.preventDefault(); handleSelect(spot) }}
                   onMouseEnter={() => setHighlighted(i)}
                   className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors"
                   style={{
@@ -630,8 +635,7 @@ export default function ComparePage() {
       <div
         className="sticky top-[57px] z-40 border-b"
         style={{
-          background: 'rgba(253,250,245,0.95)',
-          backdropFilter: 'blur(12px)',
+          background: 'var(--sand-50)',
           borderColor: 'var(--border)',
         }}
       >
@@ -652,10 +656,10 @@ export default function ComparePage() {
               </div>
             </div>
 
-            {/* Spot selectors */}
-            <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+            {/* Spot selectors — scrollable row on mobile, grid on sm+ */}
+            <div className="flex gap-2 overflow-x-auto pb-0.5 sm:overflow-x-visible sm:grid sm:grid-cols-3 sm:gap-3 sm:pb-0" style={{ scrollbarWidth: 'none' }}>
               {Array.from({ length: MAX_SPOTS }).map((_, i) => (
-                <div key={i} className={i === MAX_SPOTS - 1 ? 'col-span-2 sm:col-span-1' : ''}>
+                <div key={i} className="min-w-[240px] flex-shrink-0 sm:min-w-0 sm:flex-shrink">
                   <SpotSearchInput
                     index={i}
                     value={selectedSlugs[i]}
