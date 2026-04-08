@@ -11,31 +11,42 @@ export default function AppleIcon() {
           width: 180,
           height: 180,
           background: '#0e4d88',
-          borderRadius: 38,
+          borderRadius: 40,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <svg width="148" height="110" viewBox="0 0 148 110" fill="none">
-          {/* Wave 1 */}
+        {/* WaveFinder logo — matches the Navbar WaveFinderLogo SVG */}
+        <svg width="144" height="112" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Wave 1 — ocean blue */}
           <path
-            d="M4 48 C17 35 30 32 43 41 C56 50 64 34 77 30 C90 26 103 32 116 38 C122 41 130 44 144 46"
+            d="M2 14 C5 9 8 7.5 11 10 C14 12.5 16 8 19 7 C22 6 25 8 28 10 C30 11.2 32 12 34 12"
             stroke="#7ec0f5"
-            strokeWidth="9"
+            strokeWidth="2.5"
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
-          {/* Wave 2 */}
+          {/* Wave 2 — seafoam */}
           <path
-            d="M4 70 C17 57 30 55 43 63 C56 71 64 57 77 53 C90 49 103 55 116 61 C122 64 130 67 144 68"
+            d="M2 20 C5 16 8 15 11 17 C14 19 16 15.5 19 14.5 C22 13.5 25 15.5 28 17 C30 18 32 18.5 34 18.5"
             stroke="#4dbfca"
-            strokeWidth="7"
+            strokeWidth="2"
             strokeLinecap="round"
+            strokeLinejoin="round"
             opacity="0.85"
           />
-          {/* Sun */}
-          <circle cx="122" cy="22" r="13" fill="#e07a5f" />
-          <circle cx="122" cy="22" r="6.5" fill="white" />
+          {/* Fin */}
+          <path
+            d="M22 10 L20 16"
+            stroke="#7ec0f5"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            opacity="0.7"
+          />
+          {/* Sun — coral with white center */}
+          <circle cx="34" cy="7" r="3" fill="#e07a5f" opacity="0.95" />
+          <circle cx="34" cy="7" r="1.5" fill="white" />
         </svg>
       </div>
     ),
