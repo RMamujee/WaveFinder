@@ -183,7 +183,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           autoComplete="off"
-          className="w-full rounded-xl pl-9 pr-7 py-2.5 sm:py-3 text-xs sm:text-sm font-medium focus:outline-none transition-all truncate"
+          className="w-full rounded-xl pl-9 pr-9 py-3 text-sm font-medium focus:outline-none transition-all"
           style={{
             background: isSelected && !open ? 'var(--ocean-50)' : 'var(--sand-100)',
             border: `1.5px solid ${isSelected ? 'var(--ocean-300)' : open ? 'var(--ocean-400)' : 'var(--border)'}`,
@@ -630,7 +630,7 @@ export default function ComparePage() {
     <div className="min-h-screen" style={{ background: 'var(--sand-50)' }}>
       {/* Page header */}
       <div
-        className="sticky top-[57px] z-40 border-b"
+        className="sm:sticky top-[57px] z-40 border-b"
         style={{
           background: 'rgba(253,250,245,0.95)',
           backdropFilter: 'blur(12px)',
@@ -655,7 +655,7 @@ export default function ComparePage() {
             </div>
 
             {/* Spot selectors */}
-            <div className="w-full grid grid-cols-3 gap-2">
+            <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
               {Array.from({ length: MAX_SPOTS }).map((_, i) => (
                 <SpotSearchInput
                   key={i}
