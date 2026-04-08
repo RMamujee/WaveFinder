@@ -17,7 +17,6 @@ export function Navbar() {
     { href: '/spots', label: 'Browse Spots', auth: false },
     { href: '/regions', label: 'Regions', auth: false },
     { href: '/compare', label: 'Compare', auth: false },
-    { href: '/leaderboard', label: 'Leaderboard', auth: false },
     { href: '/sessions', label: 'My Log', auth: true },
     { href: '/dashboard', label: 'My Spots', auth: true },
   ].filter((l) => !l.auth || !!session?.user)

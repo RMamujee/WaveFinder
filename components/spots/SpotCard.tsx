@@ -19,7 +19,7 @@ const RATING_DOTS: Record<ConditionRating, string> = {
 }
 
 export function SpotCard({ spot, rating, waveHeight }: Props) {
-  const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES]
+  const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES] ?? DIFFICULTY_STYLES.intermediate
 
   return (
     <Link
