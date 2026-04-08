@@ -484,8 +484,8 @@ export function SpotForecastView({ spot }: Props) {
           })()}
         </div>
 
-        {/* Row 7: Live Buoy Data | Community Reports — same y-axis below Row 6 */}
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* Row 7: Live Buoy Data | Community Reports — top-aligned, Community Reports capped to Buoy height */}
+        <div className="grid gap-4 md:grid-cols-2 items-start">
           {forecast?.buoy && spot.noaaBuoyId && (
             <div>
               <SectionTitle>Live Buoy Data</SectionTitle>

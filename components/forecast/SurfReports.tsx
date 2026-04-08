@@ -52,9 +52,9 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
   const report = data?.report
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'white' }}>
-      {/* Header */}
-      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
+    <div className="rounded-2xl flex flex-col" style={{ border: '1px solid var(--border)', background: 'white', overflow: 'hidden' }}>
+      {/* Header — stays fixed while content scrolls */}
+      <div className="px-5 py-3 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
         <div>
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Live Conditions</h3>
           {report?.stationName && (
@@ -73,7 +73,7 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
         </div>
       </div>
 
-      <div className="p-4">
+      <div className="p-4" style={{ overflowY: 'auto', maxHeight: '190px' }}>
         {isLoading ? (
           <WaveLoader compact label="Checking buoy…" />
         ) : !report || report.source === 'none' ? (
