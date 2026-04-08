@@ -21,11 +21,13 @@ export async function GET(req: Request) {
   const search     = searchParams.get('q') ?? ''
   const difficulty = searchParams.get('difficulty') ?? ''
   const country    = searchParams.get('country') ?? ''
+  const ids        = searchParams.get('ids')?.split(',').filter(Boolean) ?? []
   const withConditions = searchParams.get('withConditions') === 'true'
 
   const spots = await prisma.surfSpot.findMany({
     where: {
       AND: [
+        ids.length ? { id: { in: ids } } : {},
         search ? { OR: [
           { name: { contains: search } },
           { region: { contains: search } },
