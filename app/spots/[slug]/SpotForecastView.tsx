@@ -74,7 +74,7 @@ export function SpotForecastView({ spot }: Props) {
   const { data: forecast, isLoading, error } = useQuery<SpotForecast>({
     queryKey: ['forecast', spot.slug],
     queryFn: () => fetch(`/api/forecast/${spot.slug}`).then((r) => r.json()),
-    staleTime: 30 * 60 * 1000,
+    staleTime: 60 * 60 * 1000,
   })
 
   const activeDayData: ForecastDay | undefined =
@@ -85,8 +85,8 @@ export function SpotForecastView({ spot }: Props) {
 
   const bestTimes = useMemo(() => {
     if (!activeDayData?.hours.length) return []
-    return computeBestTimes(activeDayData.hours, spot.facingDirection)
-  }, [activeDayData, spot.facingDirection])
+    return computeBestTimes(activeDayData.hours, spot.facingDirection, forecast?.tides)
+  }, [activeDayData, spot.facingDirection, forecast?.tides])
 
   const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES] ?? DIFFICULTY_STYLES.beginner
 
@@ -249,6 +249,14 @@ export function SpotForecastView({ spot }: Props) {
 
       {/* Body */}
       {isLoading && <WaveLoader label="Fetching forecast…" />}
+      {error && !isLoading && (
+        <div className="mx-auto max-w-7xl px-5 pt-4">
+          <div className="rounded-2xl p-6 text-center" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+            <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>Failed to load forecast data.</p>
+            <p className="text-xs mt-1" style={{ color: '#ef4444' }}>Check your connection and refresh the page to try again.</p>
+          </div>
+        </div>
+      )}
       <div className="mx-auto max-w-7xl px-5 py-4 space-y-4" style={{ display: isLoading ? 'none' : undefined }}>
 
         {/* 7-day strip — full width */}
@@ -295,9 +303,13 @@ export function SpotForecastView({ spot }: Props) {
               </SectionTitle>
               {bestTimes.length > 0 ? (
                 <BestTimePanel slots={bestTimes} tides={forecast.tides} />
-              ) : (
+              ) : isLoading ? (
                 <div className="rounded-2xl p-8 text-center text-sm" style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
                   Loading time recommendations…
+                </div>
+              ) : (
+                <div className="rounded-2xl p-8 text-center text-sm" style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                  No session windows available for this day.
                 </div>
               )}
             </div>
@@ -379,9 +391,12 @@ export function SpotForecastView({ spot }: Props) {
                     .filter((_, i) => i % 3 === 0)
                     .map((h, i) => {
                       const rs = RATING_STYLES[h.rating]
+                      // On mobile hide every-other row (effectively 6h intervals)
+                      const mobileHidden = i % 2 !== 0 ? 'hidden sm:table-row' : ''
                       return (
                         <tr
                           key={h.time}
+                          className={mobileHidden}
                           style={{
                             borderTop: i > 0 ? '1px solid var(--border)' : undefined,
                             background: h.ratingScore >= 60 ? rs.bg : 'white',
@@ -392,9 +407,6 @@ export function SpotForecastView({ spot }: Props) {
                           </td>
                           <td className="px-4 py-3 font-semibold text-xs whitespace-nowrap" style={{ color: 'var(--text)' }}>
                             {metersToFeet(h.waveHeight)}
-                            <span className="ml-1 font-normal hidden sm:inline" style={{ color: 'var(--text-3)', fontSize: '11px' }}>
-                              ft
-                            </span>
                           </td>
                           <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text)' }}>
                             {Math.round(h.swellPeriod)}s
