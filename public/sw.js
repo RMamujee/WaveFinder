@@ -1,4 +1,4 @@
-const CACHE = 'wavefinder-v1'
+const CACHE = 'wavefinder-v2'
 
 // Assets to pre-cache on install
 const PRECACHE = ['/', '/spots', '/regions']

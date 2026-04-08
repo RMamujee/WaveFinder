@@ -1,9 +1,9 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import type { SurfSpot } from '@/types/spot'
-import type { SpotForecast, ConditionRating, ForecastDay } from '@/types/forecast'
+import type { SpotForecast, ConditionRating, ForecastDay, ForecastHour } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { weatherIcon, tempF } from '@/lib/forecast/weather-code'
 import { WaveLoader } from '@/components/layout/WaveLoader'
@@ -119,7 +119,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   }, [])
 
   // Sorted results — show all spots when query is empty, fuzzy-sorted when typing
-  const results = useCallback((): SurfSpot[] => {
+  const results = useMemo((): SurfSpot[] => {
     if (!query.trim()) {
       return spots  // show all spots when no query
     }
@@ -129,7 +129,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
       .sort((a, b) => b.score - a.score)
       .slice(0, 20)
       .map((x) => x.spot)
-  }, [query, spots])()
+  }, [query, spots])
 
   const handleSelect = (spot: SurfSpot) => {
     onChange(spot.slug)
@@ -316,8 +316,6 @@ function StatCell({ label, value, sub }: { label: string; value: string; sub?: s
 }
 
 // ── Peak hour helper ──────────────────────────────────────────────────────────
-
-import type { ForecastHour } from '@/types/forecast'
 
 function getPeakHour(day: ForecastDay): ForecastHour | null {
   if (!day.hours.length) return null
