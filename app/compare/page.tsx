@@ -259,73 +259,105 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   )
 }
 
+// ── Day picker card ───────────────────────────────────────────────────────────
+
 interface MiniDayCardProps {
   day: ForecastDay
+  isSelected: boolean
+  onClick: () => void
 }
 
-function MiniDayCard({ day }: MiniDayCardProps) {
+function MiniDayCard({ day, isSelected, onClick }: MiniDayCardProps) {
   const accent = DAY_RATING_ACCENT[day.dominantRating]
+  const rs = RATING_STYLES[day.dominantRating]
   return (
-    <div
-      className="flex flex-col items-center rounded-xl py-2 px-1.5 min-w-0"
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col items-center rounded-xl py-2 px-1.5 min-w-0 transition-all"
       style={{
-        background: RATING_STYLES[day.dominantRating].bg,
-        border: `1px solid ${RATING_STYLES[day.dominantRating].border}`,
+        background: isSelected ? accent : rs.bg,
+        border: `1.5px solid ${isSelected ? accent : rs.border}`,
+        boxShadow: isSelected ? `0 2px 8px ${accent}44` : 'none',
+        cursor: 'pointer',
       }}
     >
-      <span className="text-xs font-semibold mb-1" style={{ color: 'var(--text-3)' }}>
+      <span className="text-xs font-semibold mb-1" style={{ color: isSelected ? 'white' : 'var(--text-3)' }}>
         {shortDay(day.date)}
       </span>
-      <span className="text-xs font-bold" style={{ color: 'var(--text)' }}>
+      <span className="text-xs font-bold" style={{ color: isSelected ? 'white' : 'var(--text)' }}>
         {metersToFeet(day.maxWaveHeight)}
       </span>
-      <div
-        className="mt-1.5 h-1 w-full rounded-full"
-        style={{ background: 'rgba(0,0,0,0.08)' }}
-      >
-        <div
-          className="h-full rounded-full"
-          style={{
-            width: `${Math.min(100, (day.maxWaveHeight / 4) * 100)}%`,
-            background: accent,
-          }}
-        />
-      </div>
       <span
-        className="mt-1.5 text-xs font-semibold uppercase"
-        style={{ color: accent, fontSize: '9px', letterSpacing: '0.04em' }}
+        className="mt-1 text-xs font-semibold uppercase"
+        style={{ color: isSelected ? 'rgba(255,255,255,0.85)' : accent, fontSize: '9px', letterSpacing: '0.04em' }}
       >
         {day.dominantRating}
       </span>
+    </button>
+  )
+}
+
+// ── Stat cell ─────────────────────────────────────────────────────────────────
+
+function StatCell({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
+      <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
+      <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>{value}</p>
+      {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
     </div>
   )
 }
+
+// ── Peak hour helper ──────────────────────────────────────────────────────────
+
+import type { ForecastHour } from '@/types/forecast'
+
+function getPeakHour(day: ForecastDay): ForecastHour | null {
+  if (!day.hours.length) return null
+  const pool = day.hours.filter((h) => {
+    const hr = new Date(h.time).getHours()
+    return hr >= 7 && hr <= 17
+  })
+  const src = pool.length > 0 ? pool : day.hours
+  return src.reduce((best, h) => h.ratingScore > best.ratingScore ? h : best, src[0])
+}
+
+// ── Spot column ───────────────────────────────────────────────────────────────
 
 interface SpotColumnProps {
   spot: SurfSpot
   forecast: SpotForecast | undefined
   isLoading: boolean
   isError: boolean
+  selectedDay: string | null
+  onDayChange: (date: string) => void
+  isExpanded: boolean
+  onExpandToggle: () => void
 }
 
-function SpotColumn({ spot, forecast, isLoading, isError }: SpotColumnProps) {
-  const current = forecast?.currentCondition
-  const ratingStyle = current ? RATING_STYLES[current.rating] : RATING_STYLES.poor
+function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChange, isExpanded, onExpandToggle }: SpotColumnProps) {
   const diffStyle = DIFFICULTY_STYLES[spot.difficulty] ?? DIFFICULTY_STYLES.intermediate
+
+  // Resolve which day/hour to show
+  const days = forecast?.forecast ?? []
+  const activeDayObj = days.find((d) => d.date === selectedDay) ?? days[0] ?? null
+  const peakHour = activeDayObj ? getPeakHour(activeDayObj) : null
+  const displayHour = peakHour ?? forecast?.currentCondition ?? null
+
+  const ratingStyle = displayHour ? RATING_STYLES[displayHour.rating] : RATING_STYLES.poor
+  const waterTempC = displayHour?.waterTemp ?? forecast?.buoy?.waterTemp ?? null
+  const waterTempF = waterTempC != null ? Math.round((waterTempC * 9) / 5 + 32) : null
 
   return (
     <div
       className="rounded-2xl overflow-hidden flex flex-col"
-      style={{
-        background: 'white',
-        border: '1px solid var(--border)',
-        borderTop: `3px solid var(--ocean-400)`,
-        minWidth: 0,
-      }}
+      style={{ background: 'white', border: '1px solid var(--border)', borderTop: `3px solid var(--ocean-400)`, minWidth: 0 }}
     >
       {/* Spot header */}
-      <div className="px-5 pt-5 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-start justify-between gap-2 mb-1">
+      <div className="px-5 pt-4 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-start justify-between gap-2 mb-0.5">
           <a
             href={`/spots/${spot.slug}`}
             className="font-bold text-base leading-tight hover:underline"
@@ -333,30 +365,56 @@ function SpotColumn({ spot, forecast, isLoading, isError }: SpotColumnProps) {
           >
             {spot.name}
           </a>
-          <span
-            className="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize"
-            style={{ background: diffStyle.bg, color: diffStyle.color }}
-          >
-            {spot.difficulty}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className="rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize"
+              style={{ background: diffStyle.bg, color: diffStyle.color }}
+            >
+              {spot.difficulty}
+            </span>
+            <button
+              type="button"
+              onClick={onExpandToggle}
+              title={isExpanded ? 'Collapse' : 'Expand details'}
+              className="rounded-lg px-2 py-1 text-xs font-semibold transition-colors"
+              style={{
+                background: isExpanded ? 'var(--ocean-600)' : 'var(--sand-100)',
+                color: isExpanded ? 'white' : 'var(--text-3)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {isExpanded ? '▲ Less' : '▼ More'}
+            </button>
+          </div>
         </div>
-        <p className="text-xs" style={{ color: 'var(--text-3)' }}>
-          {spot.region}
-        </p>
+        <p className="text-xs" style={{ color: 'var(--text-3)' }}>{spot.region}</p>
       </div>
 
+      {/* Day selector */}
+      {days.length > 0 && (
+        <div className="px-4 pt-3 pb-2" style={{ borderBottom: '1px solid var(--sand-100)' }}>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>Select day</p>
+          <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
+            {days.map((day) => (
+              <MiniDayCard
+                key={day.date}
+                day={day}
+                isSelected={(selectedDay ?? days[0]?.date) === day.date}
+                onClick={() => onDayChange(day.date)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Content */}
-      <div className="flex-1 px-5 py-4 space-y-5">
+      <div className="flex-1 px-4 py-4 space-y-3">
         {isLoading ? (
           <WaveLoader compact label="Fetching forecast…" />
         ) : isError ? (
-          <p className="text-sm text-center py-6" style={{ color: '#ef4444' }}>
-            Failed to load forecast
-          </p>
-        ) : !current ? (
-          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>
-            No current data available
-          </p>
+          <p className="text-sm text-center py-6" style={{ color: '#ef4444' }}>Failed to load forecast</p>
+        ) : !displayHour ? (
+          <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>No data available</p>
         ) : (
           <>
             {/* Rating badge */}
@@ -366,97 +424,106 @@ function SpotColumn({ spot, forecast, isLoading, isError }: SpotColumnProps) {
             >
               <div>
                 <p className="text-xs font-medium mb-0.5" style={{ color: ratingStyle.text }}>
-                  Conditions
+                  {activeDayObj ? shortDay(activeDayObj.date) : 'Now'}
                 </p>
-                <p
-                  className="font-black uppercase tracking-wide"
-                  style={{ color: ratingStyle.text, fontSize: '18px', fontFamily: 'Playfair Display, serif' }}
-                >
-                  {current.rating === 'epic' ? 'EPIC' : current.rating.charAt(0).toUpperCase() + current.rating.slice(1)}
+                <p className="font-black uppercase tracking-wide" style={{ color: ratingStyle.text, fontSize: '18px', fontFamily: 'Playfair Display, serif' }}>
+                  {displayHour.rating === 'epic' ? 'EPIC' : displayHour.rating.charAt(0).toUpperCase() + displayHour.rating.slice(1)}
                 </p>
               </div>
               <div className="text-right">
                 <p className="text-xs font-medium mb-0.5" style={{ color: ratingStyle.text }}>Score</p>
-                <p className="text-2xl font-black" style={{ color: ratingStyle.accent }}>
-                  {current.ratingScore}
-                </p>
+                <p className="text-2xl font-black" style={{ color: ratingStyle.accent }}>{displayHour.ratingScore}</p>
               </div>
             </div>
 
-            {/* Stats grid */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Wave height */}
-              <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
-                <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Wave Height</p>
-                <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>
-                  {metersToFeet(current.waveHeight)}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                  {current.waveHeight.toFixed(1)}m
-                </p>
-              </div>
-
-              {/* Swell period */}
-              <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
-                <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Swell Period</p>
-                <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>
-                  {Math.round(current.swellPeriod)}s
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                  {degreesToCompass(current.swellDirection)}
-                </p>
-              </div>
-
-              {/* Wind */}
+            {/* Core stats — always visible */}
+            <div className="grid grid-cols-2 gap-2">
+              <StatCell label="Wave Height" value={metersToFeet(displayHour.waveHeight)} sub={`${displayHour.waveHeight.toFixed(1)}m`} />
+              <StatCell label="Swell Period" value={`${Math.round(displayHour.swellPeriod)}s`} sub={degreesToCompass(displayHour.swellDirection)} />
               <div className="col-span-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
                 <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Wind</p>
                 <div className="flex items-baseline gap-2">
-                  <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>
-                    {Math.round(current.wind.speed)} km/h
-                  </p>
-                  <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
-                    {current.wind.directionLabel}
-                  </p>
+                  <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>{Math.round(displayHour.wind.speed)} km/h</p>
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{displayHour.wind.directionLabel}</p>
                 </div>
               </div>
-
-              {/* Water temperature */}
               <div className="col-span-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
                 <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Water Temp</p>
-                {(() => {
-                  const tempC = current.waterTemp ?? forecast?.buoy?.waterTemp ?? null
-                  if (tempC == null) {
-                    return <p className="font-bold text-lg" style={{ color: 'var(--text-3)', lineHeight: 1 }}>—</p>
-                  }
-                  const tempF = (tempC * 9) / 5 + 32
-                  return (
-                    <div className="flex items-baseline gap-2">
-                      <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>
-                        {Math.round(tempF)}°F
-                      </p>
-                      <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>
-                        {Math.round(tempC)}°C
-                      </p>
-                    </div>
-                  )
-                })()}
+                {waterTempF != null ? (
+                  <div className="flex items-baseline gap-2">
+                    <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>{waterTempF}°F</p>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{Math.round(waterTempC!)}°C</p>
+                  </div>
+                ) : (
+                  <p className="font-bold text-lg" style={{ color: 'var(--text-3)', lineHeight: 1 }}>—</p>
+                )}
               </div>
             </div>
 
-            {/* 7-day mini strip */}
-            {forecast?.forecast && forecast.forecast.length > 0 && (
-              <div>
-                <p
-                  className="text-xs font-semibold uppercase tracking-wide mb-2"
-                  style={{ color: 'var(--text-3)' }}
-                >
-                  7-Day Outlook
-                </p>
-                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${forecast.forecast.length}, minmax(0, 1fr))` }}>
-                  {forecast.forecast.map((day) => (
-                    <MiniDayCard key={day.date} day={day} />
-                  ))}
+            {/* Expanded details */}
+            {isExpanded && (
+              <div className="space-y-2 pt-1" style={{ borderTop: '1px dashed var(--border)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wide pt-1" style={{ color: 'var(--text-3)' }}>Full details</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <StatCell label="Swell Height" value={`${Math.round(displayHour.swellHeight * 3.281)}ft`} sub={`${displayHour.swellHeight.toFixed(1)}m`} />
+                  <StatCell label="Wave Power" value={`${Math.round(displayHour.wavePower)} kW/m`} />
+                  {displayHour.wind.gust > 0 && (
+                    <StatCell label="Wind Gust" value={`${Math.round(displayHour.wind.gust)} km/h`} />
+                  )}
+                  {displayHour.uvIndex > 0 && (
+                    <StatCell label="UV Index" value={displayHour.uvIndex.toFixed(1)} />
+                  )}
+                  {displayHour.airTempC != null && (
+                    <StatCell label="Air Temp" value={`${Math.round(displayHour.airTempC * 9/5 + 32)}°F`} sub={`${Math.round(displayHour.airTempC)}°C`} />
+                  )}
+                  {displayHour.precipProb != null && (
+                    <StatCell label="Rain Chance" value={`${displayHour.precipProb}%`} />
+                  )}
                 </div>
+
+                {/* Hourly table for selected day */}
+                {activeDayObj && activeDayObj.hours.length > 0 && (
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide" style={{ background: 'var(--sand-100)', color: 'var(--text-3)' }}>
+                      Hourly — {shortDay(activeDayObj.date)}
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
+                            {['Time', 'Waves', 'Period', 'Wind', 'Rating'].map((h) => (
+                              <th key={h} className="px-2 py-1.5 text-left font-semibold" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeDayObj.hours
+                            .filter((_, i) => i % 2 === 0)  // every 2 hours
+                            .slice(0, 8)
+                            .map((h) => {
+                              const rs = RATING_STYLES[h.rating]
+                              const hr = new Date(h.time).getHours()
+                              const ampm = hr < 12 ? 'am' : 'pm'
+                              const disp = `${hr === 0 ? 12 : hr > 12 ? hr - 12 : hr}${ampm}`
+                              return (
+                                <tr key={h.time} style={{ borderBottom: '1px solid var(--sand-100)' }}>
+                                  <td className="px-2 py-2 font-medium" style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{disp}</td>
+                                  <td className="px-2 py-2 font-bold" style={{ color: 'var(--text)' }}>{metersToFeet(h.waveHeight)}</td>
+                                  <td className="px-2 py-2" style={{ color: 'var(--text-2)' }}>{Math.round(h.swellPeriod)}s</td>
+                                  <td className="px-2 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{Math.round(h.wind.speed)} {h.wind.directionLabel}</td>
+                                  <td className="px-2 py-2">
+                                    <span className="rounded-full px-2 py-0.5 text-xs font-semibold capitalize" style={{ background: rs.bg, color: rs.text, border: `1px solid ${rs.border}` }}>
+                                      {h.rating}
+                                    </span>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -479,11 +546,31 @@ function useSpotForecast(slug: string) {
 
 // ── Connected column wrapper ──────────────────────────────────────────────────
 
-function ConnectedSpotColumn({ slug, spots }: { slug: string; spots: SurfSpot[] }) {
+interface ConnectedProps {
+  slug: string
+  spots: SurfSpot[]
+  selectedDay: string | null
+  onDayChange: (date: string) => void
+  isExpanded: boolean
+  onExpandToggle: () => void
+}
+
+function ConnectedSpotColumn({ slug, spots, selectedDay, onDayChange, isExpanded, onExpandToggle }: ConnectedProps) {
   const { data: forecast, isLoading, isError } = useSpotForecast(slug)
   const spot = spots.find((s) => s.slug === slug)
   if (!spot) return null
-  return <SpotColumn spot={spot} forecast={forecast} isLoading={isLoading} isError={isError} />
+  return (
+    <SpotColumn
+      spot={spot}
+      forecast={forecast}
+      isLoading={isLoading}
+      isError={isError}
+      selectedDay={selectedDay}
+      onDayChange={onDayChange}
+      isExpanded={isExpanded}
+      onExpandToggle={onExpandToggle}
+    />
+  )
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -493,6 +580,8 @@ const STORAGE_KEY = 'wavefinder-compare-slugs'
 
 export default function ComparePage() {
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>(['', '', ''])
+  const [selectedDays, setSelectedDays] = useState<Record<string, string>>({})
+  const [expandedSlugs, setExpandedSlugs] = useState<Set<string>>(new Set())
 
   // Restore from localStorage after hydration (useState initializer runs on server
   // where window is undefined, so we must use useEffect to read client storage)
@@ -613,7 +702,21 @@ export default function ComparePage() {
             }`}
           >
             {activeSlugs.map((slug) => (
-              <ConnectedSpotColumn key={slug} slug={slug} spots={spots} />
+              <ConnectedSpotColumn
+                key={slug}
+                slug={slug}
+                spots={spots}
+                selectedDay={selectedDays[slug] ?? null}
+                onDayChange={(date) => setSelectedDays((prev) => ({ ...prev, [slug]: date }))}
+                isExpanded={expandedSlugs.has(slug)}
+                onExpandToggle={() =>
+                  setExpandedSlugs((prev) => {
+                    const next = new Set(prev)
+                    next.has(slug) ? next.delete(slug) : next.add(slug)
+                    return next
+                  })
+                }
+              />
             ))}
           </div>
         )}

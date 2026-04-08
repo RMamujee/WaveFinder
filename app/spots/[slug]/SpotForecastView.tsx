@@ -484,24 +484,27 @@ export function SpotForecastView({ spot }: Props) {
           })()}
         </div>
 
-        {/* Row 7: Live Buoy Data | Community Reports — top-aligned, Community Reports capped to Buoy height */}
+        {/* Row 7: Community Reports (left, full height) | Buoy Data + Season Calendar (right, stacked) */}
         <div className="grid gap-4 md:grid-cols-2 items-start">
-          {forecast?.buoy && spot.noaaBuoyId && (
-            <div>
-              <SectionTitle>Live Buoy Data</SectionTitle>
-              <BuoyReadings buoy={forecast.buoy} buoyId={spot.noaaBuoyId} />
-            </div>
-          )}
+          {/* Left — Community Reports at natural full height */}
           <div>
             <SectionTitle>Community Reports</SectionTitle>
             <SurfReports spotSlug={spot.slug} />
           </div>
-        </div>
 
-        {/* Season Calendar */}
-        <div>
-          <SectionTitle>Best Season to Surf</SectionTitle>
-          <SeasonCalendar region={spot.region} difficulty={spot.difficulty} />
+          {/* Right — Buoy Data (compact) then Season Calendar directly below */}
+          <div className="flex flex-col gap-4">
+            {forecast?.buoy && spot.noaaBuoyId && (
+              <div>
+                <SectionTitle>Live Buoy Data</SectionTitle>
+                <BuoyReadings buoy={forecast.buoy} buoyId={spot.noaaBuoyId} />
+              </div>
+            )}
+            <div>
+              <SectionTitle>Best Season to Surf</SectionTitle>
+              <SeasonCalendar region={spot.region} difficulty={spot.difficulty} />
+            </div>
+          </div>
         </div>
 
         {/* Water Quality — only renders when USGS/EPA data exists within 20 miles */}
