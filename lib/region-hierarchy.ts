@@ -11,7 +11,7 @@ export interface RegionHierarchy {
 
 export const REGION_HIERARCHY: RegionHierarchy = {
   'North America': {
-    'United States': {
+    'USA': {
       'California': [
         'San Diego',
         'Orange County',

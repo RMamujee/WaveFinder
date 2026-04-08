@@ -42,7 +42,7 @@ const REGION_MAP_CENTERS: Record<string, { lat: number; lng: number; zoom: numbe
 }
 
 const COUNTRY_MAP_CENTERS: Record<string, { lat: number; lng: number; zoom: number }> = {
-  'United States':  { lat: 37.0,  lng: -119.5, zoom: 5 },
+  'USA':            { lat: 37.0,  lng: -119.5, zoom: 5 },
   'Australia':      { lat: -27.0, lng: 133.0,  zoom: 4 },
   'Indonesia':      { lat: -4.0,  lng: 117.0,  zoom: 5 },
   'Portugal':       { lat: 39.5,  lng: -8.0,   zoom: 6 },
