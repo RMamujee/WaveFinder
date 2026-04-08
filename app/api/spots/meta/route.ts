@@ -6,7 +6,7 @@ export const revalidate = 3600
 // Returns distinct countries and (optionally) regions for a given country
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const country = searchParams.get('country')
+  const country = (searchParams.get('country') ?? '').slice(0, 100) || null
 
   if (country) {
     // Return distinct region values for this country
