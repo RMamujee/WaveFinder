@@ -29,8 +29,8 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
       }
 
       const map = L.map(mapRef.current, {
-        center: [lat, lng],
-        zoom,
+        center: [centerLat, centerLng],
+        zoom: zoom + 1,   // one level tighter now that center is on the beach
         zoomControl: true,
         scrollWheelZoom: false,
         attributionControl: true,
@@ -58,14 +58,23 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
         { maxZoom: 19, maxNativeZoom: 18, opacity: 0.75, crossOrigin: true }
       ).addTo(map)
 
-      // ── Nudge marker ~40 m toward shore (opposite of facingDirection) ──────
-      // facingDirection = direction the beach faces (toward ocean).
-      // Shoreline is in the opposite direction from the break.
-      const shoreRad = ((facingDirection + 180) % 360) * (Math.PI / 180)
+      // facingDirection = the direction the beach faces toward the ocean.
+      // Shore (land) is in the OPPOSITE direction: (facingDirection + 180) % 360.
       const metersPerDeg = 111_320
-      const nudgeM = 40
-      const shLat = lat + (nudgeM / metersPerDeg) * Math.cos(shoreRad)
-      const shLng = lng + (nudgeM / (metersPerDeg * Math.cos(lat * Math.PI / 180))) * Math.sin(shoreRad)
+      const shoreRad = ((facingDirection + 180) % 360) * (Math.PI / 180)
+      const cosLat   = Math.cos(lat * Math.PI / 180)
+
+      // Nudge the MAP CENTER 150 m toward shore so the beach/waterline is
+      // always centered rather than the offshore break.
+      const centerNudgeM = 150
+      const centerLat = lat + (centerNudgeM / metersPerDeg) * Math.cos(shoreRad)
+      const centerLng = lng + (centerNudgeM / (metersPerDeg * cosLat)) * Math.sin(shoreRad)
+
+      // Nudge the MARKER 30 m toward shore — keeps it at the break, just
+      // pulled slightly off the open ocean.
+      const markerNudgeM = 30
+      const shLat = lat + (markerNudgeM / metersPerDeg) * Math.cos(shoreRad)
+      const shLng = lng + (markerNudgeM / (metersPerDeg * cosLat)) * Math.sin(shoreRad)
 
       // ── Custom surf-pin marker ─────────────────────────────────────────────
       const icon = L.divIcon({

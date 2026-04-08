@@ -251,12 +251,23 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
       },
     })
 
+    // Metres-per-degree constant for coordinate nudging
+    const MTRS_PER_DEG = 111_320
+
     for (const spot of allSpots) {
       const rating = spot.currentRating ?? 'unknown'
       const colors = RATING_COLORS[rating]
       const h = spot.currentWaveHeight
       const label = h == null ? '—' : h === 0 ? 'Flat' : `${Math.round(h * 3.281)}ft`
       const fontSize = label.length > 4 ? '7px' : label.length > 3 ? '8px' : '9px'
+
+      // Nudge the pin 80 m toward shore (opposite of facingDirection) so it sits
+      // on the beach rather than at the offshore break.
+      const shoreRad  = ((spot.facingDirection + 180) % 360) * (Math.PI / 180)
+      const cosLat    = Math.cos(spot.lat * Math.PI / 180)
+      const nudgeM    = 80
+      const pinLat    = spot.lat + (nudgeM / MTRS_PER_DEG) * Math.cos(shoreRad)
+      const pinLng    = spot.lng + (nudgeM / (MTRS_PER_DEG * cosLat)) * Math.sin(shoreRad)
 
       const icon = L.divIcon({
         className: '',
@@ -273,9 +284,9 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
         popupAnchor: [0, -48],
       })
 
-      // Place markers at canonical position + ±360° world copies so they appear on all map copies
+      // Place markers at shore-nudged position + ±360° world copies
       for (const lngOffset of [0, 360, -360]) {
-        const marker = L.marker([spot.lat, spot.lng + lngOffset], { icon })
+        const marker = L.marker([pinLat, pinLng + lngOffset], { icon })
         marker.bindTooltip(tooltipHtml(spot), {
           permanent: false, sticky: false, direction: 'top',
           offset: [0, -48], opacity: 1, className: 'spot-hover-tooltip',
