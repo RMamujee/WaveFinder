@@ -135,11 +135,12 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
     setOpen(false)
   }
 
-  const handleClear = (e: React.MouseEvent) => {
+  const handleClear = (e: React.SyntheticEvent) => {
     e.stopPropagation()
+    e.preventDefault()
     onChange('')
     setQuery('')
-    inputRef.current?.focus()
+    setOpen(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -192,7 +193,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
         {/* Clear button (when selected) or chevron (when empty) */}
         {isSelected ? (
           <button
-            onClick={handleClear}
+            onPointerDown={handleClear}
             className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full w-4 h-4 transition-colors hover:bg-[var(--sand-200)]"
             style={{ color: 'var(--text-3)' }}
           >
@@ -235,8 +236,10 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
                 <button
                   key={spot.slug}
                   type="button"
-                  onPointerDown={(e) => e.preventDefault()}
-                  onClick={() => handleSelect(spot)}
+                  onPointerDown={(e) => {
+                    e.preventDefault() // prevent input blur
+                    handleSelect(spot) // select directly — Android suppresses click after preventDefault
+                  }}
                   onMouseEnter={() => setHighlighted(i)}
                   className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors"
                   style={{
