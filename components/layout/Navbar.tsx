@@ -12,13 +12,12 @@ export function Navbar() {
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   const navLinks = [
-    { href: '/spots',       label: 'Browse Spots' },
-    { href: '/best-spots',  label: 'Best Spots' },
-    { href: '/timeline',    label: 'Timeline' },
-    { href: '/regions',     label: 'Regions' },
-    { href: '/compare',     label: 'Compare' },
-    { href: '/sessions',    label: 'My Log' },
-    { href: '/dashboard',   label: 'My Spots' },
+    { href: '/spots',      label: 'Browse Spots' },
+    { href: '/timeline',   label: 'Timeline' },
+    { href: '/regions',    label: 'Regions' },
+    { href: '/compare',    label: 'Compare' },
+    { href: '/sessions',   label: 'My Log' },
+    { href: '/dashboard',  label: 'My Spots' },
   ]
 
   return (
