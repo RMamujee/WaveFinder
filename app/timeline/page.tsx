@@ -7,21 +7,10 @@ import Link from 'next/link'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const REGIONS = [
-  'San Diego',
-  'Orange County',
-  'Los Angeles',
-  'Ventura',
-  'Santa Barbara',
-  'Central Coast',
-  'Monterey',
-  'NorCal',
-  'North Shore',
-  'South Shore',
-  'Gold Coast',
-  'Sydney Northern Beaches',
-  'Uluwatu',
-  'Hossegor',
-  "Jeffrey's Bay",
+  'San Diego', 'Orange County', 'Los Angeles', 'Ventura',
+  'Santa Barbara', 'Central Coast', 'Monterey', 'NorCal',
+  'North Shore', 'South Shore', 'Gold Coast', 'Sydney Northern Beaches',
+  'Uluwatu', 'Hossegor', "Jeffrey's Bay",
 ]
 
 const RATING_PILL: Record<string, { bg: string; text: string; track: string }> = {
@@ -33,188 +22,168 @@ const RATING_PILL: Record<string, { bg: string; text: string; track: string }> =
   flat:  { bg: '#e5e7eb', text: '#374151', track: '#f3f4f6' },
 }
 
+// Static skeleton heights — same on server and client (no hydration risk)
+const SKELETON = [28,38,48,42,32,28,52,62,68,72,66,58,54,64,72,68,58,50,44,40,36,30,26,22]
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getLocalDateStr(offset = 0): string {
   const d = new Date()
   d.setDate(d.getDate() + offset)
-  return (
-    d.getFullYear() +
-    '-' + String(d.getMonth() + 1).padStart(2, '0') +
-    '-' + String(d.getDate()).padStart(2, '0')
-  )
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0')
 }
 
-function hourFromTimeStr(time: string): number {
+function hourFromTime(time: string): number {
   return parseInt(time.slice(11, 13), 10)
 }
 
-function dayLabel(dateStr: string, idx: number): string {
-  if (idx === 0) return 'Today'
-  if (idx === 1) return 'Tomorrow'
+function dayLabel(dateStr: string, i: number): string {
+  if (i === 0) return 'Today'
+  if (i === 1) return 'Tomorrow'
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
   })
 }
 
-function hourLabel(h: number): string {
+function hrLabel(h: number): string {
   if (h === 0)  return '12 AM'
   if (h < 12)   return `${h} AM`
   if (h === 12) return '12 PM'
   return `${h - 12} PM`
 }
 
-function scoreToColor(score: number): string {
-  if (score >= 75) return '#7c3aed'
-  if (score >= 55) return '#1b7fcb'
-  if (score >= 35) return '#059669'
-  if (score >= 20) return '#d97706'
-  return '#9ca3af'
+function scoreColor(s: number) {
+  if (s >= 75) return '#7c3aed'
+  if (s >= 55) return '#1b7fcb'
+  if (s >= 35) return '#059669'
+  if (s >= 20) return '#d97706'
+  return '#94a3b8'
 }
 
-function scoreToLabel(score: number): string {
-  if (score >= 75) return 'Epic'
-  if (score >= 55) return 'Great'
-  if (score >= 35) return 'Good'
-  if (score >= 20) return 'Fair'
+function scoreLabel(s: number) {
+  if (s >= 75) return 'Epic'
+  if (s >= 55) return 'Great'
+  if (s >= 35) return 'Good'
+  if (s >= 20) return 'Fair'
   return 'Poor'
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SpotHour {
-  time: string
-  rating: string
-  ratingScore: number
-  waveHeight: number
-  windSpeed: number
-  windDirectionLabel: string
+  time: string; rating: string; ratingScore: number
+  waveHeight: number; windSpeed: number; windDirectionLabel: string
 }
-
-interface SpotEntry {
-  id: string
-  name: string
-  slug: string
-  facingDirection: number
-  hours: SpotHour[]
+interface Spot {
+  id: string; name: string; slug: string
+  facingDirection: number; hours: SpotHour[]
 }
-
 interface SwellHour {
-  time: string
-  waveHeight: number
-  swellHeight: number
-  swellPeriod: number
-  swellDirectionLabel: string
-  windSpeed: number
-  windDirectionLabel: string
+  time: string; waveHeight: number; swellPeriod: number
+  swellDirectionLabel: string; windSpeed: number; windDirectionLabel: string
 }
 
-// ── Hourly bar chart ──────────────────────────────────────────────────────────
+// ── SVG bar chart ─────────────────────────────────────────────────────────────
 
-// Stable skeleton heights so SSR and client match (no hydration mismatch)
-const SKELETON_HEIGHTS = [30,45,55,50,40,35,60,70,75,80,72,65,60,70,80,75,65,55,50,45,40,35,30,25]
+const SVG_W = 480   // viewBox width  (24 bars × 20)
+const SVG_H = 88    // viewBox height
+const BAR_W = 18    // bar width (1px gap between bars)
 
-interface HourlyChartProps {
-  scores: number[]        // 24 values, one per hour
+function BarChart({ scores, selectedHour, nowHour, isLoading, onSelect }: {
+  scores: number[]
   selectedHour: number
-  nowHour: number | null  // null when not today
-  onSelect: (h: number) => void
+  nowHour: number | null
   isLoading: boolean
-}
-
-function HourlyChart({ scores, selectedHour, nowHour, onSelect, isLoading }: HourlyChartProps) {
-  const maxScore = isLoading ? 100 : Math.max(...scores, 1)
+  onSelect: (h: number) => void
+}) {
+  const maxScore = Math.max(...scores, 1)
 
   return (
-    <div className="w-full select-none">
-      {/* Bars */}
-      <div
-        className="flex items-end gap-px rounded-t-xl overflow-hidden"
-        style={{ height: '88px', background: 'var(--sand-50)' }}
-      >
-        {Array.from({ length: 24 }, (_, h) => {
-          const isSelected = h === selectedHour
-          const isNow      = h === nowHour
+    <svg
+      viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+      width="100%"
+      height={SVG_H}
+      style={{ display: 'block', overflow: 'visible' }}
+    >
+      {Array.from({ length: 24 }, (_, h) => {
+        const score  = scores[h] ?? 0
+        const barH   = isLoading
+          ? (SKELETON[h] / 100) * (SVG_H - 4)
+          : Math.max(4, (score / maxScore) * (SVG_H - 4))
+        const x      = h * 20
+        const y      = SVG_H - barH
+        const fill   = isLoading ? '#e2e8f0' : scoreColor(score)
+        const active = h === selectedHour
 
-          // Use real score when loaded, skeleton height when loading
-          const heightPct = isLoading
-            ? SKELETON_HEIGHTS[h]
-            : Math.max(6, (scores[h] / maxScore) * 100)
-
-          const color = isLoading ? '#e2e8f0' : scoreToColor(scores[h])
-
-          return (
-            <button
-              key={h}
-              type="button"
-              onClick={() => onSelect(h)}
-              className="flex-1 relative focus:outline-none group"
-              style={{ height: '100%', display: 'flex', alignItems: 'flex-end' }}
-              title={isLoading ? hourLabel(h) : `${hourLabel(h)}: ${scoreToLabel(scores[h])} (${Math.round(scores[h])}/100)`}
-            >
-              {/* Bar fill */}
-              <div
-                className="w-full rounded-t-sm transition-all duration-300"
-                style={{
-                  height: `${heightPct}%`,
-                  background: isSelected
-                    ? color
-                    : isLoading
-                      ? `${color}`
-                      : `${color}99`,
-                  animation: isLoading ? 'pulse 1.5s ease-in-out infinite' : 'none',
-                  animationDelay: isLoading ? `${h * 40}ms` : '0ms',
-                  boxShadow: isSelected && !isLoading ? `0 -3px 10px ${color}55` : 'none',
-                  outline: isSelected ? `2px solid ${color}` : 'none',
-                  outlineOffset: '1px',
-                }}
-              />
-              {/* Now indicator */}
-              {isNow && (
-                <div
-                  className="absolute top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full"
-                  style={{ background: '#f97316' }}
-                />
-              )}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* X-axis */}
-      <div className="relative mt-2" style={{ height: '16px' }}>
-        {[0, 6, 12, 18, 23].map((h) => (
-          <span
+        return (
+          <g
             key={h}
-            className="absolute text-xs -translate-x-1/2"
-            style={{
-              left: `${(h / 23) * 100}%`,
-              color: 'var(--text-3)',
-              fontSize: '10px',
-              whiteSpace: 'nowrap',
-            }}
+            onClick={() => onSelect(h)}
+            style={{ cursor: 'pointer' }}
           >
-            {hourLabel(h)}
-          </span>
-        ))}
-      </div>
+            {/* Invisible full-height hit area */}
+            <rect x={x} y={0} width={20} height={SVG_H} fill="transparent" />
+            {/* Visible bar */}
+            <rect
+              x={x + 1} y={y} width={BAR_W} height={barH} rx={2}
+              fill={active ? fill : fill + 'aa'}
+            />
+            {/* Selection indicator — white outline */}
+            {active && (
+              <rect
+                x={x} y={y - 2} width={20} height={barH + 2} rx={3}
+                fill="none" stroke={fill} strokeWidth={1.5}
+              />
+            )}
+            {/* Now dot */}
+            {h === nowHour && (
+              <circle cx={x + 10} cy={3} r={2.5} fill="#f97316" />
+            )}
+          </g>
+        )
+      })}
+
+      {/* Hour axis labels */}
+      {[0, 6, 12, 18, 23].map((h) => (
+        <text
+          key={h}
+          x={h * 20 + 10}
+          y={SVG_H + 14}
+          textAnchor="middle"
+          fontSize={9}
+          fill="#94a3b8"
+        >
+          {hrLabel(h)}
+        </text>
+      ))}
+
+      {/* Pulsing overlay when loading */}
+      {isLoading && (
+        <rect
+          x={0} y={0} width={SVG_W} height={SVG_H}
+          fill="white" opacity={0.5}
+          style={{ animation: 'tlPulse 1.4s ease-in-out infinite' }}
+        />
+      )}
 
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.5; }
+        @keyframes tlPulse {
+          0%,100% { opacity: 0.5; }
+          50%      { opacity: 0.1; }
         }
       `}</style>
-    </div>
+    </svg>
   )
 }
 
 // ── Spot row ──────────────────────────────────────────────────────────────────
 
-function SpotRow({ spot, rank, hour }: { spot: SpotEntry; rank: number; hour: number }) {
-  const hourData = spot.hours.find((h) => hourFromTimeStr(h.time) === hour) ?? spot.hours[0]
-  if (!hourData) return null
-  const rc = RATING_PILL[hourData.rating] ?? RATING_PILL.poor
+function SpotRow({ spot, rank, hour }: { spot: Spot; rank: number; hour: number }) {
+  const hd = spot.hours.find((h) => hourFromTime(h.time) === hour) ?? spot.hours[0]
+  if (!hd) return null
+  const rc = RATING_PILL[hd.rating] ?? RATING_PILL.poor
 
   return (
     <Link
@@ -224,10 +193,7 @@ function SpotRow({ spot, rank, hour }: { spot: SpotEntry; rank: number; hour: nu
     >
       <div
         className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold"
-        style={{
-          background: rank <= 3 ? 'var(--ocean-600)' : 'var(--sand-100)',
-          color:      rank <= 3 ? 'white' : 'var(--text-3)',
-        }}
+        style={{ background: rank <= 3 ? 'var(--ocean-600)' : 'var(--sand-100)', color: rank <= 3 ? 'white' : 'var(--text-3)' }}
       >
         {rank}
       </div>
@@ -237,29 +203,22 @@ function SpotRow({ spot, rank, hour }: { spot: SpotEntry; rank: number; hour: nu
           {spot.name}
         </div>
         <div className="text-xs mt-0.5 flex gap-2" style={{ color: 'var(--text-3)' }}>
-          <span>{hourData.waveHeight.toFixed(1)} m waves</span>
+          <span>{hd.waveHeight.toFixed(1)} m</span>
           <span>·</span>
-          <span>{hourData.windDirectionLabel} {Math.round(hourData.windSpeed)} km/h</span>
+          <span>{hd.windDirectionLabel} {Math.round(hd.windSpeed)} km/h wind</span>
         </div>
       </div>
 
       <div className="hidden sm:flex flex-col gap-1 w-28">
         <div className="h-1.5 rounded-full overflow-hidden" style={{ background: rc.track }}>
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${Math.min(100, hourData.ratingScore)}%`, background: rc.bg }}
-          />
+          <div className="h-full rounded-full" style={{ width: `${Math.min(100, hd.ratingScore)}%`, background: rc.bg }} />
         </div>
-        <div className="text-xs" style={{ color: 'var(--text-3)' }}>
-          {Math.round(hourData.ratingScore)}/100
-        </div>
+        <div className="text-xs" style={{ color: 'var(--text-3)' }}>{Math.round(hd.ratingScore)}/100</div>
       </div>
 
-      <div
-        className="flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold"
-        style={{ background: rc.bg, color: rc.text }}
-      >
-        {scoreToLabel(hourData.ratingScore)}
+      <div className="flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold"
+        style={{ background: rc.bg, color: rc.text }}>
+        {scoreLabel(hd.ratingScore)}
       </div>
 
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -275,74 +234,58 @@ function SpotRow({ spot, rank, hour }: { spot: SpotEntry; rank: number; hour: nu
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TimelinePage() {
-  // ⚠️ Use stable initial values to avoid SSR/client hydration mismatch.
-  // useEffect updates them to real values after mount.
-  const [hour,    setHour]    = useState(10)          // updated to real current hour post-mount
-  const [nowHour, setNowHour] = useState<number|null>(null)  // null until client mounts
-
+  // Stable initial values to avoid SSR/client hydration mismatch.
+  // useEffect sets real current hour after mount.
+  const [hour,    setHour]    = useState(10)
+  const [nowHour, setNowHour] = useState<number | null>(null)
   const [region,  setRegion]  = useState('San Diego')
   const [dayIdx,  setDayIdx]  = useState(0)
 
-  // Set real current hour after hydration
   useEffect(() => {
     const h = new Date().getHours()
     setHour(h)
     setNowHour(h)
   }, [])
 
-  // Clear "now" indicator when switching to a future day
   useEffect(() => {
-    if (dayIdx === 0) {
-      setNowHour(new Date().getHours())
-    } else {
-      setNowHour(null)
-    }
+    setNowHour(dayIdx === 0 ? new Date().getHours() : null)
   }, [dayIdx])
 
-  const dates = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)),
-    []
-  )
+  const dates = useMemo(() => Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)), [])
   const selectedDate = dates[dayIdx]
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['timeline', region, selectedDate],
     queryFn: () =>
       fetch(`/api/best-spots?region=${encodeURIComponent(region)}&date=${selectedDate}`)
-        .then((r) => {
-          if (!r.ok) throw new Error(`API error ${r.status}`)
-          return r.json()
-        }),
+        .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json() }),
     staleTime: 30 * 60 * 1000,
     retry: 1,
   })
 
-  const spots: SpotEntry[] = data?.spots        ?? []
+  const spots: Spot[]      = data?.spots        ?? []
   const swell: SwellHour[] = data?.regionalSwell ?? []
 
-  // Average score per hour across all spots
-  const hourlyScores: number[] = useMemo(() => {
-    if (!spots.length) return Array(24).fill(0)
+  const hourlyScores = useMemo((): number[] => {
+    if (!spots.length) return Array(24).fill(0) as number[]
     return Array.from({ length: 24 }, (_, h) => {
       const vals = spots.map(
-        (s) => s.hours.find((e) => hourFromTimeStr(e.time) === h)?.ratingScore ?? 0
+        (s) => s.hours.find((e) => hourFromTime(e.time) === h)?.ratingScore ?? 0
       )
       return vals.reduce((a, b) => a + b, 0) / vals.length
     })
   }, [spots])
 
-  const swellNow   = swell.find((s) => hourFromTimeStr(s.time) === hour) ?? swell[0]
+  const swellNow   = swell.find((s) => hourFromTime(s.time) === hour) ?? swell[0]
   const avgScore   = hourlyScores[hour] ?? 0
-  const bestHour   = hourlyScores.indexOf(Math.max(...hourlyScores, 0))
+  const bestHour   = hourlyScores.reduce((best, v, i) => v > hourlyScores[best] ? i : best, 0)
 
-  const rankedSpots = useMemo(() => {
-    return [...spots]
-      .sort((a, b) => {
-        const aScore = a.hours.find((h) => hourFromTimeStr(h.time) === hour)?.ratingScore ?? 0
-        const bScore = b.hours.find((h) => hourFromTimeStr(h.time) === hour)?.ratingScore ?? 0
-        return bScore - aScore
-      })
-  }, [spots, hour])
+  const rankedSpots = useMemo(() =>
+    [...spots].sort((a, b) => {
+      const aS = a.hours.find((h) => hourFromTime(h.time) === hour)?.ratingScore ?? 0
+      const bS = b.hours.find((h) => hourFromTime(h.time) === hour)?.ratingScore ?? 0
+      return bS - aS
+    }), [spots, hour])
 
   return (
     <div style={{ background: 'var(--sand-50)', minHeight: '100vh' }}>
@@ -357,7 +300,7 @@ export default function TimelinePage() {
             Timeline
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-2)' }}>
-            Click any bar to explore conditions hour-by-hour. Bar height and color = real surf quality.
+            Click a bar or drag the slider to explore conditions hour-by-hour.
           </p>
         </div>
       </div>
@@ -392,18 +335,15 @@ export default function TimelinePage() {
               Day
             </label>
             <div className="flex gap-2 flex-wrap">
-              {dates.map((dateStr, i) => (
-                <button
-                  key={dateStr}
-                  onClick={() => setDayIdx(i)}
+              {dates.map((ds, i) => (
+                <button key={ds} onClick={() => setDayIdx(i)}
                   className="rounded-xl px-3.5 py-2 text-xs font-semibold transition-all"
                   style={{
                     background: dayIdx === i ? 'var(--ocean-600)' : 'white',
                     color:      dayIdx === i ? 'white' : 'var(--text-2)',
                     border:     `1px solid ${dayIdx === i ? 'var(--ocean-600)' : 'var(--border)'}`,
-                  }}
-                >
-                  {dayLabel(dateStr, i)}
+                  }}>
+                  {dayLabel(ds, i)}
                 </button>
               ))}
             </div>
@@ -411,35 +351,31 @@ export default function TimelinePage() {
         </div>
 
         {/* Chart card */}
-        <div className="rounded-2xl p-6 space-y-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+        <div className="rounded-2xl p-6 space-y-4" style={{ background: 'white', border: '1px solid var(--border)' }}>
 
-          {/* Selected time summary */}
+          {/* Time label + swell info */}
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-baseline gap-3">
                 <span className="text-3xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ocean-700)' }}>
-                  {hourLabel(hour)}
+                  {hrLabel(hour)}
                 </span>
                 {!isLoading && !isError && avgScore > 0 && (
-                  <span
-                    className="rounded-lg px-2.5 py-1 text-xs font-bold"
-                    style={{ background: scoreToColor(avgScore), color: 'white' }}
-                  >
-                    {scoreToLabel(avgScore)}
+                  <span className="rounded-lg px-2.5 py-1 text-xs font-bold"
+                    style={{ background: scoreColor(avgScore), color: 'white' }}>
+                    {scoreLabel(avgScore)}
                   </span>
                 )}
               </div>
               <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
-                  weekday: 'long', month: 'long', day: 'numeric',
-                })}
+                {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                 {!isLoading && !isError && spots.length > 0 && (
-                  <> · Best: <span style={{ color: 'var(--ocean-600)', fontWeight: 600 }}>{hourLabel(bestHour)}</span></>
+                  <> · Peak: <span style={{ color: 'var(--ocean-600)', fontWeight: 600 }}>{hrLabel(bestHour)}</span></>
                 )}
               </p>
             </div>
 
-            {!isLoading && swellNow && (
+            {!isLoading && !isError && swellNow && (
               <div className="flex gap-5 flex-wrap">
                 {[
                   { label: 'Waves',  val: `${swellNow.waveHeight.toFixed(1)} m` },
@@ -456,18 +392,32 @@ export default function TimelinePage() {
             )}
           </div>
 
-          {/* The bar chart — always rendered and interactable */}
-          <HourlyChart
-            scores={hourlyScores}
-            selectedHour={hour}
-            nowHour={nowHour}
-            onSelect={setHour}
-            isLoading={isLoading}
-          />
+          {/* SVG bar chart — always visible, click to select hour */}
+          <div className="pb-5">
+            <BarChart
+              scores={hourlyScores}
+              selectedHour={hour}
+              nowHour={nowHour}
+              isLoading={isLoading}
+              onSelect={setHour}
+            />
+          </div>
+
+          {/* Range slider — always interactive */}
+          <div className="px-1">
+            <input
+              type="range"
+              min={0} max={23} step={1}
+              value={hour}
+              onChange={(e) => setHour(parseInt(e.target.value, 10))}
+              className="w-full"
+              style={{ accentColor: !isLoading && avgScore > 0 ? scoreColor(avgScore) : 'var(--ocean-600)', cursor: 'pointer' }}
+            />
+          </div>
 
           {isLoading && (
             <p className="text-xs text-center" style={{ color: 'var(--text-3)' }}>
-              Loading forecast…
+              Loading forecast from Open-Meteo…
             </p>
           )}
           {isError && (
@@ -481,11 +431,11 @@ export default function TimelinePage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
-              Best Spots at {hourLabel(hour)}
+              Best Spots at {hrLabel(hour)}
             </h2>
             {!isLoading && rankedSpots.length > 0 && (
               <span className="text-sm" style={{ color: 'var(--text-3)' }}>
-                {rankedSpots.length} spot{rankedSpots.length !== 1 ? 's' : ''} · {region}
+                {rankedSpots.length} spots · {region}
               </span>
             )}
           </div>
@@ -499,8 +449,9 @@ export default function TimelinePage() {
           )}
 
           {!isLoading && isError && (
-            <div className="rounded-2xl p-5 text-sm" style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
-              Could not load forecast. Open-Meteo may be temporarily unavailable — try again in a moment.
+            <div className="rounded-2xl p-5 text-sm"
+              style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+              Could not load forecast. Open-Meteo may be temporarily unavailable — try again shortly.
             </div>
           )}
 
@@ -508,9 +459,7 @@ export default function TimelinePage() {
             <div className="rounded-2xl p-10 text-center" style={{ background: 'white', border: '1px solid var(--border)' }}>
               <div className="text-3xl mb-3">🌊</div>
               <p className="font-semibold" style={{ color: 'var(--text)' }}>No spots found for {region}</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>
-                Try a California region like San Diego or Los Angeles.
-              </p>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>Try San Diego, Los Angeles, or another California region.</p>
             </div>
           )}
 
@@ -524,11 +473,9 @@ export default function TimelinePage() {
         </div>
 
         <div className="pt-2 text-center">
-          <Link
-            href="/spots"
+          <Link href="/spots"
             className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
-            style={{ background: 'var(--ocean-600)' }}
-          >
+            style={{ background: 'var(--ocean-600)' }}>
             🗺️ Open live map
           </Link>
         </div>
