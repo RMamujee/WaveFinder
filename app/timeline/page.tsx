@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 
@@ -35,7 +35,9 @@ function hrLabel(h: number): string {
 function dayLabel(ds: string, i: number): string {
   if (i === 0) return 'Today'
   if (i === 1) return 'Tomorrow'
-  return new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  return new Date(ds + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
 }
 
 function scoreColor(s: number) {
@@ -54,7 +56,9 @@ function scoreLabel(s: number) {
   return 'Poor'
 }
 
-function mToFt(m: number) { return (m * 3.281).toFixed(1) + ' ft' }
+function mToFt(m: number) {
+  return (m * 3.281).toFixed(1) + ' ft'
+}
 
 interface SpotHour {
   time: string; rating: string; ratingScore: number
@@ -63,21 +67,34 @@ interface SpotHour {
 interface Spot { id: string; name: string; slug: string; hours: SpotHour[] }
 
 export default function TimelinePage() {
-  const [region, setRegion] = useState('Los Angeles')
-  const [dayIdx, setDayIdx] = useState(0)
-  const [hour,   setHour]   = useState(() => {
+  // All dynamic state initialized after mount to guarantee no SSR/client mismatch
+  const [mounted,  setMounted]  = useState(false)
+  const [hour,     setHour]     = useState(10)
+  const [region,   setRegion]   = useState('Los Angeles')
+  const [dayIdx,   setDayIdx]   = useState(0)
+  const [dates,    setDates]    = useState<string[]>([])
+
+  useEffect(() => {
     const h = new Date().getHours()
-    return Math.max(6, Math.min(20, h))
-  })
+    setHour(Math.max(6, Math.min(21, h)))
+    setDates(Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)))
+    setMounted(true)
+  }, [])
 
-  const dates = useMemo(() => Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)), [])
-  const selectedDate = dates[dayIdx]
+  const selectedDate = dates[dayIdx] ?? ''
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['best-spots', region, selectedDate],
     queryFn: () =>
       fetch(`/api/best-spots?region=${encodeURIComponent(region)}&date=${selectedDate}`)
-        .then(r => { if (!r.ok) throw new Error('fetch failed'); return r.json() }),
+        .then(async r => {
+          if (!r.ok) {
+            const msg = await r.text().catch(() => r.statusText)
+            throw new Error(`${r.status} – ${msg}`)
+          }
+          return r.json()
+        }),
+    enabled: !!selectedDate,   // don't fire until date is set client-side
     staleTime: 30 * 60 * 1000,
   })
 
@@ -85,14 +102,36 @@ export default function TimelinePage() {
 
   const sorted = useMemo(() =>
     [...spots]
-      .map(s => ({ spot: s, h: s.hours.find(e => hrFromTime(e.time) === hour) ?? s.hours[0] }))
-      .filter(x => x.h)
-      .sort((a, b) => (b.h?.ratingScore ?? 0) - (a.h?.ratingScore ?? 0)),
+      .map(s => ({ spot: s, hd: s.hours.find(e => hrFromTime(e.time) === hour) ?? s.hours[0] }))
+      .filter(x => !!x.hd)
+      .sort((a, b) => (b.hd?.ratingScore ?? 0) - (a.hd?.ratingScore ?? 0)),
     [spots, hour]
   )
 
+  const trackColor = !isLoading && sorted.length > 0
+    ? scoreColor(sorted[0]?.hd?.ratingScore ?? 0)
+    : 'var(--ocean-600)'
+
+  const pct = (hour / 23) * 100
+
+  // Skeleton while not yet mounted (avoids any flash)
+  if (!mounted) {
+    return (
+      <div style={{ background: 'var(--sand-50)', minHeight: '100vh' }}>
+        <div className="border-b" style={{ background: 'white', borderColor: 'var(--border)' }}>
+          <div className="mx-auto max-w-4xl px-5 py-8">
+            <div className="h-4 w-24 rounded-lg mb-3 animate-pulse" style={{ background: 'var(--sand-200)' }} />
+            <div className="h-9 w-40 rounded-xl animate-pulse" style={{ background: 'var(--sand-200)' }} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ background: 'var(--sand-50)', minHeight: '100vh' }}>
+
+      {/* Header */}
       <div className="border-b" style={{ background: 'white', borderColor: 'var(--border)' }}>
         <div className="mx-auto max-w-4xl px-5 py-8">
           <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--ocean-500)' }}>
@@ -102,14 +141,14 @@ export default function TimelinePage() {
             Timeline
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-2)' }}>
-            Drag the slider to find the best surf time of day.
+            Drag the bar to find the best surf time of day.
           </p>
         </div>
       </div>
 
       <div className="mx-auto max-w-4xl px-5 py-8 space-y-6">
 
-        {/* Region + Day */}
+        {/* Region + Day controls */}
         <div className="flex flex-wrap gap-5 items-end">
           <div>
             <label className="block text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-3)' }}>
@@ -125,7 +164,8 @@ export default function TimelinePage() {
                 {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
-                width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-3)' }}>
+                width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-3)' }}>
                 <path d="M6 9l6 6 6-6" />
               </svg>
             </div>
@@ -152,30 +192,95 @@ export default function TimelinePage() {
         </div>
 
         {/* Slider card */}
-        <div className="rounded-2xl p-6" style={{ background: 'white', border: '1px solid var(--border)' }}>
-          <div className="text-center mb-5">
-            <div className="text-4xl font-light mb-1" style={{ color: 'var(--text)', letterSpacing: '-0.02em' }}>
-              {hrLabel(hour)}
+        <div className="rounded-2xl p-6 space-y-6" style={{ background: 'white', border: '1px solid var(--border)' }}>
+
+          {/* Time display */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div className="text-4xl font-bold tabular-nums"
+                style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ocean-700)', letterSpacing: '-0.02em' }}>
+                {hrLabel(hour)}
+              </div>
+              <div className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+                {selectedDate
+                  ? new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
+                      weekday: 'long', month: 'long', day: 'numeric',
+                    })
+                  : ''}
+              </div>
             </div>
-            <div className="text-sm" style={{ color: 'var(--text-3)' }}>
-              {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            </div>
+            {!isLoading && !isError && sorted.length > 0 && (
+              <div className="rounded-2xl px-4 py-2 text-sm font-bold"
+                style={{ background: trackColor, color: 'white' }}>
+                {scoreLabel(sorted[0]?.hd?.ratingScore ?? 0)} conditions
+              </div>
+            )}
           </div>
 
-          <input
-            type="range"
-            min={0} max={23} step={1}
-            value={hour}
-            onChange={e => setHour(parseInt(e.target.value, 10))}
-            className="w-full"
-            style={{ accentColor: 'var(--ocean-600)', cursor: 'pointer', height: '6px' }}
-          />
-          <div className="flex justify-between mt-1.5 text-xs" style={{ color: 'var(--text-3)' }}>
-            <span>12 AM</span>
-            <span>6 AM</span>
-            <span>12 PM</span>
-            <span>6 PM</span>
-            <span>11 PM</span>
+          {/* Custom styled slider */}
+          <div className="space-y-3">
+            <style>{`
+              .timeline-slider {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 100%;
+                height: 10px;
+                border-radius: 9999px;
+                outline: none;
+                cursor: pointer;
+                background: linear-gradient(
+                  to right,
+                  ${trackColor} 0%,
+                  ${trackColor} ${pct}%,
+                  #e2e8f0 ${pct}%,
+                  #e2e8f0 100%
+                );
+                transition: background 0.1s;
+              }
+              .timeline-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 28px;
+                height: 28px;
+                border-radius: 9999px;
+                background: white;
+                border: 3px solid ${trackColor};
+                box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+                cursor: pointer;
+                transition: border-color 0.1s, transform 0.1s;
+              }
+              .timeline-slider::-webkit-slider-thumb:hover {
+                transform: scale(1.15);
+              }
+              .timeline-slider::-moz-range-thumb {
+                width: 28px;
+                height: 28px;
+                border-radius: 9999px;
+                background: white;
+                border: 3px solid ${trackColor};
+                box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+                cursor: pointer;
+              }
+              .timeline-slider::-moz-range-track {
+                height: 10px;
+                border-radius: 9999px;
+                background: #e2e8f0;
+              }
+            `}</style>
+            <input
+              type="range"
+              min={0} max={23} step={1}
+              value={hour}
+              onChange={e => setHour(parseInt(e.target.value, 10))}
+              className="timeline-slider"
+            />
+            <div className="flex justify-between text-xs px-1" style={{ color: 'var(--text-3)' }}>
+              <span>12 AM</span>
+              <span>6 AM</span>
+              <span>12 PM</span>
+              <span>6 PM</span>
+              <span>11 PM</span>
+            </div>
           </div>
         </div>
 
@@ -185,7 +290,7 @@ export default function TimelinePage() {
             <h2 className="text-xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
               Best at {hrLabel(hour)}
             </h2>
-            {!isLoading && sorted.length > 0 && (
+            {!isLoading && !isError && sorted.length > 0 && (
               <span className="text-sm" style={{ color: 'var(--text-3)' }}>
                 {sorted.length} spots · {region}
               </span>
@@ -196,14 +301,22 @@ export default function TimelinePage() {
             <div className="flex flex-col items-center py-16 gap-3">
               <div className="w-8 h-8 rounded-full border-2 animate-spin"
                 style={{ borderColor: 'var(--ocean-100)', borderTopColor: 'var(--ocean-600)' }} />
-              <span className="text-sm" style={{ color: 'var(--text-3)' }}>Fetching forecast…</span>
+              <span className="text-sm" style={{ color: 'var(--text-3)' }}>Fetching conditions…</span>
             </div>
           )}
 
           {!isLoading && isError && (
-            <div className="rounded-2xl p-5 text-sm"
-              style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
-              Could not load forecast. Check your connection or try a different region.
+            <div className="rounded-2xl p-5 space-y-2"
+              style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+              <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>
+                Could not load forecast
+              </p>
+              <p className="text-xs font-mono" style={{ color: '#ef4444' }}>
+                {(error as Error)?.message ?? 'Unknown error'}
+              </p>
+              <p className="text-xs" style={{ color: '#b91c1c' }}>
+                Try a different region, or check that the Vercel environment variables (DATABASE_URL) are set in your project settings.
+              </p>
             </div>
           )}
 
@@ -215,20 +328,21 @@ export default function TimelinePage() {
 
           {!isLoading && !isError && sorted.length > 0 && (
             <div className="space-y-3">
-              {sorted.map(({ spot, h: hd }, idx) => {
+              {sorted.map(({ spot, hd }, idx) => {
                 const color = scoreColor(hd!.ratingScore)
-                const label = scoreLabel(hd!.ratingScore)
                 return (
                   <Link key={spot.id} href={`/spots/${spot.slug}`}
-                    className="group flex items-center gap-4 rounded-2xl p-4 transition-all hover:shadow-md"
+                    className="group flex items-center gap-4 rounded-2xl p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
                     style={{ background: 'white', border: '1px solid var(--border)', textDecoration: 'none' }}>
+
                     <div className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold"
                       style={{ background: idx < 3 ? 'var(--ocean-600)' : 'var(--sand-100)', color: idx < 3 ? 'white' : 'var(--text-3)' }}>
                       {idx + 1}
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate" style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+                      <div className="font-semibold truncate"
+                        style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
                         {spot.name}
                       </div>
                       <div className="text-xs mt-0.5 flex gap-2" style={{ color: 'var(--text-3)' }}>
@@ -240,18 +354,22 @@ export default function TimelinePage() {
 
                     <div className="hidden sm:flex flex-col gap-1 w-28">
                       <div className="h-1.5 rounded-full" style={{ background: '#e5e7eb' }}>
-                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, hd!.ratingScore)}%`, background: color }} />
+                        <div className="h-full rounded-full"
+                          style={{ width: `${Math.min(100, hd!.ratingScore)}%`, background: color }} />
                       </div>
-                      <div className="text-xs" style={{ color: 'var(--text-3)' }}>{Math.round(hd!.ratingScore)}/100</div>
+                      <div className="text-xs" style={{ color: 'var(--text-3)' }}>
+                        {Math.round(hd!.ratingScore)}/100
+                      </div>
                     </div>
 
                     <div className="flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold"
                       style={{ background: color, color: 'white' }}>
-                      {label}
+                      {scoreLabel(hd!.ratingScore)}
                     </div>
 
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="2" strokeLinecap="round" className="flex-shrink-0"
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                      className="flex-shrink-0 transition-transform group-hover:translate-x-0.5"
                       style={{ color: 'var(--text-3)' }}>
                       <path d="M5 12h14M12 5l7 7-7 7" />
                     </svg>
