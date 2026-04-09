@@ -48,6 +48,8 @@ export interface BestSpotsSwellHour {
   windSpeed: number    // km/h
   windDirection: number
   windDirectionLabel: string
+  // Water
+  seaSurfaceTemperature: number | null  // °C
 }
 
 export interface BestSpotsSpotEntry {
@@ -132,6 +134,7 @@ export async function GET(req: Request) {
       windSpeed:            w.speed,
       windDirection:        w.dir,
       windDirectionLabel:   degreesToCompass(w.dir),
+      seaSurfaceTemperature: marine.hourly.sea_surface_temperature?.[i] ?? null,
     }
   })
 
