@@ -18,12 +18,17 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const search     = (searchParams.get('q') ?? '').slice(0, 200)
+  // Sanitize: strip SQL wildcard chars that could widen LIKE matches
+  const search     = (searchParams.get('q') ?? '').slice(0, 200).replace(/[%_\\]/g, '')
   const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced'])
   const rawDiff    = searchParams.get('difficulty') ?? ''
   const difficulty = VALID_DIFFICULTIES.has(rawDiff) ? rawDiff : ''
-  const country    = (searchParams.get('country') ?? '').slice(0, 100)
-  const ids        = (searchParams.get('ids') ?? '').split(',').filter(Boolean).slice(0, 50)
+  const country    = (searchParams.get('country') ?? '').slice(0, 100).replace(/[%_\\]/g, '')
+  // Validate each ID looks like a cuid/uuid before querying
+  const ids        = (searchParams.get('ids') ?? '').split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^[a-z0-9]{20,36}$/i.test(s))
+    .slice(0, 50)
   const withConditions = searchParams.get('withConditions') === 'true'
 
   const spots = await prisma.surfSpot.findMany({
