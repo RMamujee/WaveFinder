@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import 'leaflet/dist/leaflet.css'
 
 interface Props {
   lat: number
   lng: number
   spotName: string
-  facingDirection?: number  // degrees — used to nudge marker to the shoreline
+  facingDirection?: number
   zoom?: number
 }
 
@@ -20,7 +21,6 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
 
     ;(async () => {
       const L = (await import('leaflet')).default
-      await import('leaflet/dist/leaflet.css')
       if (cancelled || !mapRef.current) return
 
       if (mapInstance.current) {
@@ -28,37 +28,29 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
         mapInstance.current = null
       }
 
-      // facingDirection = the direction the beach faces toward the ocean.
-      // Shore (land) is in the OPPOSITE direction: (facingDirection + 180) % 360.
       const metersPerDeg = 111_320
       const shoreRad = ((facingDirection + 180) % 360) * (Math.PI / 180)
       const cosLat   = Math.cos(lat * Math.PI / 180)
 
-      // Nudge the MAP CENTER 150 m toward shore so the beach/waterline is
-      // always centered rather than the offshore break.
       const centerNudgeM = 150
       const centerLat = lat + (centerNudgeM / metersPerDeg) * Math.cos(shoreRad)
       const centerLng = lng + (centerNudgeM / (metersPerDeg * cosLat)) * Math.sin(shoreRad)
 
-      // Nudge the MARKER 30 m toward shore — keeps it at the break, just
-      // pulled slightly off the open ocean.
       const markerNudgeM = 30
       const shLat = lat + (markerNudgeM / metersPerDeg) * Math.cos(shoreRad)
       const shLng = lng + (markerNudgeM / (metersPerDeg * cosLat)) * Math.sin(shoreRad)
 
       const map = L.map(mapRef.current, {
         center: [centerLat, centerLng],
-        zoom: zoom + 1,   // one level tighter now that center is on the beach
+        zoom: zoom + 1,
         zoomControl: true,
         scrollWheelZoom: false,
         attributionControl: true,
       })
       mapInstance.current = map
 
-      // Force correct sizing after container renders
-      setTimeout(() => map.invalidateSize(), 100)
+      setTimeout(() => map.invalidateSize(), 150)
 
-      // ── Esri World Imagery (satellite) — free, no API key ──────────────────
       L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         {
@@ -70,13 +62,11 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
         }
       ).addTo(map)
 
-      // ── Subtle labels overlay (roads/place names over satellite) ───────────
       L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
         { maxZoom: 19, maxNativeZoom: 18, opacity: 0.75, crossOrigin: true }
       ).addTo(map)
 
-      // ── Custom surf-pin marker ─────────────────────────────────────────────
       const icon = L.divIcon({
         className: '',
         html: `
@@ -109,5 +99,5 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
     }
   }, [lat, lng, spotName, facingDirection, zoom])
 
-  return <div ref={mapRef} style={{ height: '100%', width: '100%' }} />
+  return <div ref={mapRef} style={{ height: '100%', width: '100%', minHeight: '280px' }} />
 }
