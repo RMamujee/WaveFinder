@@ -203,7 +203,7 @@ export function SpotForecastView({ spot }: Props) {
                   <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>
                     Wind — 7 day
                   </p>
-                  <WindRoseChart days={forecast.forecast} size={150} showLegend={false} />
+                  <WindRoseChart days={forecast.forecast} size={175} showLegend={false} />
                   <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 mt-1.5" style={{ maxWidth: 150 }}>
                     {[
                       { color: '#16a34a', label: '<10' },
@@ -339,31 +339,30 @@ export function SpotForecastView({ spot }: Props) {
               )}
             </div>
 
-            {/* Wind Speed + UV — col 2, stacked */}
-            <div className="flex flex-col gap-4">
-              <div>
-                <SectionTitle>Wind Speed</SectionTitle>
-                <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-                  <WindChart days={forecast.forecast} activeDayData={activeDayData} />
-                </div>
-              </div>
-              <div>
-                <SectionTitle>
-                  UV Index —{' '}
-                  <span style={{ fontWeight: 400 }}>{format(parseISO(activeDayData.date), 'EEE, MMM d')}</span>
-                </SectionTitle>
-                <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-                  <UVChart activeDayData={activeDayData} />
-                </div>
+            {/* Wind Speed + UV — cols 2+3, side by side */}
+            <div>
+              <SectionTitle>Wind Speed</SectionTitle>
+              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+                <WindChart days={forecast.forecast} activeDayData={activeDayData} />
               </div>
             </div>
 
-            {/* Satellite Map — col 3, full height */}
-            <div className="flex flex-col">
+            <div>
+              <SectionTitle>
+                UV Index —{' '}
+                <span style={{ fontWeight: 400 }}>{format(parseISO(activeDayData.date), 'EEE, MMM d')}</span>
+              </SectionTitle>
+              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+                <UVChart activeDayData={activeDayData} />
+              </div>
+            </div>
+
+            {/* Satellite Map — spans all 3 cols */}
+            <div className="lg:col-span-3">
               <SectionTitle>Satellite View</SectionTitle>
               <div
-                className="rounded-2xl overflow-hidden flex-1"
-                style={{ border: '1px solid var(--border)', minHeight: '280px' }}
+                className="rounded-2xl overflow-hidden"
+                style={{ border: '1px solid var(--border)', aspectRatio: '21/6' }}
               >
                 <SpotSatelliteMap
                   lat={spot.lat}
