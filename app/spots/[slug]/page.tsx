@@ -7,6 +7,29 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import type { SurfSpot } from '@/types/spot'
 
+type PrismaSpot = Awaited<ReturnType<typeof prisma.surfSpot.findUniqueOrThrow>>
+
+function toSurfSpot(s: PrismaSpot): SurfSpot {
+  const VALID = new Set(['beginner', 'intermediate', 'advanced'])
+  return {
+    id: s.id,
+    slug: s.slug,
+    name: s.name,
+    region: s.region,
+    country: s.country,
+    lat: s.lat,
+    lng: s.lng,
+    description: s.description,
+    difficulty: VALID.has(s.difficulty) ? (s.difficulty as SurfSpot['difficulty']) : 'intermediate',
+    facingDirection: s.facingDirection,
+    noaaTideStationId: s.noaaTideStationId,
+    noaaBuoyId: s.noaaBuoyId,
+    webcamUrl: s.webcamUrl,
+    webcamType: s.webcamType,
+    parkingOptions: s.parkingOptions as SurfSpot['parkingOptions'] ?? null,
+  }
+}
+
 interface Props {
   params: Promise<{ slug: string }>
 }
@@ -49,7 +72,7 @@ export default async function SpotPage({ params }: Props) {
   return (
     <>
       <Suspense>
-        <SpotForecastView spot={spot as SurfSpot} />
+        <SpotForecastView spot={toSurfSpot(spot)} />
       </Suspense>
 
       {/* More spots in this region */}
@@ -73,7 +96,7 @@ export default async function SpotPage({ params }: Props) {
             </div>
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8">
               {nearbySpots.map((s) => (
-                <SpotCard key={s.slug} spot={s as SurfSpot} />
+                <SpotCard key={s.slug} spot={toSurfSpot(s)} />
               ))}
             </div>
           </div>

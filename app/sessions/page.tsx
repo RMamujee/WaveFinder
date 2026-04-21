@@ -227,11 +227,13 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
       setIsSearching(true)
       try {
         const res = await fetch(`/api/spots?q=${encodeURIComponent(value.trim())}`)
+        if (!res.ok) throw new Error(`${res.status}`)
         const spots: SpotSuggestion[] = await res.json()
         setSuggestions(spots.slice(0, 8))
         setShowSuggestions(spots.length > 0)
       } catch {
         setSuggestions([])
+        setShowSuggestions(false)
       } finally {
         setIsSearching(false)
       }
