@@ -18,6 +18,7 @@ export function Navbar() {
     { href: '/compare',    label: 'Compare' },
     { href: '/sessions',   label: 'My Log' },
     { href: '/dashboard',  label: 'My Spots' },
+    { href: '/gear',       label: 'Gear Locker' },
   ]
 
   return (

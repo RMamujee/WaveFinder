@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function TideChart({ tides, selectedDate }: Props) {
-  const [mode, setMode] = useState<'7day' | 'daily'>('7day')
+  const [mode, setMode] = useState<'7day' | 'daily'>('daily')
 
   if (!tides.length) {
     return (

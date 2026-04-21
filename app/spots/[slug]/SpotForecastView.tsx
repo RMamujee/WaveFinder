@@ -6,6 +6,7 @@ import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ForecastDay, ConditionRating } from '@/types/forecast'
 import { WaveChart } from '@/components/forecast/WaveChart'
 import { WindChart } from '@/components/forecast/WindChart'
+import { WindRoseChart } from '@/components/forecast/WindRoseChart'
 import { TideChart } from '@/components/forecast/TideChart'
 import { UVChart } from '@/components/forecast/UVChart'
 import { GearPanel } from '@/components/forecast/GearPanel'
@@ -195,49 +196,72 @@ export function SpotForecastView({ spot }: Props) {
               ) : null}
             </div>
 
-            {/* Right: rating badge + save */}
-            <div className="flex flex-col items-end gap-3">
-              {current && (
-                <div
-                  className="flex flex-col items-center justify-center rounded-2xl px-6 py-4"
-                  style={{
-                    background: ratingStyle.bg,
-                    border: `2px solid ${ratingStyle.border}`,
-                    minWidth: '110px',
-                  }}
-                >
-                  <span
-                    className="font-black uppercase tracking-wider"
-                    style={{
-                      fontSize: current.rating === 'epic' ? '22px' : '20px',
-                      color: ratingStyle.text,
-                      fontFamily: 'Playfair Display, serif',
-                    }}
-                  >
-                    {current.rating === 'epic' ? '🏆 EPIC' : current.rating.charAt(0).toUpperCase() + current.rating.slice(1)}
-                  </span>
-                  <div
-                    className="mt-1.5 h-1.5 w-full rounded-full"
-                    style={{ background: 'var(--sand-200)' }}
-                  >
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${current.ratingScore}%`, background: ratingStyle.accent }}
-                    />
-                  </div>
-                  <p className="text-xs mt-1 font-medium" style={{ color: ratingStyle.text }}>
-                    {current.ratingScore}/100
+            {/* Right: wind rose + rating badge + actions */}
+            <div className="flex items-start gap-4">
+              {forecast && (
+                <div className="hidden sm:flex flex-col items-center">
+                  <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>
+                    Wind — 7 day
                   </p>
+                  <WindRoseChart days={forecast.forecast} size={150} showLegend={false} />
+                  <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 mt-1.5" style={{ maxWidth: 150 }}>
+                    {[
+                      { color: '#16a34a', label: '<10' },
+                      { color: '#f59e0b', label: '10–20' },
+                      { color: '#f97316', label: '20–30' },
+                      { color: '#ef4444', label: '30+' },
+                    ].map(b => (
+                      <div key={b.label} className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm" style={{ background: b.color }} />
+                        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{b.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
-              <SaveSpotButton spotId={spot.id} />
-              <a
-                href={`/sessions?spot=${encodeURIComponent(spot.name)}&region=${encodeURIComponent(spot.region)}&slug=${spot.slug}`}
-                className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
-                style={{ background: 'var(--ocean-600)' }}
-              >
-                📓 Log Session
-              </a>
+              <div className="flex flex-col items-end gap-3">
+                {current && (
+                  <div
+                    className="flex flex-col items-center justify-center rounded-2xl px-6 py-4"
+                    style={{
+                      background: ratingStyle.bg,
+                      border: `2px solid ${ratingStyle.border}`,
+                      minWidth: '110px',
+                    }}
+                  >
+                    <span
+                      className="font-black uppercase tracking-wider"
+                      style={{
+                        fontSize: current.rating === 'epic' ? '22px' : '20px',
+                        color: ratingStyle.text,
+                        fontFamily: 'Playfair Display, serif',
+                      }}
+                    >
+                      {current.rating === 'epic' ? '🏆 EPIC' : current.rating.charAt(0).toUpperCase() + current.rating.slice(1)}
+                    </span>
+                    <div
+                      className="mt-1.5 h-1.5 w-full rounded-full"
+                      style={{ background: 'var(--sand-200)' }}
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${current.ratingScore}%`, background: ratingStyle.accent }}
+                      />
+                    </div>
+                    <p className="text-xs mt-1 font-medium" style={{ color: ratingStyle.text }}>
+                      {current.ratingScore}/100
+                    </p>
+                  </div>
+                )}
+                <SaveSpotButton spotId={spot.id} />
+                <a
+                  href={`/sessions?spot=${encodeURIComponent(spot.name)}&region=${encodeURIComponent(spot.region)}&slug=${spot.slug}`}
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
+                  style={{ background: 'var(--ocean-600)' }}
+                >
+                  Log Session
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -295,11 +319,11 @@ export function SpotForecastView({ spot }: Props) {
           />
         </div>
 
-        {/* Row 2: Best Times (left, spans 2 rows) | Wind / UV (top-right) | Map (bottom-right) */}
+        {/* Row 2: Best Times (left) | Wind + UV stacked (middle) | Satellite (right) */}
         {forecast?.forecast && activeDayData && (
           <div className="grid gap-4 lg:grid-cols-3">
-            {/* Best Times — left column, spans Wind+UV row AND map row */}
-            <div className="lg:row-span-2">
+            {/* Best Times — col 1 */}
+            <div>
               <SectionTitle>
                 Best Times
                 <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-3)' }}>
@@ -308,10 +332,6 @@ export function SpotForecastView({ spot }: Props) {
               </SectionTitle>
               {bestTimes.length > 0 ? (
                 <BestTimePanel slots={bestTimes} tides={forecast.tides} />
-              ) : isPending ? (
-                <div className="rounded-2xl p-8 text-center text-sm" style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
-                  Loading time recommendations…
-                </div>
               ) : (
                 <div className="rounded-2xl p-8 text-center text-sm" style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
                   No session windows available for this day.
@@ -319,31 +339,31 @@ export function SpotForecastView({ spot }: Props) {
               )}
             </div>
 
-            {/* Wind Speed — top-right col 2 */}
-            <div>
-              <SectionTitle>Wind Speed</SectionTitle>
-              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-                <WindChart days={forecast.forecast} activeDayData={activeDayData} />
+            {/* Wind Speed + UV — col 2, stacked */}
+            <div className="flex flex-col gap-4">
+              <div>
+                <SectionTitle>Wind Speed</SectionTitle>
+                <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+                  <WindChart days={forecast.forecast} activeDayData={activeDayData} />
+                </div>
+              </div>
+              <div>
+                <SectionTitle>
+                  UV Index —{' '}
+                  <span style={{ fontWeight: 400 }}>{format(parseISO(activeDayData.date), 'EEE, MMM d')}</span>
+                </SectionTitle>
+                <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+                  <UVChart activeDayData={activeDayData} />
+                </div>
               </div>
             </div>
 
-            {/* UV Index — top-right col 3 */}
-            <div>
-              <SectionTitle>
-                UV Index —{' '}
-                <span style={{ fontWeight: 400 }}>{format(parseISO(activeDayData.date), 'EEE, MMM d')}</span>
-              </SectionTitle>
-              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
-                <UVChart activeDayData={activeDayData} />
-              </div>
-            </div>
-
-            {/* Satellite Map — bottom-right, spans cols 2+3 */}
-            <div className="lg:col-span-2">
+            {/* Satellite Map — col 3, full height */}
+            <div className="flex flex-col">
               <SectionTitle>Satellite View</SectionTitle>
               <div
-                className="rounded-2xl overflow-hidden"
-                style={{ border: '1px solid var(--border)', aspectRatio: '16/9' }}
+                className="rounded-2xl overflow-hidden flex-1"
+                style={{ border: '1px solid var(--border)', minHeight: '280px' }}
               >
                 <SpotSatelliteMap
                   lat={spot.lat}

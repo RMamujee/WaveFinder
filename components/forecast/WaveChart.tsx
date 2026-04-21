@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function WaveChart({ days, activeDayData }: Props) {
-  const [mode, setMode] = useState<'7day' | 'daily'>('7day')
+  const [mode, setMode] = useState<'7day' | 'daily'>('daily')
 
   const sevenDayData = days.flatMap((day) =>
     day.hours

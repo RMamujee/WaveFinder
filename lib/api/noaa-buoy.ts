@@ -6,7 +6,7 @@ export async function fetchBuoyData(buoyId: string): Promise<BuoyReading | null>
   try {
     const res = await fetch(`${NDBC_BASE}/${buoyId}.txt`, {
       next: { revalidate: 1800 },
-
+      signal: AbortSignal.timeout(8000),
     })
 
     if (!res.ok) return null

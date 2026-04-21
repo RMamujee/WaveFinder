@@ -553,9 +553,14 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
 function useSpotForecast(slug: string) {
   return useQuery<SpotForecast>({
     queryKey: ['forecast', slug],
-    queryFn: () => fetch(`/api/forecast/${slug}`).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/forecast/${slug}`)
+      if (!r.ok) throw new Error(`forecast ${r.status}`)
+      return r.json()
+    },
     enabled: !!slug,
     staleTime: 30 * 60 * 1000,
+    retry: 1,
   })
 }
 
