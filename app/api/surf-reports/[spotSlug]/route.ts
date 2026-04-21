@@ -100,6 +100,7 @@ export async function GET(
       `https://www.ndbc.noaa.gov/data/realtime2/${spot.noaaBuoyId}.txt`,
       {
         headers: { 'User-Agent': 'WaveFinder/1.0 (surf forecast; contact@wavefinder.app)' },
+        signal: AbortSignal.timeout(8000),
         next: { revalidate: 1800 },
       }
     )

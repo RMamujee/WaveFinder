@@ -94,7 +94,7 @@ export async function GET(
   const siteIds = stations
     .slice(0, 3)
     .map(s => s['MonitoringLocationIdentifier'])
-    .filter(Boolean)
+    .filter((id): id is string => typeof id === 'string' && /^[\w:.-]{1,60}$/.test(id))
 
   if (siteIds.length === 0) return NextResponse.json(noData)
 
