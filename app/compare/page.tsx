@@ -28,7 +28,7 @@ function fuzzyScore(query: string, spot: SurfSpot): number {
   for (const qw of qWords) {
     let best = 0
     for (const tw of tWords) {
-      if (tw.startsWith(qw))  best = Math.max(best, 80)
+      if (tw.startsWith(qw))    best = Math.max(best, 80)
       else if (tw.includes(qw)) best = Math.max(best, 50)
     }
     wordScore += best
@@ -77,11 +77,11 @@ function metersToFeet(m: number): string {
 }
 
 function shortDay(dateStr: string): string {
-  const d = new Date(dateStr)
+  const d = new Date(dateStr + 'T12:00:00')
   return d.toLocaleDateString('en-US', { weekday: 'short' })
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Spot search input ─────────────────────────────────────────────────────────
 
 interface SpotSearchInputProps {
   index: number
@@ -96,22 +96,28 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   const [query, setQuery]             = useState('')
   const [open, setOpen]               = useState(false)
   const [highlighted, setHighlighted] = useState(0)
-  const inputRef    = useRef<HTMLInputElement>(null)
+  const inputRef     = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const dropdownRef  = useRef<HTMLDivElement>(null)
 
+  // Close on outside tap — works on both desktop (pointerdown) and iOS (touchstart)
   useEffect(() => {
-    const handler = (e: PointerEvent) => {
+    const close = (e: Event) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false)
         setQuery('')
       }
     }
-    document.addEventListener('pointerdown', handler)
-    return () => document.removeEventListener('pointerdown', handler)
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('touchstart', close, { passive: true })
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('touchstart', close)
+    }
   }, [])
 
   const results = useMemo((): SurfSpot[] => {
-    if (!query.trim()) return spots
+    if (!query.trim()) return spots.slice(0, 40)
     return spots
       .map((s) => ({ spot: s, score: fuzzyScore(query, s) }))
       .filter((x) => x.score > 0)
@@ -121,7 +127,8 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   }, [query, spots])
 
   const handleSelect = (spot: SurfSpot) => { onChange(spot.slug); setQuery(''); setOpen(false) }
-  const handleClear = (e: React.SyntheticEvent) => { e.stopPropagation(); e.preventDefault(); onChange(''); setQuery(''); setOpen(false) }
+  const handleClear  = (e: React.SyntheticEvent) => { e.stopPropagation(); e.preventDefault(); onChange(''); setQuery(''); setOpen(false) }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!open) { if (e.key !== 'Tab') setOpen(true); return }
     if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted((h) => Math.min(h + 1, results.length - 1)) }
@@ -135,7 +142,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   const isSelected = !!value
 
   return (
-    <div className="flex flex-col gap-1.5" ref={containerRef}>
+    <div className="flex flex-col gap-1.5" ref={containerRef} style={{ position: 'relative' }}>
       <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
         Spot {index + 1}
       </label>
@@ -156,19 +163,26 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           className="w-full rounded-xl pl-9 pr-9 py-3 text-sm font-medium focus:outline-none transition-all"
           style={{
             background: isSelected && !open ? 'var(--ocean-50)' : 'var(--sand-100)',
             border: `1.5px solid ${isSelected ? 'var(--ocean-300)' : open ? 'var(--ocean-400)' : 'var(--border)'}`,
             color: 'var(--text)',
+            fontSize: '16px', // prevents iOS auto-zoom on focus
           }}
         />
         {isSelected ? (
-          <button onPointerDown={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full w-4 h-4 transition-colors hover:bg-[var(--sand-200)]"
+          <button
+            onPointerDown={handleClear}
+            className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full w-5 h-5 transition-colors"
             style={{ color: 'var(--text-3)' }}
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
           </button>
         ) : (
           <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
@@ -178,51 +192,92 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
             <path d="m6 9 6 6 6-6" />
           </svg>
         )}
-        {open && (
-          <div className="absolute left-0 mt-1.5 rounded-xl overflow-hidden"
-            style={{ background: 'white', border: '1.5px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', maxHeight: '260px', overflowY: 'auto', zIndex: 9999, minWidth: '260px', width: 'max-content', maxWidth: '90vw' }}
-          >
-            {isLoading ? (
-              <div className="px-4 py-3 text-sm" style={{ color: 'var(--text-3)' }}>Loading spots…</div>
-            ) : results.length === 0 ? (
-              <div className="px-4 py-3 text-sm" style={{ color: 'var(--text-3)' }}>No spots found for &ldquo;{query}&rdquo;</div>
-            ) : (
-              results.map((spot, i) => (
-                <button key={spot.slug} type="button"
-                  onPointerDown={(e) => { e.preventDefault(); handleSelect(spot) }}
-                  onMouseEnter={() => setHighlighted(i)}
-                  className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors"
-                  style={{ background: i === highlighted ? 'var(--ocean-50)' : spot.slug === value ? 'var(--sand-50)' : 'white', borderTop: i > 0 ? '1px solid var(--sand-100)' : 'none' }}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{spot.name}</p>
-                    <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{spot.region}</p>
-                  </div>
-                  {spot.slug === value && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ocean-500)" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" /></svg>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        )}
       </div>
+
+      {/* Dropdown — rendered outside the relative wrapper to avoid clipping */}
+      {open && (
+        <div
+          ref={dropdownRef}
+          className="absolute left-0 rounded-xl overflow-hidden"
+          style={{
+            top: '100%',
+            marginTop: '6px',
+            background: 'white',
+            border: '1.5px solid var(--border)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+            maxHeight: '220px',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            zIndex: 9999,
+            minWidth: '240px',
+            width: '100%',
+          }}
+        >
+          {isLoading ? (
+            <div className="px-4 py-3 text-sm" style={{ color: 'var(--text-3)' }}>Loading spots…</div>
+          ) : results.length === 0 ? (
+            <div className="px-4 py-3 text-sm" style={{ color: 'var(--text-3)' }}>
+              No spots found{query ? ` for "${query}"` : ''}
+            </div>
+          ) : (
+            results.map((spot, i) => (
+              <button
+                key={spot.slug}
+                type="button"
+                // Use onPointerDown to fire before blur (desktop + Android)
+                onPointerDown={(e) => { e.preventDefault(); handleSelect(spot) }}
+                // Use onTouchEnd as fallback for iOS (avoids 300ms delay)
+                onTouchEnd={(e) => { e.preventDefault(); handleSelect(spot) }}
+                onMouseEnter={() => setHighlighted(i)}
+                className="w-full text-left px-4 py-3 flex items-center justify-between gap-3"
+                style={{
+                  background: i === highlighted ? 'var(--ocean-50)' : spot.slug === value ? 'var(--sand-50)' : 'white',
+                  borderTop: i > 0 ? '1px solid var(--sand-100)' : 'none',
+                  cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{spot.name}</p>
+                  <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{spot.region}</p>
+                </div>
+                {spot.slug === value && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ocean-500)" strokeWidth="2.5">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Day picker card ───────────────────────────────────────────────────────────
+// ── Day picker ────────────────────────────────────────────────────────────────
 
 function MiniDayCard({ day, isSelected, onClick }: { day: ForecastDay; isSelected: boolean; onClick: () => void }) {
   const accent = DAY_RATING_ACCENT[day.dominantRating]
   const rs = RATING_STYLES[day.dominantRating]
   return (
-    <button type="button" onClick={onClick}
+    <button
+      type="button"
+      onClick={onClick}
       className="flex flex-col items-center rounded-xl py-2 px-1.5 shrink-0 w-[50px] transition-all"
-      style={{ background: isSelected ? accent : rs.bg, border: `1.5px solid ${isSelected ? accent : rs.border}`, boxShadow: isSelected ? `0 2px 8px ${accent}44` : 'none', cursor: 'pointer' }}
+      style={{
+        background: isSelected ? accent : rs.bg,
+        border: `1.5px solid ${isSelected ? accent : rs.border}`,
+        boxShadow: isSelected ? `0 2px 8px ${accent}44` : 'none',
+        WebkitTapHighlightColor: 'transparent',
+      }}
     >
-      <span className="text-xs font-semibold mb-1" style={{ color: isSelected ? 'white' : 'var(--text-3)' }}>{shortDay(day.date)}</span>
-      <span className="text-xs font-bold" style={{ color: isSelected ? 'white' : 'var(--text)' }}>{metersToFeet(day.maxWaveHeight)}</span>
+      <span className="text-xs font-semibold mb-1" style={{ color: isSelected ? 'white' : 'var(--text-3)' }}>
+        {shortDay(day.date)}
+      </span>
+      <span className="text-xs font-bold" style={{ color: isSelected ? 'white' : 'var(--text)' }}>
+        {metersToFeet(day.maxWaveHeight)}
+      </span>
       <span className="mt-1 text-xs font-semibold uppercase" style={{ color: isSelected ? 'rgba(255,255,255,0.85)' : accent, fontSize: '9px', letterSpacing: '0.04em' }}>
         {day.dominantRating}
       </span>
@@ -268,43 +323,73 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
   const diffStyle = DIFFICULTY_STYLES[spot.difficulty] ?? DIFFICULTY_STYLES.intermediate
   const days = forecast?.forecast ?? []
   const activeDayObj = days.find((d) => d.date === selectedDay) ?? days[0] ?? null
-  const peakHour = activeDayObj ? getPeakHour(activeDayObj) : null
-  const displayHour = peakHour ?? forecast?.currentCondition ?? null
+  const peakHour: ForecastHour | null = activeDayObj ? getPeakHour(activeDayObj) : (forecast?.currentCondition ?? null)
+  const displayHour = peakHour
   const ratingStyle = displayHour ? RATING_STYLES[displayHour.rating] : RATING_STYLES.poor
   const waterTempC = displayHour?.waterTemp ?? forecast?.buoy?.waterTemp ?? null
   const waterTempF = waterTempC != null ? Math.round((waterTempC * 9) / 5 + 32) : null
 
   return (
-    <div className="rounded-2xl overflow-hidden flex flex-col" style={{ background: 'white', border: '1px solid var(--border)', borderTop: '3px solid var(--ocean-400)', minWidth: 0 }}>
+    <div
+      className="rounded-2xl overflow-hidden flex flex-col"
+      style={{ background: 'white', border: '1px solid var(--border)', borderTop: '3px solid var(--ocean-400)', minWidth: 0 }}
+    >
+      {/* Header */}
       <div className="px-5 pt-4 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-start justify-between gap-2 mb-0.5">
-          <a href={`/spots/${spot.slug}`} className="font-bold text-base leading-tight hover:underline"
-            style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>{spot.name}</a>
+          <a
+            href={`/spots/${spot.slug}`}
+            className="font-bold text-base leading-tight hover:underline"
+            style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}
+          >
+            {spot.name}
+          </a>
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize"
-              style={{ background: diffStyle.bg, color: diffStyle.color }}>{spot.difficulty}</span>
-            <button type="button" onClick={onExpandToggle}
+            <span
+              className="rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize"
+              style={{ background: diffStyle.bg, color: diffStyle.color }}
+            >
+              {spot.difficulty}
+            </span>
+            <button
+              type="button"
+              onClick={onExpandToggle}
               className="rounded-lg px-2 py-1 text-xs font-semibold transition-colors"
-              style={{ background: isExpanded ? 'var(--ocean-600)' : 'var(--sand-100)', color: isExpanded ? 'white' : 'var(--text-3)', border: '1px solid var(--border)' }}
-            >{isExpanded ? '▲ Less' : '▼ More'}</button>
+              style={{
+                background: isExpanded ? 'var(--ocean-600)' : 'var(--sand-100)',
+                color: isExpanded ? 'white' : 'var(--text-3)',
+                border: '1px solid var(--border)',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              {isExpanded ? '▲ Less' : '▼ More'}
+            </button>
           </div>
         </div>
         <p className="text-xs" style={{ color: 'var(--text-3)' }}>{spot.region}</p>
       </div>
 
+      {/* Day picker */}
       {days.length > 0 && (
         <div className="px-4 pt-3 pb-2" style={{ borderBottom: '1px solid var(--sand-100)' }}>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>Select day</p>
-          <div className="flex gap-1 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+          <div
+            className="flex gap-1 pb-0.5"
+            style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+          >
             {days.map((day) => (
-              <MiniDayCard key={day.date} day={day}
+              <MiniDayCard
+                key={day.date}
+                day={day}
                 isSelected={(selectedDay ?? days[0]?.date) === day.date}
-                onClick={() => onDayChange(day.date)} />
+                onClick={() => onDayChange(day.date)}
+              />
             ))}
           </div>
         </div>
       )}
 
+      {/* Body */}
       <div className="flex-1 px-4 py-4 space-y-3">
         {isLoading ? (
           <WaveLoader compact label="Fetching forecast…" />
@@ -314,8 +399,11 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
           <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>No data available</p>
         ) : (
           <>
-            <div className="flex items-center justify-between rounded-xl px-4 py-3"
-              style={{ background: ratingStyle.bg, border: `1px solid ${ratingStyle.border}` }}>
+            {/* Rating banner */}
+            <div
+              className="flex items-center justify-between rounded-xl px-4 py-3"
+              style={{ background: ratingStyle.bg, border: `1px solid ${ratingStyle.border}` }}
+            >
               <div>
                 <p className="text-xs font-medium mb-0.5" style={{ color: ratingStyle.text }}>
                   {activeDayObj ? shortDay(activeDayObj.date) : 'Now'}
@@ -330,6 +418,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
               </div>
             </div>
 
+            {/* Core stats */}
             <div className="grid grid-cols-2 gap-2">
               <StatCell label="Wave Height" value={metersToFeet(displayHour.waveHeight)} sub={`${displayHour.waveHeight.toFixed(1)}m`} />
               <StatCell label="Swell Period" value={`${Math.round(displayHour.swellPeriod)}s`} sub={degreesToCompass(displayHour.swellDirection)} />
@@ -353,6 +442,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
               </div>
             </div>
 
+            {/* Expanded details */}
             {isExpanded && (
               <div className="space-y-2 pt-1" style={{ borderTop: '1px dashed var(--border)' }}>
                 <p className="text-xs font-semibold uppercase tracking-wide pt-1" style={{ color: 'var(--text-3)' }}>Full details</p>
@@ -361,7 +451,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                   <StatCell label="Wave Power" value={`${Math.round(displayHour.wavePower)} kW/m`} />
                   {displayHour.wind.gust > 0 && <StatCell label="Wind Gust" value={`${Math.round(displayHour.wind.gust)} km/h`} />}
                   {displayHour.uvIndex > 0 && <StatCell label="UV Index" value={displayHour.uvIndex.toFixed(1)} />}
-                  {displayHour.airTempC != null && <StatCell label="Air Temp" value={`${Math.round(displayHour.airTempC * 9/5 + 32)}°F`} sub={`${Math.round(displayHour.airTempC)}°C`} />}
+                  {displayHour.airTempC != null && <StatCell label="Air Temp" value={`${Math.round(displayHour.airTempC * 9 / 5 + 32)}°F`} sub={`${Math.round(displayHour.airTempC)}°C`} />}
                   {displayHour.precipProb != null && <StatCell label="Rain Chance" value={`${displayHour.precipProb}%`} />}
                 </div>
                 {activeDayObj && activeDayObj.hours.length > 0 && (
@@ -369,7 +459,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                     <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide" style={{ background: 'var(--sand-100)', color: 'var(--text-3)' }}>
                       Hourly — {shortDay(activeDayObj.date)}
                     </div>
-                    <div style={{ overflowX: 'auto' }}>
+                    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                       <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
@@ -392,7 +482,9 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                                 <td className="px-2 py-2" style={{ fontSize: 14, lineHeight: 1 }}>{h.weatherCode !== null ? weatherIcon(h.weatherCode) : '—'}</td>
                                 <td className="px-2 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{tempF(h.airTempC)}</td>
                                 <td className="px-2 py-2">
-                                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold capitalize" style={{ background: rs.bg, color: rs.text, border: `1px solid ${rs.border}` }}>{h.rating}</span>
+                                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold capitalize" style={{ background: rs.bg, color: rs.text, border: `1px solid ${rs.border}` }}>
+                                    {h.rating}
+                                  </span>
                                 </td>
                               </tr>
                             )
@@ -411,13 +503,13 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
   )
 }
 
-// ── Spot forecast hook ────────────────────────────────────────────────────────
+// ── Forecast hook ─────────────────────────────────────────────────────────────
 
 function useSpotForecast(slug: string) {
   return useQuery<SpotForecast>({
     queryKey: ['forecast', slug],
     queryFn: async () => {
-      const r = await fetch(`/api/forecast/${slug}`)
+      const r = await fetch(`/api/forecast/${slug}`, { signal: AbortSignal.timeout(15000) })
       if (!r.ok) throw new Error(`forecast ${r.status}`)
       return r.json()
     },
@@ -427,25 +519,33 @@ function useSpotForecast(slug: string) {
   })
 }
 
-// ── Connected column wrapper ──────────────────────────────────────────────────
+// ── Connected column ──────────────────────────────────────────────────────────
 
 function ConnectedSpotColumn({ slug, spots, selectedDay, onDayChange, isExpanded, onExpandToggle }: {
-  slug: string; spots: SurfSpot[]; selectedDay: string | null
-  onDayChange: (d: string) => void; isExpanded: boolean; onExpandToggle: () => void
+  slug: string
+  spots: SurfSpot[]
+  selectedDay: string | null
+  onDayChange: (d: string) => void
+  isExpanded: boolean
+  onExpandToggle: () => void
 }) {
   const { data: forecast, isLoading, isError } = useSpotForecast(slug)
   const spot = spots.find((s) => s.slug === slug)
   if (!spot) return null
   return (
-    <SpotColumn spot={spot} forecast={forecast} isLoading={isLoading} isError={isError}
+    <SpotColumn
+      spot={spot} forecast={forecast} isLoading={isLoading} isError={isError}
       selectedDay={selectedDay} onDayChange={onDayChange}
-      isExpanded={isExpanded} onExpandToggle={onExpandToggle} />
+      isExpanded={isExpanded} onExpandToggle={onExpandToggle}
+    />
   )
 }
 
-// ── Mobile swipe container ────────────────────────────────────────────────────
+// ── Mobile swipe ──────────────────────────────────────────────────────────────
 
-function MobileSwipeCompare({ activeSlugs, spots, selectedDays, setSelectedDays, expandedSlugs, setExpandedSlugs }: {
+function MobileSwipeCompare({
+  activeSlugs, spots, selectedDays, setSelectedDays, expandedSlugs, setExpandedSlugs,
+}: {
   activeSlugs: string[]
   spots: SurfSpot[]
   selectedDays: Record<string, string>
@@ -454,72 +554,117 @@ function MobileSwipeCompare({ activeSlugs, spots, selectedDays, setSelectedDays,
   setExpandedSlugs: React.Dispatch<React.SetStateAction<Set<string>>>
 }) {
   const [idx, setIdx] = useState(0)
-  const touchStartX = useRef<number | null>(null)
+  const containerRef  = useRef<HTMLDivElement>(null)
+  // Store mutable gesture state in a ref so event handlers don't go stale
+  const gesture = useRef({ startX: 0, startY: 0, decided: false, isHoriz: false })
+  // Keep a ref of the count so the touchend closure always has the latest value
+  const countRef = useRef(activeSlugs.length)
+  useEffect(() => { countRef.current = activeSlugs.length }, [activeSlugs.length])
 
-  // Clamp idx when slugs change
+  // Clamp index when spot list shrinks
   useEffect(() => {
-    setIdx((i) => Math.min(i, activeSlugs.length - 1))
+    setIdx((i) => Math.min(i, Math.max(0, activeSlugs.length - 1)))
   }, [activeSlugs.length])
 
-  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX }
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return
-    const delta = e.changedTouches[0].clientX - touchStartX.current
-    touchStartX.current = null
-    if (delta < -50 && idx < activeSlugs.length - 1) setIdx((i) => i + 1)
-    if (delta > 50  && idx > 0)                       setIdx((i) => i - 1)
-  }
+  // Native touch listeners with passive:false on touchmove so we can call preventDefault
+  // — this is the only reliable way to block page scroll during a horizontal swipe on iOS
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
 
-  const slug = activeSlugs[idx]
+    const onStart = (e: TouchEvent) => {
+      gesture.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, decided: false, isHoriz: false }
+    }
+
+    const onMove = (e: TouchEvent) => {
+      const g = gesture.current
+      if (!g.decided) {
+        const dx = Math.abs(e.touches[0].clientX - g.startX)
+        const dy = Math.abs(e.touches[0].clientY - g.startY)
+        if (dx > 6 || dy > 6) {
+          g.isHoriz = dx > dy
+          g.decided = true
+        }
+      }
+      // Block the browser's native scroll when swiping horizontally
+      if (g.isHoriz) e.preventDefault()
+    }
+
+    const onEnd = (e: TouchEvent) => {
+      const g = gesture.current
+      if (!g.isHoriz) return
+      const dx = e.changedTouches[0].clientX - g.startX
+      setIdx((i) => {
+        if (dx < -50) return Math.min(i + 1, countRef.current - 1)
+        if (dx >  50) return Math.max(i - 1, 0)
+        return i
+      })
+      gesture.current.isHoriz = false
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove',  onMove,  { passive: false }) // must be non-passive
+    el.addEventListener('touchend',   onEnd,   { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove',  onMove)
+      el.removeEventListener('touchend',   onEnd)
+    }
+  }, []) // intentionally empty — refs keep closure values current
+
+  const slug = activeSlugs[idx] ?? ''
 
   return (
     <div>
-      {/* Swipe area */}
-      <div
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        style={{ touchAction: 'pan-y' }}
-      >
-        <ConnectedSpotColumn
-          key={slug}
-          slug={slug}
-          spots={spots}
-          selectedDay={selectedDays[slug] ?? null}
-          onDayChange={(date) => setSelectedDays((prev) => ({ ...prev, [slug]: date }))}
-          isExpanded={expandedSlugs.has(slug)}
-          onExpandToggle={() => setExpandedSlugs((prev) => {
-            const next = new Set(prev)
-            next.has(slug) ? next.delete(slug) : next.add(slug)
-            return next
-          })}
-        />
+      {/* Swipe area — ref used for native touch listeners */}
+      <div ref={containerRef} style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
+        {slug ? (
+          <ConnectedSpotColumn
+            key={slug}
+            slug={slug}
+            spots={spots}
+            selectedDay={selectedDays[slug] ?? null}
+            onDayChange={(date) => setSelectedDays((prev) => ({ ...prev, [slug]: date }))}
+            isExpanded={expandedSlugs.has(slug)}
+            onExpandToggle={() =>
+              setExpandedSlugs((prev) => {
+                const next = new Set(prev)
+                next.has(slug) ? next.delete(slug) : next.add(slug)
+                return next
+              })
+            }
+          />
+        ) : null}
       </div>
 
-      {/* Navigation */}
+      {/* Swipe hint + navigation */}
       <div className="flex items-center justify-between mt-4 px-1">
         <button
           onClick={() => setIdx((i) => Math.max(i - 1, 0))}
           disabled={idx === 0}
-          className="rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-30"
-          style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+          className="rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-30"
+          style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)', WebkitTapHighlightColor: 'transparent' }}
         >
           ← Prev
         </button>
 
         {/* Dot indicators */}
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-3 items-center">
           {activeSlugs.map((s, i) => {
             const spot = spots.find((sp) => sp.slug === s)
             return (
-              <button key={s} onClick={() => setIdx(i)}
+              <button
+                key={s}
+                onClick={() => setIdx(i)}
                 className="flex flex-col items-center gap-1"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
                 title={spot?.name}
               >
                 <div
                   className="rounded-full transition-all"
                   style={{
-                    width: i === idx ? 10 : 7,
-                    height: i === idx ? 10 : 7,
+                    width:      i === idx ? 10 : 7,
+                    height:     i === idx ? 10 : 7,
                     background: i === idx ? 'var(--ocean-600)' : 'var(--border)',
                   }}
                 />
@@ -536,80 +681,110 @@ function MobileSwipeCompare({ activeSlugs, spots, selectedDays, setSelectedDays,
         <button
           onClick={() => setIdx((i) => Math.min(i + 1, activeSlugs.length - 1))}
           disabled={idx === activeSlugs.length - 1}
-          className="rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-30"
-          style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+          className="rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-30"
+          style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)', WebkitTapHighlightColor: 'transparent' }}
         >
           Next →
         </button>
       </div>
+
+      <p className="text-center text-xs mt-2" style={{ color: 'var(--text-3)' }}>
+        Swipe left or right to switch spots
+      </p>
     </div>
   )
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const MAX_SPOTS = 3
+const MAX_SPOTS   = 3
 const STORAGE_KEY = 'wavefinder-compare-slugs'
+const SLUG_RE     = /^[a-z0-9-]{1,120}$/
 
 export default function ComparePage() {
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>(['', '', ''])
-  const [selectedDays, setSelectedDays]   = useState<Record<string, string>>({})
+  const [selectedDays,  setSelectedDays]  = useState<Record<string, string>>({})
   const [expandedSlugs, setExpandedSlugs] = useState<Set<string>>(new Set())
 
+  // Restore saved slugs from localStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        const SLUG_RE = /^[a-z0-9-]{1,120}$/
-        if (Array.isArray(parsed) && parsed.length === MAX_SPOTS &&
-            parsed.every((s) => typeof s === 'string' && (s === '' || SLUG_RE.test(s))))
-          setSelectedSlugs(parsed)
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (
+        Array.isArray(parsed) &&
+        parsed.length === MAX_SPOTS &&
+        parsed.every((s) => typeof s === 'string' && (s === '' || SLUG_RE.test(s)))
+      ) {
+        setSelectedSlugs(parsed)
       }
-    } catch { /* ignore */ }
+    } catch { /* corrupt storage — ignore */ }
   }, [])
 
-  const { data: spots = [], isLoading: spotsLoading } = useQuery<SurfSpot[]>({
+  const { data: spots = [], isLoading: spotsLoading, isError: spotsError } = useQuery<SurfSpot[]>({
     queryKey: ['spots-all'],
-    queryFn: () => fetch('/api/spots?limit=200').then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch('/api/spots', { signal: AbortSignal.timeout(12000) })
+      if (!r.ok) throw new Error(`${r.status}`)
+      const data = await r.json()
+      return Array.isArray(data) ? data : []
+    },
     staleTime: 60 * 60 * 1000,
+    retry: 2,
   })
 
-  const activeSlugs = selectedSlugs.filter(Boolean)
+  const activeSlugs   = selectedSlugs.filter(Boolean)
   const hasComparison = activeSlugs.length >= 2
 
   function handleSlugChange(index: number, slug: string) {
     setSelectedSlugs((prev) => {
       const next = [...prev]
       next[index] = slug
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* quota full */ }
       return next
     })
   }
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--sand-50)' }}>
-      {/* Page header */}
-      <div className="sticky top-[57px] z-40 border-b" style={{ background: 'var(--sand-50)', borderColor: 'var(--border)' }}>
+      {/* Sticky search header */}
+      <div
+        className="sticky z-40 border-b"
+        style={{ top: '57px', background: 'var(--sand-50)', borderColor: 'var(--border)' }}
+      >
         <div className="mx-auto max-w-7xl px-5 py-4">
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold leading-tight"
-                  style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
-                  Compare Spots
-                </h1>
-                <p className="hidden sm:block text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
-                  Compare conditions across multiple breaks
-                </p>
+            <div>
+              <h1
+                className="text-xl sm:text-2xl font-bold leading-tight"
+                style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}
+              >
+                Compare Spots
+              </h1>
+              <p className="hidden sm:block text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
+                Compare conditions across multiple breaks
+              </p>
+            </div>
+
+            {spotsError ? (
+              <p className="text-sm" style={{ color: '#ef4444' }}>
+                Could not load spots — please refresh the page.
+              </p>
+            ) : (
+              <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3" style={{ position: 'relative', zIndex: 50 }}>
+                {Array.from({ length: MAX_SPOTS }).map((_, i) => (
+                  <SpotSearchInput
+                    key={i}
+                    index={i}
+                    value={selectedSlugs[i]}
+                    spots={spots}
+                    onChange={(slug) => handleSlugChange(i, slug)}
+                    isLoading={spotsLoading}
+                  />
+                ))}
               </div>
-            </div>
-            <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-              {Array.from({ length: MAX_SPOTS }).map((_, i) => (
-                <SpotSearchInput key={i} index={i} value={selectedSlugs[i]} spots={spots}
-                  onChange={(slug) => handleSlugChange(i, slug)} isLoading={spotsLoading} />
-              ))}
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -618,8 +793,10 @@ export default function ComparePage() {
       <div className="mx-auto max-w-7xl px-5 py-8">
         {!hasComparison ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full"
-              style={{ background: 'var(--ocean-50)', border: '2px solid var(--ocean-200)' }}>
+            <div
+              className="mb-6 flex h-20 w-20 items-center justify-center rounded-full"
+              style={{ background: 'var(--ocean-50)', border: '2px solid var(--ocean-200)' }}
+            >
               <svg width="40" height="30" viewBox="0 0 40 30" fill="none">
                 <path d="M2 15 C6 10 10 8 14 11 C18 14 20 9 24 8 C28 7 32 10 36 12 C38 13 40 13.5 40 13.5"
                   stroke="var(--ocean-400)" strokeWidth="2.5" strokeLinecap="round" />
@@ -631,12 +808,12 @@ export default function ComparePage() {
               Select at least 2 spots to compare
             </h2>
             <p className="text-sm max-w-sm" style={{ color: 'var(--text-3)' }}>
-              Choose spots from the dropdowns above to see their conditions and 7-day forecasts side by side.
+              Choose spots from the search boxes above to see their conditions and 7-day forecasts side by side.
             </p>
           </div>
         ) : (
           <>
-            {/* Mobile: swipe one at a time */}
+            {/* Mobile: one spot at a time with swipe */}
             <div className="sm:hidden">
               <MobileSwipeCompare
                 activeSlugs={activeSlugs}
@@ -648,20 +825,25 @@ export default function ComparePage() {
               />
             </div>
 
-            {/* Desktop: side-by-side grid */}
+            {/* Desktop: side-by-side */}
             <div className={`hidden sm:grid gap-5 ${
               activeSlugs.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'
             }`}>
               {activeSlugs.map((slug) => (
-                <ConnectedSpotColumn key={slug} slug={slug} spots={spots}
+                <ConnectedSpotColumn
+                  key={slug}
+                  slug={slug}
+                  spots={spots}
                   selectedDay={selectedDays[slug] ?? null}
                   onDayChange={(date) => setSelectedDays((prev) => ({ ...prev, [slug]: date }))}
                   isExpanded={expandedSlugs.has(slug)}
-                  onExpandToggle={() => setExpandedSlugs((prev) => {
-                    const next = new Set(prev)
-                    next.has(slug) ? next.delete(slug) : next.add(slug)
-                    return next
-                  })}
+                  onExpandToggle={() =>
+                    setExpandedSlugs((prev) => {
+                      const next = new Set(prev)
+                      next.has(slug) ? next.delete(slug) : next.add(slug)
+                      return next
+                    })
+                  }
                 />
               ))}
             </div>
