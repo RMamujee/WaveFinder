@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { SurfSpot, ParkingOption } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 
@@ -312,10 +315,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
 
     ;(async () => {
       const L = (await import('leaflet')).default
-      await import('leaflet/dist/leaflet.css')
-      await import('leaflet.markercluster/dist/MarkerCluster.css')
-      await import('leaflet.markercluster/dist/MarkerCluster.Default.css')
-      await import('leaflet.markercluster') // registers L.MarkerClusterGroup as side-effect
+      await import('leaflet.markercluster')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const MarkerClusterGroup = (L as any).MarkerClusterGroup
 
@@ -374,9 +374,9 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
       const L = (await import('leaflet')).default
       await import('leaflet.markercluster')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const MarkerClusterGroup = (L as any).MarkerClusterGroup
+      const MCG2 = (L as any).MarkerClusterGroup
       if (!mapInstance.current) return
-      await rebuildCluster(mapInstance.current, L, MarkerClusterGroup, spots)
+      await rebuildCluster(mapInstance.current, L, MCG2, spots)
     })().catch(console.error)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spots.map(s => `${s.id}:${s.currentRating ?? '?'}:${s.currentWaveHeight ?? 'x'}`).join('|')])
