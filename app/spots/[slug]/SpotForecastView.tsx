@@ -369,12 +369,12 @@ export function SpotForecastView({ spot }: Props) {
               </div>
             </div>
 
-            {/* Satellite — cols 2+3, row 2 (fills space next to Best Times) */}
-            <div className="lg:col-span-2">
+            {/* Satellite — cols 2+3, row 2 (stretches to fill remaining Best Times height) */}
+            <div className="lg:col-span-2" style={{ display: 'flex', flexDirection: 'column' }}>
               <SectionTitle>Satellite View</SectionTitle>
               <div
                 className="rounded-2xl overflow-hidden"
-                style={{ border: '1px solid var(--border)', height: '300px' }}
+                style={{ border: '1px solid var(--border)', flex: 1, minHeight: '260px' }}
               >
                 <SpotSatelliteMap
                   lat={spot.lat}

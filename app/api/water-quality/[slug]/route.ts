@@ -82,17 +82,21 @@ export async function GET(
     lastUpdated: new Date().toISOString(),
   }
 
-  // Step 1 — find BEACH program monitoring stations within 3 miles
-  const stationUrl = `https://www.waterqualitydata.us/data/Station/search?lat=${spot.lat}&long=${spot.lng}&within=20&characteristicName=Enterococcus&mimeType=csv`
+  // Bacterial indicators used by different agencies (CA uses Enterococcus; some use E. coli)
+  const CHAR_NAMES = ['Enterococcus', 'E. coli', 'Fecal Coliform']
+  const charParam = CHAR_NAMES.map(c => `characteristicName=${encodeURIComponent(c)}`).join('&')
+
+  // Step 1 — find BEACH program monitoring stations within 25 miles
+  const stationUrl = `https://www.waterqualitydata.us/data/Station/search?lat=${spot.lat}&long=${spot.lng}&within=25&${charParam}&mimeType=csv`
   const stationCSV = await fetchText(stationUrl)
   if (!stationCSV) return NextResponse.json(noData)
 
   const stations = parseCSV(stationCSV)
   if (stations.length === 0) return NextResponse.json(noData)
 
-  // Use up to 3 nearest stations (CSV is already sorted by distance)
+  // Use up to 5 nearest stations (CSV is already sorted by distance)
   const siteIds = stations
-    .slice(0, 3)
+    .slice(0, 5)
     .map(s => s['MonitoringLocationIdentifier'])
     .filter((id): id is string => typeof id === 'string' && /^[\w:.-]{1,60}$/.test(id))
 
@@ -100,10 +104,10 @@ export async function GET(
 
   const beachName = stations[0]['MonitoringLocationName'] ?? null
 
-  // Step 2 — fetch results from the last 180 days for those stations
+  // Step 2 — fetch results from the last 180 days for those stations, all characteristic names
   const since = new Date(Date.now() - 180 * 24 * 3600 * 1000)
   const sinceStr = `${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}-${since.getFullYear()}`
-  const resultUrl = `https://www.waterqualitydata.us/data/Result/search?siteid=${siteIds.map(encodeURIComponent).join(';')}&characteristicName=Enterococcus&startDateLo=${sinceStr}&mimeType=csv`
+  const resultUrl = `https://www.waterqualitydata.us/data/Result/search?siteid=${siteIds.map(encodeURIComponent).join(';')}&${charParam}&startDateLo=${sinceStr}&mimeType=csv`
   const resultCSV = await fetchText(resultUrl)
   if (!resultCSV) return NextResponse.json(noData)
 
