@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
+import { Suspense } from 'react'
 import { SpotForecastView } from './SpotForecastView'
 import { SpotCard } from '@/components/spots/SpotCard'
 import Link from 'next/link'
@@ -47,7 +48,9 @@ export default async function SpotPage({ params }: Props) {
 
   return (
     <>
-      <SpotForecastView spot={spot as SurfSpot} />
+      <Suspense>
+        <SpotForecastView spot={spot as SurfSpot} />
+      </Suspense>
 
       {/* More spots in this region */}
       {nearbySpots.length > 0 && (

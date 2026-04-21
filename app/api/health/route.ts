@@ -8,8 +8,9 @@ export async function GET() {
     await prisma.$queryRaw`SELECT 1`
     return NextResponse.json({ status: 'ok', db: 'connected', ts: new Date().toISOString() })
   } catch (err) {
+    console.error('[health] db error:', err)
     return NextResponse.json(
-      { status: 'error', db: 'unreachable', error: String(err) },
+      { status: 'error', db: 'unreachable' },
       { status: 503 }
     )
   }

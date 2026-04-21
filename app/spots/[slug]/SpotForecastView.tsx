@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ForecastDay, ConditionRating } from '@/types/forecast'
 import { WaveChart } from '@/components/forecast/WaveChart'
@@ -70,7 +71,16 @@ const DIFFICULTY_STYLES = {
 }
 
 export function SpotForecastView({ spot }: Props) {
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const [selectedDay, setSelectedDay] = useState<string | null>(
+    searchParams.get('date')
+  )
+
+  function selectDay(date: string) {
+    setSelectedDay(date)
+    router.replace(`/spots/${spot.slug}?date=${date}`, { scroll: false })
+  }
 
   const { data: forecast, isPending, error } = useQuery<SpotForecast>({
     queryKey: ['forecast', spot.slug],
@@ -261,6 +271,7 @@ export function SpotForecastView({ spot }: Props) {
                 >
                   Log Session
                 </a>
+                <ShareButton slug={spot.slug} selectedDay={selectedDay} />
               </div>
             </div>
           </div>
@@ -301,7 +312,7 @@ export function SpotForecastView({ spot }: Props) {
                     selectedDay === day.date ||
                     (!selectedDay && day === forecast.forecast[0])
                   }
-                  onClick={() => setSelectedDay(day.date)}
+                  onClick={() => selectDay(day.date)}
                 />
               ))}
             </div>
@@ -552,6 +563,35 @@ export function SpotForecastView({ spot }: Props) {
   )
 }
 
+
+function ShareButton({ slug, selectedDay }: { slug: string; selectedDay: string | null }) {
+  const [copied, setCopied] = useState(false)
+  const share = async () => {
+    const url = `${window.location.origin}/spots/${slug}${selectedDay ? `?date=${selectedDay}` : ''}`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'WaveFinder forecast', url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+    } catch { /* user cancelled */ }
+  }
+  return (
+    <button
+      onClick={share}
+      className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition hover:opacity-80"
+      style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+    >
+      {copied ? (
+        <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6 9 17l-5-5" /></svg> Copied!</>
+      ) : (
+        <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Share</>
+      )}
+    </button>
+  )
+}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
