@@ -319,11 +319,11 @@ export function SpotForecastView({ spot }: Props) {
           />
         </div>
 
-        {/* Row 2: Best Times (left) | Wind + UV stacked (middle) | Satellite (right) */}
+        {/* Row 2: Best Times (col 1, spans 2 rows) | Wind (col 2) | UV (col 3) | Satellite (cols 2+3, row 2) */}
         {forecast?.forecast && activeDayData && (
           <div className="grid gap-4 lg:grid-cols-3">
-            {/* Best Times — col 1 */}
-            <div>
+            {/* Best Times — col 1, spans both rows */}
+            <div className="lg:row-span-2">
               <SectionTitle>
                 Best Times
                 <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-3)' }}>
@@ -339,7 +339,7 @@ export function SpotForecastView({ spot }: Props) {
               )}
             </div>
 
-            {/* Wind Speed + UV — cols 2+3, side by side */}
+            {/* Wind Speed — col 2, row 1 */}
             <div>
               <SectionTitle>Wind Speed</SectionTitle>
               <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
@@ -347,6 +347,7 @@ export function SpotForecastView({ spot }: Props) {
               </div>
             </div>
 
+            {/* UV Index — col 3, row 1 */}
             <div>
               <SectionTitle>
                 UV Index —{' '}
@@ -357,12 +358,12 @@ export function SpotForecastView({ spot }: Props) {
               </div>
             </div>
 
-            {/* Satellite Map — spans all 3 cols */}
-            <div className="lg:col-span-3">
+            {/* Satellite — cols 2+3, row 2 (fills space next to Best Times) */}
+            <div className="lg:col-span-2 flex flex-col">
               <SectionTitle>Satellite View</SectionTitle>
               <div
-                className="rounded-2xl overflow-hidden"
-                style={{ border: '1px solid var(--border)', aspectRatio: '21/6' }}
+                className="rounded-2xl overflow-hidden flex-1"
+                style={{ border: '1px solid var(--border)', minHeight: '200px' }}
               >
                 <SpotSatelliteMap
                   lat={spot.lat}
