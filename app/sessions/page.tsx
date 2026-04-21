@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { format, parseISO } from 'date-fns'
+import { getBoards, getWetsuits, BOARD_TYPES, WETSUIT_OPTIONS } from '@/lib/gear'
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -104,8 +105,6 @@ function WaveRating({ value, max = 5 }: { value: number; max?: number }) {
 
 // ─── Log Session Modal ────────────────────────────────────────────────────────
 
-const BOARD_TYPES = ['Shortboard', 'Longboard', 'Fish', 'Mid-length', 'Gun', 'Foil', 'Bodyboard', 'Other']
-const WETSUIT_OPTIONS = ['None / Boardshorts', '2mm', '3/2mm', '4/3mm', '5/4mm', 'Drysuit']
 const WIND_DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 
 const EMPTY_FORM: FormState = {
@@ -179,6 +178,8 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
   const defaultTime = `${String(now.getHours()).padStart(2, '0')}:00`
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, sessionTime: defaultTime, ...initialData })
   const [submitError, setSubmitError] = useState('')
+  const [lockerBoards] = useState(() => getBoards())
+  const [lockerWetsuits] = useState(() => getWetsuits())
 
   // Autocomplete state
   const [suggestions, setSuggestions] = useState<SpotSuggestion[]>([])
@@ -709,16 +710,25 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
             <p style={sectionHeadingStyle()}>③ Equipment</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label style={labelStyle()}>Board type</label>
+                <label style={labelStyle()}>Board</label>
                 <select
                   value={form.boardType}
                   onChange={(e) => set('boardType', e.target.value)}
                   style={inputStyle({ appearance: 'auto' })}
                 >
                   <option value="">— select —</option>
-                  {BOARD_TYPES.map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
+                  {lockerBoards.length > 0 && (
+                    <optgroup label="My Gear Locker">
+                      {lockerBoards.map((b) => (
+                        <option key={b.id} value={b.name}>{b.name}{b.lengthFt ? ` (${b.lengthFt})` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Generic">
+                    {BOARD_TYPES.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
               <div>
@@ -729,9 +739,18 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                   style={inputStyle({ appearance: 'auto' })}
                 >
                   <option value="">— select —</option>
-                  {WETSUIT_OPTIONS.map((w) => (
-                    <option key={w} value={w}>{w}</option>
-                  ))}
+                  {lockerWetsuits.length > 0 && (
+                    <optgroup label="My Gear Locker">
+                      {lockerWetsuits.map((w) => (
+                        <option key={w.id} value={w.name}>{w.name} ({w.thickness})</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Generic">
+                    {WETSUIT_OPTIONS.map((w) => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
             </div>

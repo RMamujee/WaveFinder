@@ -1,2 +1,2 @@
-// Auth replaced with device-local cookies — no server-side accounts or sessions
+// All user data is stored locally on the device — no server-side accounts
 export {}
