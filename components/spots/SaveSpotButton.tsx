@@ -18,14 +18,17 @@ export function SaveSpotButton({ spotId }: { spotId: string }) {
 
   const handleClick = () => {
     const saved = getSavedIds()
-    if (isSaved) {
-      localStorage.setItem(SAVED_KEY, JSON.stringify(saved.filter((id) => id !== spotId)))
-      setIsSaved(false)
-    } else {
-      localStorage.setItem(SAVED_KEY, JSON.stringify([...saved, spotId]))
-      setIsSaved(true)
+    try {
+      if (isSaved) {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(saved.filter((id) => id !== spotId)))
+        setIsSaved(false)
+      } else {
+        localStorage.setItem(SAVED_KEY, JSON.stringify([...saved, spotId]))
+        setIsSaved(true)
+      }
+    } catch {
+      // QuotaExceededError — storage full, skip persisting
     }
-    // Notify dashboard of the change
     window.dispatchEvent(new Event('storage'))
   }
 

@@ -160,6 +160,7 @@ export async function fetchWindForecast(
     const res = await fetch(`${WEATHER_BASE}?${params}`, {
       next: { revalidate: 3600 },
       headers: HEADERS,
+      signal: AbortSignal.timeout(15000),
     })
 
     if (!res.ok) throw new Error(`status ${res.status}`)
