@@ -201,9 +201,9 @@ export function SpotForecastView({ spot }: Props) {
               {forecast && (
                 <div className="hidden sm:flex flex-col items-center">
                   <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>
-                    Wind — 7 day
+                    Wind — {activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : '7 day'}
                   </p>
-                  <WindRoseChart days={forecast.forecast} size={175} showLegend={false} />
+                  <WindRoseChart days={activeDayData ? [activeDayData] : forecast.forecast} size={175} showLegend={false} />
                   <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 mt-1.5" style={{ maxWidth: 150 }}>
                     {[
                       { color: '#16a34a', label: '<10' },
