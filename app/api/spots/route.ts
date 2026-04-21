@@ -36,9 +36,9 @@ export async function GET(req: Request) {
       AND: [
         ids.length ? { id: { in: ids } } : {},
         search ? { OR: [
-          { name: { contains: search } },
-          { region: { contains: search } },
-          { country: { contains: search } },
+          { name: { contains: search, mode: 'insensitive' } },
+          { region: { contains: search, mode: 'insensitive' } },
+          { country: { contains: search, mode: 'insensitive' } },
         ]} : {},
         difficulty ? { difficulty } : {},
         country ? { country } : {},

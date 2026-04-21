@@ -226,9 +226,10 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
     debounceRef.current = setTimeout(async () => {
       setIsSearching(true)
       try {
-        const res = await fetch(`/api/spots?q=${encodeURIComponent(value.trim())}`)
+        const res = await fetch(`/api/spots?q=${encodeURIComponent(value.trim())}`, { signal: AbortSignal.timeout(8000) })
         if (!res.ok) throw new Error(`${res.status}`)
-        const spots: SpotSuggestion[] = await res.json()
+        const raw = await res.json()
+        const spots: SpotSuggestion[] = Array.isArray(raw) ? raw : []
         setSuggestions(spots.slice(0, 8))
         setShowSuggestions(spots.length > 0)
       } catch {
@@ -257,8 +258,12 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
 
     setAutoFilling(true)
     try {
-      const res = await fetch(`/api/forecast/${selectedSlug}`)
+      const capturedSlug = selectedSlug
+      const capturedDate = form.sessionDate
+      const res = await fetch(`/api/forecast/${capturedSlug}`, { signal: AbortSignal.timeout(10000) })
+      if (!res.ok) return
       const data: { forecast?: Array<{ date: string; hours: Array<{ time: string; waveHeight: number; swellPeriod: number; wind: { speed: number; directionLabel: string }; waterTemp: number | null }> }> } = await res.json()
+      if (capturedSlug !== selectedSlug || capturedDate !== form.sessionDate) return
 
       const targetDay = data.forecast?.find((d) => d.date === form.sessionDate)
       if (!targetDay?.hours.length) return
@@ -312,7 +317,11 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
-      localStorage.setItem(SESSIONS_KEY, JSON.stringify([entry, ...stored]))
+      try {
+        localStorage.setItem(SESSIONS_KEY, JSON.stringify([entry, ...stored]))
+      } catch {
+        // QuotaExceededError — storage full
+      }
       window.dispatchEvent(new Event('storage'))
       return entry
     },

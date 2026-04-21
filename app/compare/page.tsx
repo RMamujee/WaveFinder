@@ -561,7 +561,10 @@ export default function ComparePage() {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length === MAX_SPOTS) setSelectedSlugs(parsed)
+        const SLUG_RE = /^[a-z0-9-]{1,120}$/
+        if (Array.isArray(parsed) && parsed.length === MAX_SPOTS &&
+            parsed.every((s) => typeof s === 'string' && (s === '' || SLUG_RE.test(s))))
+          setSelectedSlugs(parsed)
       }
     } catch { /* ignore */ }
   }, [])

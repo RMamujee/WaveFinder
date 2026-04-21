@@ -21,7 +21,8 @@ export default function DashboardPage() {
     const ids = getSavedIds()
     if (!ids.length) { setSavedSpots([]); setLoading(false); return }
     try {
-      const res = await fetch(`/api/spots?ids=${ids.join(',')}`)
+      const res = await fetch(`/api/spots?ids=${ids.join(',')}`, { signal: AbortSignal.timeout(10000) })
+      if (!res.ok) throw new Error(`${res.status}`)
       const data = await res.json()
       setSavedSpots(Array.isArray(data) ? data : [])
     } catch {

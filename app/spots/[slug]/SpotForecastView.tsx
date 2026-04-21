@@ -567,7 +567,8 @@ export function SpotForecastView({ spot }: Props) {
 function ShareButton({ slug, selectedDay }: { slug: string; selectedDay: string | null }) {
   const [copied, setCopied] = useState(false)
   const share = async () => {
-    const url = `${window.location.origin}/spots/${slug}${selectedDay ? `?date=${selectedDay}` : ''}`
+    const origin = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin
+    const url = `${origin}/spots/${slug}${selectedDay ? `?date=${selectedDay}` : ''}`
     try {
       if (navigator.share) {
         await navigator.share({ title: 'WaveFinder forecast', url })

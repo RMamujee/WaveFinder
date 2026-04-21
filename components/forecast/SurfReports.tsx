@@ -45,7 +45,11 @@ function StatCard({ label, value, unit, sub }: { label: string; value: string | 
 export function SurfReports({ spotSlug }: { spotSlug: string }) {
   const { data, isLoading } = useQuery<{ report: LiveConditionReport }>({
     queryKey: ['surf-reports', spotSlug],
-    queryFn: () => fetch(`/api/surf-reports/${spotSlug}`).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/surf-reports/${spotSlug}`, { signal: AbortSignal.timeout(10000) })
+      if (!r.ok) throw new Error(`${r.status}`)
+      return r.json()
+    },
     staleTime: 30 * 60 * 1000,
   })
 
