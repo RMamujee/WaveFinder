@@ -6,6 +6,8 @@ import {
 } from 'recharts'
 import type { ForecastDay } from '@/types/forecast'
 import { format, parseISO } from 'date-fns'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeightDec } from '@/lib/units'
 
 interface Props {
   days: ForecastDay[]
@@ -14,6 +16,7 @@ interface Props {
 
 export function WaveChart({ days, activeDayData }: Props) {
   const [mode, setMode] = useState<'7day' | 'daily'>('daily')
+  const { unit } = useUnits()
 
   const sevenDayData = days.flatMap((day) =>
     day.hours
@@ -89,8 +92,8 @@ export function WaveChart({ days, activeDayData }: Props) {
               tick={{ fill: '#8888aa', fontSize: 10 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v) => `${v}m`}
-              width={30}
+              tickFormatter={(v) => fmtHeightDec(v, unit)}
+              width={34}
             />
             <Tooltip
               contentStyle={{
@@ -102,7 +105,7 @@ export function WaveChart({ days, activeDayData }: Props) {
               }}
               labelStyle={{ color: '#4a4a6a', marginBottom: '4px' }}
               formatter={(value, name) => [
-                `${value}m`,
+                fmtHeightDec(value as number, unit),
                 name === 'waveHeight' ? 'Wave' : 'Swell',
               ]}
             />
