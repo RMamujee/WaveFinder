@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { format, parseISO } from 'date-fns'
 import { getBoards, getWetsuits, BOARD_TYPES, WETSUIT_OPTIONS } from '@/lib/gear'
+import { Icon } from '@/components/ui/Icon'
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -95,8 +96,8 @@ function WaveRating({ value, max = 5 }: { value: number; max?: number }) {
   return (
     <span style={{ letterSpacing: '1px', fontSize: '14px' }}>
       {Array.from({ length: max }, (_, i) => (
-        <span key={i} style={{ opacity: i < value ? 1 : 0.2 }}>
-          🌊
+        <span key={i} style={{ opacity: i < value ? 1 : 0.2, color: 'var(--ocean-500)' }}>
+          <Icon name="wave" size={14} strokeWidth={1.6} />
         </span>
       ))}
     </span>
@@ -188,6 +189,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
   const [isSearching, setIsSearching] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const comboboxRef = useRef<HTMLDivElement>(null)
+  const autoFillGenRef = useRef(0)
 
   // Auto-fill state
   const [autoFilling, setAutoFilling] = useState(false)
@@ -243,6 +245,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
 
   // Pick a spot from dropdown
   const selectSuggestion = (spot: SpotSuggestion) => {
+    autoFillGenRef.current++ // cancel any in-flight autofill
     setForm((prev) => ({ ...prev, spotName: spot.name, region: spot.region }))
     setSelectedSlug(spot.slug)
     setSuggestions([])
@@ -256,14 +259,14 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
     const sevenDaysOut = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
     if (form.sessionDate > sevenDaysOut) return  // outside forecast window
 
+    const gen = ++autoFillGenRef.current
     setAutoFilling(true)
     try {
-      const capturedSlug = selectedSlug
-      const capturedDate = form.sessionDate
-      const res = await fetch(`/api/forecast/${capturedSlug}`, { signal: AbortSignal.timeout(10000) })
+      const res = await fetch(`/api/forecast/${selectedSlug}`, { signal: AbortSignal.timeout(10000) })
+      if (gen !== autoFillGenRef.current) return
       if (!res.ok) return
       const data: { forecast?: Array<{ date: string; hours: Array<{ time: string; waveHeight: number; swellPeriod: number; wind: { speed: number; directionLabel: string }; waterTemp: number | null }> }> } = await res.json()
-      if (capturedSlug !== selectedSlug || capturedDate !== form.sessionDate) return
+      if (gen !== autoFillGenRef.current) return
 
       const targetDay = data.forecast?.find((d) => d.date === form.sessionDate)
       if (!targetDay?.hours.length) return
@@ -792,7 +795,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                       }}
                       title={`${n} star${n !== 1 ? 's' : ''}`}
                     >
-                      🌊
+                      <Icon name="wave" size={16} strokeWidth={1.6} />
                     </button>
                   ))}
                   {form.rating > 0 && (
@@ -869,7 +872,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
               fontFamily: 'DM Sans, sans-serif',
             }}
           >
-            {mutation.isPending ? 'Logging session…' : '🌊 Log Session'}
+            {mutation.isPending ? 'Logging session…' : <><Icon name="wave" size={14} strokeWidth={1.8} /> Log Session</>}
           </button>
         </form>
       </div>
@@ -1012,7 +1015,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
             </h3>
             {session.region && (
               <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>
-                📍 {session.region}
+                <Icon name="pin" size={11} strokeWidth={1.6} style={{ display: 'inline', verticalAlign: 'middle' }} /> {session.region}
               </p>
             )}
           </div>
@@ -1045,7 +1048,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
           >
             {session.waveHeightFt !== null && (
               <Chip>
-                🌊 {session.waveHeightFt}ft
+                <Icon name="wave" size={12} strokeWidth={1.6} style={{ display: 'inline', verticalAlign: 'middle' }} /> {session.waveHeightFt}ft
                 {session.wavePeriod !== null ? ` @ ${session.wavePeriod}s` : ''}
               </Chip>
             )}
@@ -1063,7 +1066,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
         {/* Equipment row */}
         {(session.boardType || session.wetsuitMm) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {session.boardType && <Chip variant="sand">🏄 {session.boardType}</Chip>}
+            {session.boardType && <Chip variant="sand"><Icon name="surfer" size={12} strokeWidth={1.6} style={{ display: 'inline', verticalAlign: 'middle' }} /> {session.boardType}</Chip>}
             {session.wetsuitMm && <Chip variant="sand">🤿 {session.wetsuitMm}</Chip>}
           </div>
         )}
@@ -1193,7 +1196,7 @@ function SessionsPageInner() {
               boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
             }}
           >
-            🌊 Session logged!
+            <Icon name="wave" size={14} strokeWidth={1.6} style={{ display: 'inline', verticalAlign: 'middle' }} /> Session logged!
           </div>
         )}
 
@@ -1321,7 +1324,7 @@ function SessionsPageInner() {
                         }, {})
                         return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
                       })(),
-                      icon: '📍',
+                      icon: 'pin',
                     },
                     {
                       label: 'Fav board',
@@ -1332,7 +1335,7 @@ function SessionsPageInner() {
                         }, {})
                         return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
                       })(),
-                      icon: '🏄',
+                      icon: 'surfer',
                     },
                   ] as { label: string; value: string; icon: string }[]
                 ).map((stat) => (
@@ -1346,7 +1349,9 @@ function SessionsPageInner() {
                       textAlign: 'center',
                     }}
                   >
-                    <div style={{ fontSize: '18px', marginBottom: '3px' }}>{stat.icon}</div>
+                    <div style={{ marginBottom: '3px', color: 'var(--ocean-500)', display: 'flex', justifyContent: 'center' }}>
+                      <Icon name={stat.icon as import('@/components/ui/Icon').IconName} size={18} strokeWidth={1.6} />
+                    </div>
                     <div
                       style={{
                         fontSize: '16px',

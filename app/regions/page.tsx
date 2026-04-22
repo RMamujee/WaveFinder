@@ -4,12 +4,13 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { REGION_HIERARCHY } from '@/lib/region-hierarchy'
+import { Icon } from '@/components/ui/Icon'
 
 // ── Visual config ─────────────────────────────────────────────────────────────
 
 const WORLD_REGION_COLORS: Record<string, { color: string; bg: string; border: string; icon: string }> = {
-  'North America': { color: '#1b7fcb', bg: '#eff6ff', border: '#bfdbfe', icon: '🌊' },
-  'South America': { color: '#059669', bg: '#ecfdf5', border: '#a7f3d0', icon: '🏄' },
+  'North America': { color: '#1b7fcb', bg: '#eff6ff', border: '#bfdbfe', icon: 'wave' },
+  'South America': { color: '#059669', bg: '#ecfdf5', border: '#a7f3d0', icon: 'surfer' },
   'Europe':        { color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', icon: '🌅' },
   'Oceania':       { color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', icon: '🤙' },
   'Asia':          { color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: '🐉' },
@@ -95,7 +96,12 @@ function RegionCard({ title, subtitle, icon, color, bg, border, description, onC
     >
       <div className="px-5 pt-5 pb-4" style={{ background: bg, borderBottom: `1px solid ${border}` }}>
         <div className="flex items-start justify-between gap-2 mb-2">
-          <span style={{ fontSize: '28px', lineHeight: 1 }}>{icon}</span>
+          <span style={{ lineHeight: 1 }}>
+            {['wave','surfer','map','pin','star','buoy','tide','wind','sun','moon','compass','temp'].includes(icon)
+              ? <Icon name={icon as import('@/components/ui/Icon').IconName} size={28} strokeWidth={1.4} style={{ color }} />
+              : <span style={{ fontSize: '28px' }}>{icon}</span>
+            }
+          </span>
           {subtitle && (
             <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: border, color }}>
               {subtitle}
@@ -228,7 +234,7 @@ export default function RegionsPage() {
                   key={country}
                   title={country}
                   subtitle={`${states.length} region${states.length !== 1 ? 's' : ''}`}
-                  icon={hasData ? '🏄' : '🗺️'}
+                  icon={hasData ? 'surfer' : 'map'}
                   color={hasData ? '#1b7fcb' : style.color}
                   bg={hasData ? '#eff6ff' : style.bg}
                   border={hasData ? '#bfdbfe' : style.border}
@@ -251,7 +257,7 @@ export default function RegionsPage() {
                   key={state}
                   title={state}
                   subtitle={`${regions.length} region${regions.length !== 1 ? 's' : ''}`}
-                  icon="🏄"
+                  icon="surfer"
                   color={style.color}
                   bg={style.bg}
                   border={style.border}
@@ -277,7 +283,7 @@ export default function RegionsPage() {
                 <RegionCard
                   key={region}
                   title={region}
-                  icon={hasData ? '🌊' : '📍'}
+                  icon={hasData ? 'wave' : 'pin'}
                   color={hasData ? '#1b7fcb' : style.color}
                   bg={hasData ? '#eff6ff' : style.bg}
                   border={hasData ? '#bfdbfe' : style.border}
@@ -295,7 +301,7 @@ export default function RegionsPage() {
             className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
             style={{ background: 'var(--ocean-600)' }}
           >
-            🗺️ Open live map — all spots
+            <Icon name="map" size={14} strokeWidth={1.8} /> Open live map — all spots
           </Link>
         </div>
       </div>

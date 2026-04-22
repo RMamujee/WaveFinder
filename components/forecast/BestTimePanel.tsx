@@ -2,18 +2,20 @@
 
 import type { BestTimeSlot } from '@/lib/forecast/best-time'
 import type { ConditionRating, TidePoint } from '@/types/forecast'
+import { Icon } from '@/components/ui/Icon'
 
 interface Props {
   slots: BestTimeSlot[]
   tides?: TidePoint[]
 }
 
-const WINDOW_ICONS: Record<string, string> = {
-  dawn: '🌅',
-  morning: '☀️',
-  midday: '🌤️',
-  afternoon: '🌊',
-  evening: '🌇',
+// Window icons mapped to Icon component names
+const WINDOW_ICON_NAMES: Record<string, import('@/components/ui/Icon').IconName> = {
+  dawn:      'moon',
+  morning:   'sun',
+  midday:    'sun',
+  afternoon: 'wave',
+  evening:   'moon',
 }
 
 const WIND_ICONS: Record<string, string> = {
@@ -89,7 +91,9 @@ export function BestTimePanel({ slots, tides }: Props) {
               <div className="flex items-start gap-4">
                 {/* Icon + window label */}
                 <div className="shrink-0 text-center" style={{ minWidth: '56px' }}>
-                  <div className="text-xl">{WINDOW_ICONS[slot.window]}</div>
+                  <div style={{ color: 'var(--ocean-400)' }}>
+                    <Icon name={WINDOW_ICON_NAMES[slot.window] ?? 'wave'} size={20} strokeWidth={1.5} />
+                  </div>
                   <div className="text-xs font-medium mt-0.5" style={{ color: 'var(--text-2)' }}>
                     {slot.label}
                   </div>
@@ -144,7 +148,7 @@ export function BestTimePanel({ slots, tides }: Props) {
                     <Stat label="Period" value={`${slot.avgPeriod}s`} />
                     <Stat
                       label="Wind"
-                      value={`${WIND_ICONS[slot.windQuality]} ${slot.windQuality}`}
+                      value={slot.windQuality}
                     />
                   </div>
 
