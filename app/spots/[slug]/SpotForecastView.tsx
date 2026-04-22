@@ -21,6 +21,13 @@ import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
 import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
 import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
+import { CoastalAlertsPanel } from '@/components/forecast/CoastalAlertsPanel'
+import { SolarPanel } from '@/components/forecast/SolarPanel'
+import { AirQualityPanel } from '@/components/forecast/AirQualityPanel'
+import { EarthquakePanel } from '@/components/forecast/EarthquakePanel'
+import { AmenitiesPanel } from '@/components/forecast/AmenitiesPanel'
+import { RiverRunoffPanel } from '@/components/forecast/RiverRunoffPanel'
+import { SeasonalClimatePanel } from '@/components/forecast/SeasonalClimatePanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
@@ -285,6 +292,9 @@ export function SpotForecastView({ spot }: Props) {
         </div>
       )}
 
+      {/* NWS coastal alerts — renders its own container only when active alerts exist */}
+      <CoastalAlertsPanel spotSlug={spot.slug} />
+
       {/* Body */}
       {isPending && <WaveLoader label="Fetching forecast…" />}
       {error && !isPending && (
@@ -505,8 +515,8 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         )}
 
-        {/* Row 6: Swell | Gear Recommendations — same y-axis, equal widths */}
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* Row 6: Swell | Gear | Air Quality — 3-col on large screens */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {current && (
             <div>
               <SectionTitle>
@@ -528,9 +538,28 @@ export function SpotForecastView({ spot }: Props) {
               </div>
             )
           })()}
+          <div>
+            <SectionTitle>Air Quality</SectionTitle>
+            <AirQualityPanel spotSlug={spot.slug} />
+          </div>
         </div>
 
-        {/* Row 7: Community Reports (left, full height) | Buoy Data + Season Calendar (right, stacked) */}
+        {/* Row 7: Solar / Moon | Seasonal Climate */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <SectionTitle>
+              Sunrise & Moon —{' '}
+              <span style={{ fontWeight: 400 }}>{activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : 'Today'}</span>
+            </SectionTitle>
+            <SolarPanel spotSlug={spot.slug} selectedDate={selectedDay} />
+          </div>
+          <div>
+            <SectionTitle>Seasonal Climate</SectionTitle>
+            <SeasonalClimatePanel spotSlug={spot.slug} />
+          </div>
+        </div>
+
+        {/* Row 8: Community Reports (left, full height) | Buoy Data + Season Calendar (right, stacked) */}
         <div className="grid gap-4 md:grid-cols-2 items-start">
           {/* Left — Community Reports at natural full height */}
           <div>
@@ -553,8 +582,21 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         </div>
 
-        {/* Water Quality — only renders when USGS/EPA data exists within 20 miles */}
+        {/* Water quality + river runoff — render only when data exists */}
         <WaterQualityPanel spotSlug={spot.slug} />
+        <RiverRunoffPanel spotSlug={spot.slug} />
+
+        {/* Nearby facilities from OpenStreetMap */}
+        <div>
+          <SectionTitle>Nearby Facilities</SectionTitle>
+          <AmenitiesPanel spotSlug={spot.slug} />
+        </div>
+
+        {/* Seismic activity — only shows when M4.5+ quakes found within 800 km */}
+        <div>
+          <SectionTitle>Seismic Activity</SectionTitle>
+          <EarthquakePanel spotSlug={spot.slug} />
+        </div>
 
       </div>
     </div>
