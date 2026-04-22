@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchSeasonalClimate } from '@/lib/api/nasa-power'
 
-export const revalidate = 86400 * 30 // 30 days — climatology data is stable
+export const revalidate = 2592000 // 30 days — climatology data is stable
 
 export async function GET(
   _req: Request,

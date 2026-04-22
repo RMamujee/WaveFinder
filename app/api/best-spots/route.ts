@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
 import { rateSurfConditions, degreesToCompass } from '@/lib/forecast/rating'
 
-export const revalidate = 1800
+export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
