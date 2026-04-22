@@ -22,7 +22,6 @@ import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
 import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
 import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
 import { CoastalAlertsPanel } from '@/components/forecast/CoastalAlertsPanel'
-import { SolarPanel } from '@/components/forecast/SolarPanel'
 import { AirQualityPanel } from '@/components/forecast/AirQualityPanel'
 import { EarthquakePanel } from '@/components/forecast/EarthquakePanel'
 import { AmenitiesPanel } from '@/components/forecast/AmenitiesPanel'
@@ -515,8 +514,9 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         )}
 
-        {/* Row 6: Swell | Gear | Air Quality — 3-col on large screens */}
+        {/* Row 6: Swell | Air Quality — 2-col; Gear + Seasonal stacked in right column */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* Swell — col 1 */}
           {current && (
             <div>
               <SectionTitle>
@@ -526,37 +526,32 @@ export function SpotForecastView({ spot }: Props) {
               <SwellPanel current={current} activeDayData={activeDayData} />
             </div>
           )}
+
+          {/* Air Quality — col 2 */}
+          <div>
+            <SectionTitle>Air Quality</SectionTitle>
+            <AirQualityPanel spotSlug={spot.slug} />
+          </div>
+
+          {/* Gear + Seasonal stacked — col 3 */}
           {activeDayData && (() => {
             const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
             const avgWaterTempC = waterHours.length > 0
               ? waterHours.reduce((sum, h) => sum + (h.waterTemp ?? 0), 0) / waterHours.length
               : null
             return (
-              <div>
-                <SectionTitle>Gear Recommendations</SectionTitle>
-                <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
+              <div className="flex flex-col gap-4">
+                <div>
+                  <SectionTitle>Gear Recommendations</SectionTitle>
+                  <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
+                </div>
+                <div>
+                  <SectionTitle>Seasonal Climate</SectionTitle>
+                  <SeasonalClimatePanel spotSlug={spot.slug} />
+                </div>
               </div>
             )
           })()}
-          <div>
-            <SectionTitle>Air Quality</SectionTitle>
-            <AirQualityPanel spotSlug={spot.slug} />
-          </div>
-        </div>
-
-        {/* Row 7: Solar / Moon | Seasonal Climate */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <SectionTitle>
-              Sunrise & Moon —{' '}
-              <span style={{ fontWeight: 400 }}>{activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : 'Today'}</span>
-            </SectionTitle>
-            <SolarPanel spotSlug={spot.slug} selectedDate={selectedDay} />
-          </div>
-          <div>
-            <SectionTitle>Seasonal Climate</SectionTitle>
-            <SeasonalClimatePanel spotSlug={spot.slug} />
-          </div>
         </div>
 
         {/* Row 8: Community Reports (left, full height) | Buoy Data + Season Calendar (right, stacked) */}
