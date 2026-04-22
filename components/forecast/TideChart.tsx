@@ -7,6 +7,8 @@ import {
 } from 'recharts'
 import type { TidePoint } from '@/types/forecast'
 import { format, parseISO } from 'date-fns'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtTide } from '@/lib/units'
 
 interface Props {
   tides: TidePoint[]
@@ -15,6 +17,7 @@ interface Props {
 
 export function TideChart({ tides, selectedDate }: Props) {
   const [mode, setMode] = useState<'7day' | 'daily'>('daily')
+  const { unit } = useUnits()
 
   if (!tides.length) {
     return (
@@ -103,8 +106,8 @@ export function TideChart({ tides, selectedDate }: Props) {
                 tick={{ fill: '#8888aa', fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(v) => `${v}m`}
-                width={30}
+                tickFormatter={(v) => fmtTide(v, unit)}
+                width={34}
               />
               <Tooltip
                 contentStyle={{
@@ -115,7 +118,7 @@ export function TideChart({ tides, selectedDate }: Props) {
                 formatter={(value, _name, props) => {
                   const t = (props as { payload?: { type?: string | null } }).payload?.type
                   const label = t === 'H' ? ' — High' : t === 'L' ? ' — Low' : ''
-                  return [`${value ?? 'N/A'}m${label}`, 'Tide']
+                  return [`${fmtTide(value as number, unit)}${label}`, 'Tide']
                 }}
                 labelStyle={{ color: '#4a4a6a', marginBottom: '4px' }}
               />
@@ -138,7 +141,7 @@ export function TideChart({ tides, selectedDate }: Props) {
                   stroke="white"
                   strokeWidth={1.5}
                   label={{
-                    value: `${d.type === 'H' ? 'H' : d.type === 'L' ? 'L' : 'N/A'} ${d.height}m`,
+                    value: `${d.type === 'H' ? 'H' : d.type === 'L' ? 'L' : 'N/A'} ${fmtTide(d.height, unit)}`,
                     position: d.type === 'H' ? 'top' : 'bottom',
                     fill: '#8888aa',
                     fontSize: 10,

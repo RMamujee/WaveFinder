@@ -5,6 +5,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import type { ForecastDay } from '@/types/forecast'
 import { format, parseISO } from 'date-fns'
 import { degreesToCompass } from '@/lib/forecast/rating'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtWind } from '@/lib/units'
 
 interface Props {
   days: ForecastDay[]
@@ -20,6 +22,7 @@ function getWindColor(speed: number): string {
 
 export function WindChart({ days, activeDayData }: Props) {
   const [mode, setMode] = useState<'7day' | 'daily'>('7day')
+  const { unit } = useUnits()
 
   const sevenDayData = days.flatMap((day) =>
     day.hours
@@ -80,7 +83,13 @@ export function WindChart({ days, activeDayData }: Props) {
               tickLine={false}
               axisLine={false}
             />
-            <YAxis tick={{ fill: '#8888aa', fontSize: 10 }} tickLine={false} axisLine={false} width={28} />
+            <YAxis
+              tick={{ fill: '#8888aa', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => fmtWind(v, unit)}
+              width={40}
+            />
             <Tooltip
               contentStyle={{ background: 'white', border: '1px solid #ede0cc', borderRadius: '10px', fontSize: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}
               labelStyle={{ color: '#4a4a6a', marginBottom: '4px' }}
@@ -90,7 +99,7 @@ export function WindChart({ days, activeDayData }: Props) {
                 return (
                   <div className="rounded-xl p-3 text-xs shadow-lg" style={{ background: 'white', border: '1px solid #ede0cc' }}>
                     <p className="mb-1 font-medium" style={{ color: '#4a4a6a' }}>{label}</p>
-                    <p style={{ color: '#1a1a2e' }}>{Math.round((payload[0]?.value as number ?? 0) * 0.621371)} mph {item?.dir}</p>
+                    <p style={{ color: '#1a1a2e' }}>{fmtWind(payload[0]?.value as number ?? 0, unit)} {item?.dir}</p>
                   </div>
                 )
               }}
