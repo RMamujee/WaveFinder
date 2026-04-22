@@ -5,6 +5,56 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
+import { TimelineSkyStrip } from '@/components/ui/TimelineSkyStrip'
+
+// ── Solar helper (NOAA approximation) — no external lib ──────────────────────
+// Returns { sunrise, sunset } as decimal hours in local time.
+function computeSunriseSunset(
+  lat: number,
+  lng: number,
+  date: Date,
+): { sunrise: number; sunset: number } {
+  const rad  = Math.PI / 180
+  const jd   = date.getTime() / 86400000 + 2440587.5
+  const n    = jd - 2451545.0
+  const L    = (280.46 + 0.9856474 * n) % 360
+  const g    = (357.528 + 0.9856003 * n) % 360
+  const lam  = L + 1.915 * Math.sin(g * rad) + 0.02 * Math.sin(2 * g * rad)
+  const eps  = 23.439 - 0.0000004 * n
+  const sinDec = Math.sin(eps * rad) * Math.sin(lam * rad)
+  const dec  = Math.asin(sinDec)
+  const cosH = (Math.cos(90.833 * rad) - Math.sin(lat * rad) * Math.sin(dec))
+             / (Math.cos(lat * rad) * Math.cos(dec))
+
+  // Clamp: if |cosH| > 1 the sun never rises/sets — fall back to defaults
+  if (Math.abs(cosH) > 1) return { sunrise: 6.25, sunset: 19.6 }
+
+  const H  = Math.acos(cosH) / rad
+  const lngOffset = lng / 15  // hours offset from UTC based on longitude
+  const sunrise = 12 - H / 15 - lngOffset
+  const sunset  = 12 + H / 15 - lngOffset
+
+  return { sunrise: ((sunrise % 24) + 24) % 24, sunset: ((sunset % 24) + 24) % 24 }
+}
+
+// Region centre coordinates (lat, lng) — used for solar computation
+const REGION_COORDS: Record<string, [number, number]> = {
+  'San Diego':              [32.7,  -117.2],
+  'Orange County':          [33.6,  -117.9],
+  'Los Angeles':            [34.0,  -118.5],
+  'Ventura':                [34.3,  -119.3],
+  'Santa Barbara':          [34.4,  -119.7],
+  'Central Coast':          [35.4,  -120.8],
+  'Monterey':               [36.6,  -121.9],
+  'NorCal':                 [37.8,  -122.5],
+  'North Shore':            [21.7,  -158.0],
+  'South Shore':            [21.3,  -157.8],
+  'Gold Coast':             [-28.0,  153.4],
+  'Sydney Northern Beaches':[-33.7,  151.3],
+  'Uluwatu':                [-8.8,   115.1],
+  'Hossegor':               [43.7,   -1.4],
+  "Jeffrey's Bay":          [-34.1,   24.9],
+}
 
 // ── Region config ─────────────────────────────────────────────────────────────
 
@@ -228,6 +278,17 @@ export default function TimelinePage() {
           </div>
         </div>
 
+        {/* ── Sky strip — sunrise / sunset for the selected region ── */}
+        {mounted && (() => {
+          const coords = REGION_COORDS[region] ?? [34.0, -118.5]
+          const { sunrise, sunset } = computeSunriseSunset(coords[0], coords[1], new Date())
+          return (
+            <div>
+              <TimelineSkyStrip sunrise={sunrise} sunset={sunset} currentHour={hour} height={30} />
+            </div>
+          )
+        })()}
+
         {/* ── Slider card ── */}
         <div className="rounded-2xl p-6 space-y-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -414,7 +475,7 @@ export default function TimelinePage() {
           <Link href="/spots"
             className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
             style={{ background: 'var(--ocean-600)' }}>
-            🗺️ Open live map
+            Open live map
           </Link>
         </div>
       </div>
