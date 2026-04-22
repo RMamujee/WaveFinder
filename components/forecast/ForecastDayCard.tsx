@@ -3,6 +3,7 @@
 import type { ForecastDay, ConditionRating } from '@/types/forecast'
 import { format, parseISO } from 'date-fns'
 import { degreesToCompass } from '@/lib/forecast/rating'
+import { Icon } from '@/components/ui/Icon'
 import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
@@ -70,7 +71,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
           title={day.weatherCode != null ? weatherLabel(day.weatherCode) : undefined}
           style={{ fontSize: 20, lineHeight: 1 }}
         >
-          {day.weatherCode != null ? weatherIcon(day.weatherCode) : '🌊'}
+          {day.weatherCode != null ? weatherIcon(day.weatherCode) : <Icon name="wave" size={20} strokeWidth={1.5} style={{ color: 'var(--ocean-400)' }} />}
         </span>
         <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
           {day.maxTempC !== null && (
@@ -139,7 +140,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         {/* Water temp */}
         {avgWaterTempC !== null && (
           <p style={{ fontSize: 11, color: '#0e7490', marginBottom: 2 }}>
-            🌊 {fmtTemp(avgWaterTempC, unit)}
+            <Icon name="wave" size={10} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', color: '#0e7490' }} /> {fmtTemp(avgWaterTempC, unit)}
           </p>
         )}
 

@@ -1,5 +1,6 @@
 'use client'
 
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import type { SurfSpot } from '@/types/spot'
@@ -94,14 +95,19 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   const [query, setQuery]             = useState('')
   const [open, setOpen]               = useState(false)
   const [highlighted, setHighlighted] = useState(0)
+  const [mounted, setMounted]         = useState(false)
+  const [ddStyle, setDdStyle]         = useState<React.CSSProperties>({})
   const inputRef     = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const dropdownRef  = useRef<HTMLDivElement>(null)
 
-  // Close on outside tap — works on both desktop (pointerdown) and iOS (touchstart)
+  useEffect(() => { setMounted(true) }, [])
+
+  // Close on outside tap — checks both the trigger and the portal dropdown
   useEffect(() => {
     const close = (e: Event) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const t = e.target as Node
+      if (!containerRef.current?.contains(t) && !dropdownRef.current?.contains(t)) {
         setOpen(false)
         setQuery('')
       }
@@ -113,6 +119,48 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
       document.removeEventListener('touchstart', close)
     }
   }, [])
+
+  // Recalculate portal dropdown position using visualViewport so the keyboard doesn't cover it
+  useEffect(() => {
+    if (!open) return
+    const recalc = () => {
+      const el = containerRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const vvp  = window.visualViewport
+      // visual viewport accounts for the soft keyboard shrinking the available space
+      const vpH  = vvp ? vvp.offsetTop + vvp.height : window.innerHeight
+      const vpW  = vvp ? vvp.width : window.innerWidth
+      const spaceBelow = vpH - rect.bottom - 6
+      const spaceAbove = rect.top - 6
+      const style: React.CSSProperties = {
+        position: 'fixed',
+        left: Math.max(8, rect.left),
+        width: Math.min(rect.width, vpW - Math.max(8, rect.left) - 8),
+        minWidth: Math.min(240, vpW - 16),
+        zIndex: 9999,
+      }
+      if (spaceBelow >= 160) {
+        style.top      = rect.bottom + 6
+        style.maxHeight = Math.min(220, spaceBelow - 8)
+      } else {
+        // flip above when keyboard leaves no room below
+        style.bottom   = vpH - rect.top + 6
+        style.maxHeight = Math.min(220, Math.max(100, spaceAbove - 8))
+      }
+      setDdStyle(style)
+    }
+    recalc()
+    const vvp = window.visualViewport
+    vvp?.addEventListener('resize', recalc)
+    vvp?.addEventListener('scroll', recalc)
+    window.addEventListener('scroll', recalc, { passive: true })
+    return () => {
+      vvp?.removeEventListener('resize', recalc)
+      vvp?.removeEventListener('scroll', recalc)
+      window.removeEventListener('scroll', recalc)
+    }
+  }, [open])
 
   const results = useMemo((): SurfSpot[] => {
     if (!query.trim()) return spots.slice(0, 40)
@@ -192,23 +240,19 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
         )}
       </div>
 
-      {/* Dropdown — rendered outside the relative wrapper to avoid clipping */}
-      {open && (
+      {/* Dropdown — portal-rendered at document.body so it escapes sticky/overflow
+          clipping and stays inside the visual viewport even when the keyboard is open */}
+      {mounted && open && createPortal(
         <div
           ref={dropdownRef}
-          className="absolute left-0 rounded-xl overflow-hidden"
+          className="rounded-xl overflow-hidden"
           style={{
-            top: '100%',
-            marginTop: '6px',
+            ...ddStyle,
             background: 'white',
             border: '1.5px solid var(--border)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-            maxHeight: '220px',
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
-            zIndex: 9999,
-            minWidth: '240px',
-            width: '100%',
           }}
         >
           {isLoading ? (
@@ -222,9 +266,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
               <button
                 key={spot.slug}
                 type="button"
-                // Use onPointerDown to fire before blur (desktop + Android)
                 onPointerDown={(e) => { e.preventDefault(); handleSelect(spot) }}
-                // Use onTouchEnd as fallback for iOS (avoids 300ms delay)
                 onTouchEnd={(e) => { e.preventDefault(); handleSelect(spot) }}
                 onMouseEnter={() => setHighlighted(i)}
                 className="w-full text-left px-4 py-3 flex items-center justify-between gap-3"
@@ -247,7 +289,8 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -577,12 +620,13 @@ function MobileSwipeCompare({
       if (!g.decided) {
         const dx = Math.abs(e.touches[0].clientX - g.startX)
         const dy = Math.abs(e.touches[0].clientY - g.startY)
-        if (dx > 6 || dy > 6) {
+        // 4px threshold: lock direction earlier so preventDefault fires before
+        // Android Chrome commits the scroll chain to vertical
+        if (dx > 4 || dy > 4) {
           g.isHoriz = dx > dy
           g.decided = true
         }
       }
-      // Block the browser's native scroll when swiping horizontally
       if (g.isHoriz) e.preventDefault()
     }
 
@@ -613,7 +657,7 @@ function MobileSwipeCompare({
   return (
     <div>
       {/* Swipe area — ref used for native touch listeners */}
-      <div ref={containerRef} style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
+      <div ref={containerRef} style={{ userSelect: 'none', WebkitUserSelect: 'none', overscrollBehaviorX: 'contain' }}>
         {slug ? (
           <ConnectedSpotColumn
             key={slug}
@@ -744,9 +788,9 @@ export default function ComparePage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--sand-50)' }}>
-      {/* Sticky search header */}
+      {/* Search header — sticky only on sm+ so the keyboard can't push it off-screen on mobile */}
       <div
-        className="sticky z-40 border-b"
+        className="sm:sticky z-40 border-b"
         style={{ top: '57px', background: 'var(--sand-50)', borderColor: 'var(--border)' }}
       >
         <div className="mx-auto max-w-7xl px-5 py-4">
