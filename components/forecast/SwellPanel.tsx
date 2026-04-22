@@ -3,6 +3,8 @@
 import { format, parseISO } from 'date-fns'
 import type { ForecastHour, ForecastDay } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeightDec } from '@/lib/units'
 
 interface Props {
   current: ForecastHour
@@ -51,10 +53,6 @@ function classifySwellType(period: number): SwellType {
   }
 }
 
-function metersToFeet(m: number) {
-  return `${(m * 3.281).toFixed(1)}ft`
-}
-
 // Compass arrow SVG pointing in the given direction
 function DirectionCompass({ degrees }: { degrees: number }) {
   // rotate arrow: 0° = N (up), 90° = E (right), etc.
@@ -86,6 +84,7 @@ function DirectionCompass({ degrees }: { degrees: number }) {
 }
 
 export function SwellPanel({ current, activeDayData }: Props) {
+  const { unit } = useUnits()
   const type = classifySwellType(current.swellPeriod)
 
   // Find peak period hour in the selected day
@@ -184,7 +183,7 @@ export function SwellPanel({ current, activeDayData }: Props) {
           <div className="rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
             <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Swell height</p>
             <p className="font-bold text-base" style={{ color: 'var(--text)', lineHeight: 1 }}>
-              {metersToFeet(current.swellHeight)}
+              {fmtHeightDec(current.swellHeight, unit)}
             </p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
               {current.swellHeight.toFixed(2)}m

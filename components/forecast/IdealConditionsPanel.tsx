@@ -3,6 +3,8 @@
 import type { SurfSpot } from '@/types/spot'
 import type { ForecastHour, BuoyReading, CoastalWindReading } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeight, fmtWindMps } from '@/lib/units'
 
 interface Props {
   spot: SurfSpot
@@ -69,6 +71,7 @@ function MatchPill({ label, match, partial }: { label: string; match: boolean; p
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export function IdealConditionsPanel({ spot, current, buoy, coastalWind }: Props) {
+  const { unit } = useUnits()
   const offshoreDir = (spot.facingDirection + 180) % 360
   const ideal = IDEAL[spot.difficulty] ?? IDEAL.intermediate
 
@@ -158,7 +161,7 @@ export function IdealConditionsPanel({ spot, current, buoy, coastalWind }: Props
               {degreesToCompass(offshoreDir)} Offshore
             </p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Ideal wind direction</p>
-            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Under 15 mph</p>
+            <p className="text-xs" style={{ color: 'var(--text-3)' }}>Under {fmtWindMps(6.7, unit)}</p>
           </div>
         </div>
 
@@ -185,7 +188,7 @@ export function IdealConditionsPanel({ spot, current, buoy, coastalWind }: Props
               color: 'var(--text)',
             }}
           >
-            {ideal.minFt}–{ideal.maxFt}ft
+            {fmtHeight(ideal.minFt / 3.281, unit)}–{fmtHeight(ideal.maxFt / 3.281, unit)}
           </p>
           <div className="text-center">
             <p className="text-xs font-semibold" style={{ color: 'var(--text-3)' }}>{ideal.period} period</p>

@@ -4,10 +4,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { useUnits } from '@/contexts/UnitsContext'
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const pathname = usePathname()
+  const { unit, toggle } = useUnits()
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
@@ -48,6 +50,19 @@ export function Navbar() {
               {l.label}
             </Link>
           ))}
+          {/* Units toggle */}
+          <button
+            onClick={toggle}
+            className="flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold transition-all"
+            style={{
+              background: unit === 'imperial' ? 'var(--ocean-50)' : 'var(--sand-100)',
+              border: `1.5px solid ${unit === 'imperial' ? 'var(--ocean-300)' : 'var(--border)'}`,
+              color: unit === 'imperial' ? 'var(--ocean-700)' : 'var(--text-2)',
+            }}
+            title={`Switch to ${unit === 'imperial' ? 'metric' : 'imperial'} units`}
+          >
+            {unit === 'imperial' ? 'mi/ft/°F' : 'km/m/°C'}
+          </button>
         </div>
 
         {/* Mobile: Made by credit */}
@@ -98,6 +113,21 @@ export function Navbar() {
                 {l.label}
               </Link>
             ))}
+            {/* Units toggle row */}
+            <div className="flex items-center justify-between px-3 py-2.5">
+              <span className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Units</span>
+              <button
+                onClick={toggle}
+                className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all"
+                style={{
+                  background: unit === 'imperial' ? 'var(--ocean-50)' : 'var(--sand-100)',
+                  border: `1.5px solid ${unit === 'imperial' ? 'var(--ocean-300)' : 'var(--border)'}`,
+                  color: unit === 'imperial' ? 'var(--ocean-700)' : 'var(--text-2)',
+                }}
+              >
+                {unit === 'imperial' ? 'mi / ft / °F' : 'km / m / °C'}
+              </button>
+            </div>
           </div>
         </div>
       )}

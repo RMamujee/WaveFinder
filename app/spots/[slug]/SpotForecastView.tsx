@@ -25,8 +25,10 @@ import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
 import { WaveLoader } from '@/components/layout/WaveLoader'
-import { weatherIcon, tempF, weatherLabel } from '@/lib/forecast/weather-code'
+import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
 import { format, parseISO } from 'date-fns'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeight, fmtWind, fmtTemp, fmtTide } from '@/lib/units'
 
 interface Props { spot: SurfSpot }
 
@@ -35,11 +37,6 @@ const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text:
   fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', accent: '#f59e0b' },
   good:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', accent: '#16a34a' },
   epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', accent: '#7c3aed' },
-}
-
-function metersToFeet(m: number) {
-  const ft = Math.round(m * 3.281)
-  return `${ft}ft`
 }
 
 function getWaterQuality(windSpeedKmh: number, windDir: number, spotFacing: number): { label: string; color: string } {
@@ -71,6 +68,7 @@ const DIFFICULTY_STYLES = {
 }
 
 export function SpotForecastView({ spot }: Props) {
+  const { unit } = useUnits()
   const searchParams = useSearchParams()
   const router = useRouter()
   const [selectedDay, setSelectedDay] = useState<string | null>(
@@ -167,7 +165,7 @@ export function SpotForecastView({ spot }: Props) {
                   <div style={{ minWidth: '52px' }}>
                     <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Height</p>
                     <p style={{ fontSize: '34px', fontWeight: 700, lineHeight: 1, color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
-                      {metersToFeet(current.waveHeight)}
+                      {fmtHeight(current.waveHeight, unit)}
                     </p>
                   </div>
 
@@ -184,7 +182,7 @@ export function SpotForecastView({ spot }: Props) {
                   />
                   <StatBlock
                     label="Wind"
-                    value={`${Math.round(current.wind.speed * 0.621371)} mph`}
+                    value={fmtWind(current.wind.speed, unit)}
                     sub={current.wind.directionLabel}
                   />
                   {(() => {
@@ -194,7 +192,7 @@ export function SpotForecastView({ spot }: Props) {
                   {current.waterTemp !== null && (
                     <StatBlock
                       label="Water"
-                      value={`${Math.round(current.waterTemp * 9/5 + 32)}°F`}
+                      value={fmtTemp(current.waterTemp, unit)}
                     />
                   )}
                   {current.wavePower > 0 && (
@@ -442,7 +440,7 @@ export function SpotForecastView({ spot }: Props) {
                             {format(parseISO(h.time), 'ha')}
                           </td>
                           <td className="px-4 py-3 font-semibold text-xs whitespace-nowrap" style={{ color: 'var(--text)' }}>
-                            {metersToFeet(h.waveHeight)}
+                            {fmtHeight(h.waveHeight, unit)}
                           </td>
                           <td className="hidden sm:table-cell px-4 py-3 text-xs" style={{ color: 'var(--text)' }}>
                             {Math.round(h.swellPeriod)}s
@@ -451,7 +449,7 @@ export function SpotForecastView({ spot }: Props) {
                             {degreesToCompass(h.swellDirection)}
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                            {Math.round(h.wind.speed * 0.621371)} mph {h.wind.directionLabel}
+                            {fmtWind(h.wind.speed, unit)} {h.wind.directionLabel}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <span title={weatherLabel(h.weatherCode)} style={{ fontSize: 16, lineHeight: 1 }}>
@@ -464,7 +462,7 @@ export function SpotForecastView({ spot }: Props) {
                             )}
                           </td>
                           <td className="hidden sm:table-cell px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--text-2)' }}>
-                            {tempF(h.airTempC)}
+                            {fmtTemp(h.airTempC, unit)}
                           </td>
                           <td className="px-4 py-3">
                             <span

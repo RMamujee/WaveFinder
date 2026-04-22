@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 
 // ── Region config ─────────────────────────────────────────────────────────────
 
@@ -71,8 +73,6 @@ function scoreLabel(s: number) {
   return 'Poor'
 }
 
-function mToFt(m: number) { return (m * 3.281).toFixed(1) + ' ft' }
-function cToF(c: number)   { return Math.round(c * 9 / 5 + 32) + '°F' }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -88,6 +88,7 @@ interface SwellHour {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TimelinePage() {
+  const { unit } = useUnits()
   const [mounted,  setMounted]  = useState(false)
   const [hour,     setHour]     = useState(10)
   const [region,   setRegion]   = useState('Los Angeles')
@@ -246,7 +247,7 @@ export default function TimelinePage() {
               {waterTemp !== null && (
                 <div className="rounded-xl px-3 py-2 text-sm font-semibold"
                   style={{ background: 'var(--ocean-50)', color: 'var(--ocean-700)', border: '1px solid var(--ocean-100)' }}>
-                  💧 {cToF(waterTemp)} water
+                  💧 {fmtTemp(waterTemp, unit)} water
                 </div>
               )}
               {!isLoading && !isError && topScore > 0 && (
@@ -356,7 +357,7 @@ export default function TimelinePage() {
                             <path d="M2 12c1.5-3 4-4.5 6.5-4.5S13 9 15.5 9 20 6 22 3" />
                             <path d="M2 19c1.5-3 4-4.5 6.5-4.5S13 16 15.5 16 20 13 22 10" />
                           </svg>
-                          {mToFt(hd!.waveHeight)}
+                          {fmtHeight(hd!.waveHeight, unit)}
                         </span>
                         {/* Wind */}
                         <span className="flex items-center gap-1 text-xs font-medium"
@@ -364,7 +365,7 @@ export default function TimelinePage() {
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
                           </svg>
-                          {hd!.windDirectionLabel} {Math.round(hd!.windSpeed)} km/h
+                          {hd!.windDirectionLabel} {fmtWind(hd!.windSpeed, unit)}
                         </span>
                         {/* Water temp */}
                         {waterTemp !== null && (
@@ -373,7 +374,7 @@ export default function TimelinePage() {
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
                             </svg>
-                            {cToF(waterTemp)}
+                            {fmtTemp(waterTemp, unit)}
                           </span>
                         )}
                       </div>

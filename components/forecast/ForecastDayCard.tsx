@@ -1,7 +1,11 @@
+'use client'
+
 import type { ForecastDay, ConditionRating } from '@/types/forecast'
 import { format, parseISO } from 'date-fns'
 import { degreesToCompass } from '@/lib/forecast/rating'
-import { weatherIcon, weatherLabel, tempF } from '@/lib/forecast/weather-code'
+import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 
 interface Props {
   day: ForecastDay
@@ -16,26 +20,24 @@ const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text:
   epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', dot: '#7c3aed', bar: '#8b5cf6' },
 }
 
-function metersToFeet(m: number) {
-  return `${Math.round(m * 3.281)}`
-}
-
 export function ForecastDayCard({ day, isSelected, onClick }: Props) {
+  const { unit } = useUnits()
   const date = parseISO(day.date)
   const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
   const styles = RATING_STYLES[day.dominantRating]
 
   const waterTemps = day.hours.filter((h) => h.waterTemp != null).map((h) => h.waterTemp!)
-  const avgWaterTempF = waterTemps.length > 0
-    ? Math.round((waterTemps.reduce((a, b) => a + b, 0) / waterTemps.length) * 9 / 5 + 32)
+  const avgWaterTempC = waterTemps.length > 0
+    ? waterTemps.reduce((a, b) => a + b, 0) / waterTemps.length
     : null
   const minWaveHeight = day.hours.length > 0 ? Math.min(...day.hours.map((h) => h.waveHeight)) : 0
-  const maxFt = Math.round(day.maxWaveHeight * 3.281)
-  const minFt = Math.round(minWaveHeight * 3.281)
-  const waveRange = minFt < maxFt ? `${minFt}–${maxFt}` : `${maxFt}`
+  const waveMax = fmtHeight(day.maxWaveHeight, unit)
+  const waveMin = fmtHeight(minWaveHeight, unit)
+  // Show range if different, e.g. "2–5ft" or "0.6–1.5m"
+  const waveRange = waveMin !== waveMax ? `${waveMin.replace(/ft|m$/, '')}–${waveMax}` : waveMax
 
-  const avgWind = day.hours.length > 0
-    ? Math.round(day.hours.reduce((s, h) => s + h.wind.speed, 0) / day.hours.length * 0.621371)
+  const avgWindKmh = day.hours.length > 0
+    ? day.hours.reduce((s, h) => s + h.wind.speed, 0) / day.hours.length
     : null
 
   return (
@@ -73,12 +75,12 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
           {day.maxTempC !== null && (
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
-              {tempF(day.maxTempC)}
+              {fmtTemp(day.maxTempC, unit)}
             </div>
           )}
           {day.minTempC !== null && (
             <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
-              {tempF(day.minTempC)}
+              {fmtTemp(day.minTempC, unit)}
             </div>
           )}
         </div>
@@ -109,7 +111,6 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
           }}
         >
           {waveRange}
-          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-3)', marginLeft: 2 }}>ft</span>
         </p>
 
         {/* Rating badge */}
@@ -129,16 +130,16 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         </p>
 
         {/* Wind */}
-        {avgWind !== null && (
+        {avgWindKmh !== null && (
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>
-            💨 {avgWind} mph
+            💨 {fmtWind(avgWindKmh, unit)}
           </p>
         )}
 
         {/* Water temp */}
-        {avgWaterTempF !== null && (
+        {avgWaterTempC !== null && (
           <p style={{ fontSize: 11, color: '#0e7490', marginBottom: 2 }}>
-            🌊 {avgWaterTempF}°F
+            🌊 {fmtTemp(avgWaterTempC, unit)}
           </p>
         )}
 

@@ -1,6 +1,10 @@
+'use client'
+
 import Link from 'next/link'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeight } from '@/lib/units'
 
 interface Props {
   spot: SurfSpot
@@ -19,6 +23,7 @@ const RATING_DOTS: Record<ConditionRating, string> = {
 }
 
 export function SpotCard({ spot, rating, waveHeight }: Props) {
+  const { unit } = useUnits()
   const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES] ?? DIFFICULTY_STYLES.intermediate
 
   return (
@@ -59,7 +64,7 @@ export function SpotCard({ spot, rating, waveHeight }: Props) {
         </span>
         {waveHeight !== undefined && (
           <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-            {Math.round(waveHeight * 3.281)}ft
+            {fmtHeight(waveHeight, unit)}
           </span>
         )}
       </div>

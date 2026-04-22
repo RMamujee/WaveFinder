@@ -7,6 +7,8 @@ import type { SpotForecast, ConditionRating, ForecastDay, ForecastHour } from '@
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { weatherIcon, tempF } from '@/lib/forecast/weather-code'
 import { WaveLoader } from '@/components/layout/WaveLoader'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 
 // ── Fuzzy search ──────────────────────────────────────────────────────────────
 
@@ -71,10 +73,6 @@ const DAY_RATING_ACCENT: Record<ConditionRating, string> = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function metersToFeet(m: number): string {
-  return `${Math.round(m * 3.281)}ft`
-}
 
 function shortDay(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
@@ -258,6 +256,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
 // ── Day picker ────────────────────────────────────────────────────────────────
 
 function MiniDayCard({ day, isSelected, onClick }: { day: ForecastDay; isSelected: boolean; onClick: () => void }) {
+  const { unit } = useUnits()
   const accent = DAY_RATING_ACCENT[day.dominantRating]
   const rs = RATING_STYLES[day.dominantRating]
   return (
@@ -276,7 +275,7 @@ function MiniDayCard({ day, isSelected, onClick }: { day: ForecastDay; isSelecte
         {shortDay(day.date)}
       </span>
       <span className="text-xs font-bold" style={{ color: isSelected ? 'white' : 'var(--text)' }}>
-        {metersToFeet(day.maxWaveHeight)}
+        {fmtHeight(day.maxWaveHeight, unit)}
       </span>
       <span className="mt-1 text-xs font-semibold uppercase" style={{ color: isSelected ? 'rgba(255,255,255,0.85)' : accent, fontSize: '9px', letterSpacing: '0.04em' }}>
         {day.dominantRating}
@@ -320,6 +319,7 @@ interface SpotColumnProps {
 }
 
 function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChange, isExpanded, onExpandToggle }: SpotColumnProps) {
+  const { unit } = useUnits()
   const diffStyle = DIFFICULTY_STYLES[spot.difficulty] ?? DIFFICULTY_STYLES.intermediate
   const days = forecast?.forecast ?? []
   const activeDayObj = days.find((d) => d.date === selectedDay) ?? days[0] ?? null
@@ -327,7 +327,6 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
   const displayHour = peakHour
   const ratingStyle = displayHour ? RATING_STYLES[displayHour.rating] : RATING_STYLES.poor
   const waterTempC = displayHour?.waterTemp ?? forecast?.buoy?.waterTemp ?? null
-  const waterTempF = waterTempC != null ? Math.round((waterTempC * 9) / 5 + 32) : null
 
   return (
     <div
@@ -420,22 +419,19 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
 
             {/* Core stats */}
             <div className="grid grid-cols-2 gap-2">
-              <StatCell label="Wave Height" value={metersToFeet(displayHour.waveHeight)} sub={`${displayHour.waveHeight.toFixed(1)}m`} />
+              <StatCell label="Wave Height" value={fmtHeight(displayHour.waveHeight, unit)} sub={unit === 'imperial' ? `${displayHour.waveHeight.toFixed(1)}m` : undefined} />
               <StatCell label="Swell Period" value={`${Math.round(displayHour.swellPeriod)}s`} sub={degreesToCompass(displayHour.swellDirection)} />
               <div className="col-span-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
                 <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Wind</p>
                 <div className="flex items-baseline gap-2">
-                  <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>{Math.round(displayHour.wind.speed)} km/h</p>
+                  <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>{fmtWind(displayHour.wind.speed, unit)}</p>
                   <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{displayHour.wind.directionLabel}</p>
                 </div>
               </div>
               <div className="col-span-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--sand-50)', border: '1px solid var(--border)' }}>
                 <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Water Temp</p>
-                {waterTempF != null ? (
-                  <div className="flex items-baseline gap-2">
-                    <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>{waterTempF}°F</p>
-                    <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{Math.round(waterTempC!)}°C</p>
-                  </div>
+                {waterTempC != null ? (
+                  <p className="font-bold text-lg" style={{ color: 'var(--text)', lineHeight: 1 }}>{fmtTemp(waterTempC, unit)}</p>
                 ) : (
                   <p className="font-bold text-lg" style={{ color: 'var(--text-3)', lineHeight: 1 }}>—</p>
                 )}
@@ -447,11 +443,11 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
               <div className="space-y-2 pt-1" style={{ borderTop: '1px dashed var(--border)' }}>
                 <p className="text-xs font-semibold uppercase tracking-wide pt-1" style={{ color: 'var(--text-3)' }}>Full details</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <StatCell label="Swell Height" value={`${Math.round(displayHour.swellHeight * 3.281)}ft`} sub={`${displayHour.swellHeight.toFixed(1)}m`} />
+                  <StatCell label="Swell Height" value={fmtHeight(displayHour.swellHeight, unit)} sub={unit === 'imperial' ? `${displayHour.swellHeight.toFixed(1)}m` : undefined} />
                   <StatCell label="Wave Power" value={`${Math.round(displayHour.wavePower)} kW/m`} />
-                  {displayHour.wind.gust > 0 && <StatCell label="Wind Gust" value={`${Math.round(displayHour.wind.gust)} km/h`} />}
+                  {displayHour.wind.gust > 0 && <StatCell label="Wind Gust" value={fmtWind(displayHour.wind.gust, unit)} />}
                   {displayHour.uvIndex > 0 && <StatCell label="UV Index" value={displayHour.uvIndex.toFixed(1)} />}
-                  {displayHour.airTempC != null && <StatCell label="Air Temp" value={`${Math.round(displayHour.airTempC * 9 / 5 + 32)}°F`} sub={`${Math.round(displayHour.airTempC)}°C`} />}
+                  {displayHour.airTempC != null && <StatCell label="Air Temp" value={fmtTemp(displayHour.airTempC, unit)} />}
                   {displayHour.precipProb != null && <StatCell label="Rain Chance" value={`${displayHour.precipProb}%`} />}
                 </div>
                 {activeDayObj && activeDayObj.hours.length > 0 && (
@@ -476,11 +472,11 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                             return (
                               <tr key={h.time} style={{ borderBottom: '1px solid var(--sand-100)' }}>
                                 <td className="px-2 py-2 font-medium" style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{disp}</td>
-                                <td className="px-2 py-2 font-bold" style={{ color: 'var(--text)' }}>{metersToFeet(h.waveHeight)}</td>
+                                <td className="px-2 py-2 font-bold" style={{ color: 'var(--text)' }}>{fmtHeight(h.waveHeight, unit)}</td>
                                 <td className="px-2 py-2" style={{ color: 'var(--text-2)' }}>{Math.round(h.swellPeriod)}s</td>
-                                <td className="px-2 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{Math.round(h.wind.speed)} {h.wind.directionLabel}</td>
+                                <td className="px-2 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{fmtWind(h.wind.speed, unit)} {h.wind.directionLabel}</td>
                                 <td className="px-2 py-2" style={{ fontSize: 14, lineHeight: 1 }}>{h.weatherCode !== null ? weatherIcon(h.weatherCode) : '—'}</td>
-                                <td className="px-2 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{tempF(h.airTempC)}</td>
+                                <td className="px-2 py-2 whitespace-nowrap" style={{ color: 'var(--text-2)' }}>{fmtTemp(h.airTempC, unit)}</td>
                                 <td className="px-2 py-2">
                                   <span className="rounded-full px-2 py-0.5 text-xs font-semibold capitalize" style={{ background: rs.bg, color: rs.text, border: `1px solid ${rs.border}` }}>
                                     {h.rating}

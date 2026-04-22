@@ -1,6 +1,10 @@
+'use client'
+
 import type { BuoyReading } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { formatDistanceToNow, parseISO } from 'date-fns'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtHeightDec, fmtWindMps, fmtTemp } from '@/lib/units'
 
 interface Props {
   buoy: BuoyReading
@@ -17,6 +21,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 export function BuoyReadings({ buoy, buoyId }: Props) {
+  const { unit } = useUnits()
   const age = formatDistanceToNow(parseISO(buoy.time), { addSuffix: true })
 
   return (
@@ -29,17 +34,17 @@ export function BuoyReadings({ buoy, buoyId }: Props) {
         </div>
       </div>
       <div className="p-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <Stat label="Wave Height" value={buoy.waveHeight != null ? `${(buoy.waveHeight * 3.281).toFixed(1)}ft` : '—'} />
+        <Stat label="Wave Height" value={buoy.waveHeight != null ? fmtHeightDec(buoy.waveHeight, unit) : '—'} />
         <Stat label="Dom. Period" value={buoy.dominantPeriod != null ? `${buoy.dominantPeriod}s` : '—'} />
         <Stat label="Avg Period"  value={buoy.averagePeriod != null  ? `${buoy.averagePeriod}s`  : '—'} />
         <Stat label="Swell Dir"   value={degreesToCompass(buoy.meanDirection)} />
         {buoy.waterTemp !== null && (
-          <Stat label="Water Temp" value={`${Math.round(buoy.waterTemp * 9/5 + 32)}°F`} />
+          <Stat label="Water Temp" value={fmtTemp(buoy.waterTemp, unit)} />
         )}
         {buoy.windSpeed !== null && (
           <Stat
             label="Wind (Buoy)"
-            value={`${Math.round(buoy.windSpeed * 2.237)} mph ${buoy.windDirection !== null ? degreesToCompass(buoy.windDirection) : ''}`}
+            value={`${fmtWindMps(buoy.windSpeed, unit)} ${buoy.windDirection !== null ? degreesToCompass(buoy.windDirection) : ''}`}
           />
         )}
       </div>
