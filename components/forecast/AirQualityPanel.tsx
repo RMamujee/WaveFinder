@@ -116,12 +116,9 @@ export function AirQualityPanel({ spotSlug }: Props) {
               }}
             />
           </div>
-          <div className="flex justify-between mt-1">
-            {AQI_SEGMENTS.map((s, i) => (
-              <div key={i} style={{ width: `${segWidths[i]}%` }} className="text-center">
-                <span style={{ fontSize: 9, color: s.color, fontWeight: 600 }}>{s.label}</span>
-              </div>
-            ))}
+          <div className="flex justify-between mt-1 px-0.5">
+            <span style={{ fontSize: 9, color: 'var(--text-3)' }}>0 · Good</span>
+            <span style={{ fontSize: 9, color: 'var(--text-3)' }}>500 · Hazardous</span>
           </div>
         </div>
       )}

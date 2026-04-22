@@ -380,7 +380,7 @@ export function SpotForecastView({ spot }: Props) {
             <div className="lg:col-span-2" style={{ display: 'flex', flexDirection: 'column' }}>
               <SectionTitle>Satellite View</SectionTitle>
               <div
-                className="rounded-2xl overflow-hidden"
+                className="rounded-2xl overflow-hidden isolate"
                 style={{ border: '1px solid var(--border)', flex: 1, minHeight: '260px' }}
               >
                 <SpotSatelliteMap
