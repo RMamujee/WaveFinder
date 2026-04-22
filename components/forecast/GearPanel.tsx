@@ -1,6 +1,8 @@
 'use client'
 
 import type { ForecastHour } from '@/types/forecast'
+import { useUnits } from '@/contexts/UnitsContext'
+import { fmtTemp, fmtHeightDec, type UnitSystem } from '@/lib/units'
 
 interface Props {
   activeDayHours: ForecastHour[]
@@ -17,7 +19,8 @@ interface Recommendation {
   extras: string[]
 }
 
-function getWetsuitRec(tempC: number | null): Pick<Recommendation, 'wetsuit' | 'wetsuitDetail' | 'wetsuitColor' | 'wetsuitBg'> {
+function getWetsuitRec(tempC: number | null, unit: UnitSystem): Pick<Recommendation, 'wetsuit' | 'wetsuitDetail' | 'wetsuitColor' | 'wetsuitBg'> {
+  const t = fmtTemp(tempC, unit)
   if (tempC === null) return {
     wetsuit: 'Unknown',
     wetsuitDetail: 'Water temperature unavailable — check local conditions.',
@@ -26,95 +29,95 @@ function getWetsuitRec(tempC: number | null): Pick<Recommendation, 'wetsuit' | '
   }
   if (tempC >= 24) return {
     wetsuit: 'Board Shorts / Bikini',
-    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — No wetsuit needed. Rash guard optional for sun.`,
+    wetsuitDetail: `${t} — No wetsuit needed. Rash guard optional for sun.`,
     wetsuitColor: '#15803d',
     wetsuitBg: '#f0fdf4',
   }
   if (tempC >= 21) return {
     wetsuit: '2mm Shorty / Spring Suit',
-    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Light suit for warmth. Keeps you comfortable without overheating.`,
+    wetsuitDetail: `${t} — Light suit for warmth. Keeps you comfortable without overheating.`,
     wetsuitColor: '#0e9488',
     wetsuitBg: '#f0fdfa',
   }
   if (tempC >= 18) return {
     wetsuit: '2mm / 3/2mm Full Suit',
-    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Light full suit. 3/2mm if surfing long sessions.`,
+    wetsuitDetail: `${t} — Light full suit. 3/2mm if surfing long sessions.`,
     wetsuitColor: '#0369a1',
     wetsuitBg: '#f0f9ff',
   }
   if (tempC >= 15) return {
     wetsuit: '3/2mm Full Suit',
-    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Standard California cold water suit. Sealed seams help.`,
+    wetsuitDetail: `${t} — Standard California cold water suit. Sealed seams help.`,
     wetsuitColor: '#1d4ed8',
     wetsuitBg: '#eff6ff',
   }
   if (tempC >= 12) return {
     wetsuit: '4/3mm Full Suit + Boots',
-    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Booties essential. Gloves optional for long sessions.`,
+    wetsuitDetail: `${t} — Booties essential. Gloves optional for long sessions.`,
     wetsuitColor: '#6d28d9',
     wetsuitBg: '#f5f3ff',
   }
   if (tempC >= 9) return {
     wetsuit: '5/4mm + Boots + Gloves',
-    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Cold. Hood recommended for sessions over an hour.`,
+    wetsuitDetail: `${t} — Cold. Hood recommended for sessions over an hour.`,
     wetsuitColor: '#7c3aed',
     wetsuitBg: '#ede9fe',
   }
   return {
     wetsuit: '6/5mm or Drysuit + Hood',
-    wetsuitDetail: `${Math.round(tempC * 9/5 + 32)}°F — Extreme cold. Full hood + boots + gloves required.`,
+    wetsuitDetail: `${t} — Extreme cold. Full hood + boots + gloves required.`,
     wetsuitColor: '#be185d',
     wetsuitBg: '#fdf2f8',
   }
 }
 
-function getBoardRec(avgHeightM: number, avgPower: number): Pick<Recommendation, 'boards' | 'boardReason' | 'extras'> {
-  const avgFt = avgHeightM * 3.281
-
+function getBoardRec(avgHeightM: number, avgPower: number, unit: UnitSystem): Pick<Recommendation, 'boards' | 'boardReason' | 'extras'> {
+  const h = fmtHeightDec(avgHeightM, unit)
   if (avgHeightM < 0.3) return {
     boards: ['Longboard (9ft+)', 'Soft Top / Foamie', 'SUP'],
-    boardReason: `Tiny surf (${avgFt.toFixed(1)}ft). Maximum volume needed to catch anything.`,
+    boardReason: `Tiny surf (${h}). Maximum volume needed to catch anything.`,
     extras: ['Wax up extra', 'Great for beginners'],
   }
   if (avgHeightM < 0.6) return {
     boards: ['Longboard', 'Mid-Length (7–8ft)', 'Funboard'],
-    boardReason: `Small surf (${avgFt.toFixed(1)}ft). High-volume boards make it fun.`,
+    boardReason: `Small surf (${h}). High-volume boards make it fun.`,
     extras: ['Soft fins for small waves', 'Try noseriding on the longboard'],
   }
   if (avgHeightM < 0.9) return {
     boards: ['Mid-Length', 'Fish', 'Funboard', 'Hybrid'],
-    boardReason: `Waist-high surf (${avgFt.toFixed(1)}ft). Fish or mid-length will generate speed and flow.`,
+    boardReason: `Waist-high surf (${h}). Fish or mid-length will generate speed and flow.`,
     extras: ['Bigger fins for drive', 'Loose setup for cutbacks'],
   }
   if (avgHeightM < 1.3) return {
     boards: ['Shortboard', 'Fish', 'Hybrid', 'Step-up for power'],
-    boardReason: `Head-high surf (${avgFt.toFixed(1)}ft). Performance boards shine here.`,
+    boardReason: `Head-high surf (${h}). Performance boards shine here.`,
     extras: ['Standard thruster or quad setup', `${Math.round(avgPower)} kW/m wave power`],
   }
   if (avgHeightM < 1.8) return {
     boards: ['Shortboard', 'Step-Up', 'Semi-Gun'],
-    boardReason: `Overhead to double-overhead (${avgFt.toFixed(1)}ft). More foam and length for paddle power.`,
+    boardReason: `Overhead to double-overhead (${h}). More foam and length for paddle power.`,
     extras: ['Stiffer leash (8–9ft)', 'Heavier glass for hold'],
   }
   if (avgHeightM < 2.5) return {
     boards: ['Step-Up (7–8ft)', 'Gun'],
-    boardReason: `Big surf (${avgFt.toFixed(1)}ft). A proper step-up or gun is essential.`,
+    boardReason: `Big surf (${h}). A proper step-up or gun is essential.`,
     extras: ['Heavy-duty leash (9–10ft)', 'Only experienced surfers'],
   }
   return {
     boards: ['Gun (8ft+)', 'Big Wave Board'],
-    boardReason: `XXL surf (${avgFt.toFixed(1)}ft). Expert surfers only. Safety gear required.`,
+    boardReason: `XXL surf (${h}). Expert surfers only. Safety gear required.`,
     extras: ['Inflation vest recommended', 'Know the spot well', 'Surf with others'],
   }
 }
 
 export function GearPanel({ activeDayHours, waterTempC }: Props) {
+  const { unit } = useUnits()
   const avgHeight = activeDayHours.reduce((s, h) => s + h.waveHeight, 0) / activeDayHours.length
   const avgPower = activeDayHours.reduce((s, h) => s + h.wavePower, 0) / activeDayHours.length
   const peakHeight = Math.max(...activeDayHours.map((h) => h.waveHeight))
 
-  const wetsuit = getWetsuitRec(waterTempC)
-  const board = getBoardRec(avgHeight, avgPower)
+  const wetsuit = getWetsuitRec(waterTempC, unit)
+  const board = getBoardRec(avgHeight, avgPower, unit)
 
   return (
     <div
@@ -153,7 +156,7 @@ export function GearPanel({ activeDayHours, waterTempC }: Props) {
             Board
           </span>
           <span className="ml-auto text-xs" style={{ color: 'var(--text-3)' }}>
-            avg {(avgHeight * 3.281).toFixed(1)}ft · peak {(peakHeight * 3.281).toFixed(1)}ft · {Math.round(avgPower)} kW/m
+            avg {fmtHeightDec(avgHeight, unit)} · peak {fmtHeightDec(peakHeight, unit)} · {Math.round(avgPower)} kW/m
           </span>
         </div>
 
