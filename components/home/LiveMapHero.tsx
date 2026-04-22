@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { WaveLoader } from '@/components/layout/WaveLoader'
+import { HeroBackdrop } from '@/components/home/HeroBackdrop'
+import { Icon } from '@/components/ui/Icon'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 
@@ -20,12 +22,22 @@ const SpotMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full flex items-center justify-center" style={{ background: 'var(--sand-50)' }}>
-        <WaveLoader compact label="Loading live map…" />
+      <div className="h-full w-full relative overflow-hidden" style={{ background: 'var(--ocean-50)' }}>
+        <HeroBackdrop style={{ position: 'absolute', inset: 0 }} />
+        <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 1 }}>
+          <WaveLoader compact label="Loading live map…" />
+        </div>
       </div>
     ),
   }
 )
+
+const DATA_SOURCES = [
+  { name: 'NOAA NDBC Buoys',    icon: 'buoy' as const },
+  { name: 'Open-Meteo Marine',  icon: 'wave' as const },
+  { name: 'NOAA CO-OPS Tides', icon: 'tide' as const },
+  { name: 'OpenStreetMap',      icon: 'map'  as const },
+]
 
 interface Props {
   spotCount: number
@@ -48,9 +60,7 @@ export function LiveMapHero({ spotCount }: Props) {
   const spots = enrichedSpots ?? baseSpots
 
   return (
-    <section
-      className="flex flex-col lg:flex-row h-[90svh] lg:h-[calc(100svh-57px)] min-h-[500px]"
-    >
+    <section className="flex flex-col lg:flex-row h-[90svh] lg:h-[calc(100svh-57px)] min-h-[500px]">
       {/* ── Left: text panel (desktop only) ──────────────────────────── */}
       <div
         className="hidden lg:flex shrink-0 flex-col justify-center px-10 w-[400px] border-r"
@@ -99,14 +109,9 @@ export function LiveMapHero({ spotCount }: Props) {
             Trusted Data Sources
           </p>
           <div className="flex flex-col gap-1.5 mb-5">
-            {[
-              { name: 'NOAA NDBC Buoys', icon: '📡' },
-              { name: 'Open-Meteo Marine API', icon: '🌊' },
-              { name: 'NOAA CO-OPS Tides', icon: '🌊' },
-              { name: 'OpenStreetMap', icon: '🗺️' },
-            ].map((s) => (
+            {DATA_SOURCES.map((s) => (
               <span key={s.name} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-                <span>{s.icon}</span>
+                <Icon name={s.icon} size={14} strokeWidth={1.6} />
                 <span>{s.name}</span>
               </span>
             ))}
@@ -149,7 +154,7 @@ export function LiveMapHero({ spotCount }: Props) {
           </Link>
         </div>
 
-        {/* Mobile: bottom overlay — Browse Spots + credits */}
+        {/* Mobile: bottom overlay */}
         <div
           className="absolute bottom-0 left-0 right-0 z-10 lg:hidden flex flex-col items-center gap-3 px-5 pb-6 pt-12"
           style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.32) 0%, transparent 100%)' }}
@@ -166,8 +171,11 @@ export function LiveMapHero({ spotCount }: Props) {
           </Link>
 
           <div className="flex flex-wrap justify-center gap-x-4 gap-y-0.5">
-            {['📡 NOAA NDBC', '🌊 Open-Meteo', '🌊 NOAA Tides', '🗺️ OpenStreetMap'].map((s) => (
-              <span key={s} className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>{s}</span>
+            {DATA_SOURCES.map((s) => (
+              <span key={s.name} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                <Icon name={s.icon} size={12} strokeWidth={1.6} />
+                <span>{s.name}</span>
+              </span>
             ))}
           </div>
 
