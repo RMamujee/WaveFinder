@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 
 interface Props {
   height?: number   // wave height in metres
@@ -9,25 +9,9 @@ interface Props {
   canvasHeight?: number
 }
 
-function useIsDarkTheme(): boolean {
-  const [isDark, setIsDark] = useState(false)
-
-  useEffect(() => {
-    const root = document.documentElement
-    const check = () => setIsDark(root.dataset.theme === 'offshore')
-    check()
-    const obs = new MutationObserver(check)
-    obs.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => obs.disconnect()
-  }, [])
-
-  return isDark
-}
-
 export function MiniWave({ height = 1, wind = 5, width = 280, canvasHeight = 48 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef    = useRef<number>(0)
-  const isDark    = useIsDarkTheme()
 
   const amplitude = 0.8 + Math.min(height, 10) * 0.22
   const chop      = Math.min(0.5, wind / 36)
@@ -46,13 +30,8 @@ export function MiniWave({ height = 1, wind = 5, width = 280, canvasHeight = 48 
     const px    = (amplitude / 10) * H * 1.6
 
     const grad = ctx.createLinearGradient(0, 0, 0, H)
-    if (isDark) {
-      grad.addColorStop(0, '#1a4a7a')
-      grad.addColorStop(1, '#0a2a50')
-    } else {
-      grad.addColorStop(0, '#b8ddff')
-      grad.addColorStop(1, '#7ec0f5')
-    }
+    grad.addColorStop(0, '#b8ddff')
+    grad.addColorStop(1, '#7ec0f5')
 
     const points: [number, number][] = []
     for (let x = 0; x <= W; x += 2) {
@@ -81,7 +60,7 @@ export function MiniWave({ height = 1, wind = 5, width = 280, canvasHeight = 48 
     ctx.strokeStyle = 'rgba(255,255,255,0.55)'
     ctx.lineWidth = 1.5
     ctx.stroke()
-  }, [amplitude, chop, isDark])
+  }, [amplitude, chop])
 
   useEffect(() => {
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches

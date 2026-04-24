@@ -5,7 +5,6 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useUnits } from '@/contexts/UnitsContext'
-import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -27,7 +26,7 @@ export function Navbar() {
   return (
     <nav
       className="sticky top-0 z-50 border-b"
-      style={{ background: 'var(--nav-bg)', backdropFilter: 'blur(12px)', borderColor: 'var(--border)' }}
+      style={{ background: 'rgba(253,250,245,0.92)', backdropFilter: 'blur(12px)', borderColor: 'var(--border)' }}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3">
         {/* Logo */}
@@ -64,7 +63,6 @@ export function Navbar() {
           >
             {unit === 'imperial' ? 'mi/ft/°F' : 'km/m/°C'}
           </button>
-          <ThemeToggle />
         </div>
 
         {/* Mobile: Made by credit */}
