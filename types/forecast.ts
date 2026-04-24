@@ -57,7 +57,7 @@ export interface BuoyReading {
   waveHeight: number | null   // null when WVHT sensor is offline/missing (MM)
   dominantPeriod: number | null
   averagePeriod: number | null
-  meanDirection: number
+  meanDirection: number | null  // null when MWD sensor is offline/missing (MM)
   waterTemp: number | null
   airTemp: number | null
   windSpeed: number | null

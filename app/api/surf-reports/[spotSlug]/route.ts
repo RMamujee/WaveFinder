@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { fetchBuoyData } from '@/lib/api/noaa-buoy'
 import { degreesToCompass, computeWavePower } from '@/lib/forecast/rating'
 
 export const revalidate = 1800
@@ -77,7 +76,11 @@ export async function GET(
 
   const spot = await prisma.surfSpot.findUnique({ where: { slug: spotSlug } })
 
-  if (!spot?.noaaBuoyId) {
+  if (!spot) {
+    return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
+  }
+
+  if (!spot.noaaBuoyId) {
     const report: LiveConditionReport = {
       source: 'none',
       time: new Date().toISOString(),

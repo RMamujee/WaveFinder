@@ -77,13 +77,16 @@ export function rateSurfConditions(input: {
   swellHeight: number
   windSpeed: number
   windDirection: number
-  swellDirection: number
+  swellDirection: number | null
   spotFacing: number
 }): { score: number; rating: ConditionRating } {
   const heightScore    = scoreHeight(input.waveHeight)
   const periodScore    = scorePeriod(input.swellPeriod)
   const windScore      = scoreWind(input.windSpeed, input.windDirection, input.spotFacing)
-  const directionScore = scoreDirection(input.swellDirection, input.spotFacing)
+  // 50 = neutral score when direction is unknown (buoy sensor offline)
+  const directionScore = input.swellDirection != null
+    ? scoreDirection(input.swellDirection, input.spotFacing)
+    : 50
 
   const rawScore = Math.round(
     heightScore    * 0.25 +

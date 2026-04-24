@@ -3,6 +3,7 @@ import type { BuoyReading } from '@/types/forecast'
 const NDBC_BASE = 'https://www.ndbc.noaa.gov/data/realtime2'
 
 export async function fetchBuoyData(buoyId: string): Promise<BuoyReading | null> {
+  if (!/^\d{4,5}$/.test(buoyId)) return null
   try {
     const res = await fetch(`${NDBC_BASE}/${buoyId}.txt`, {
       next: { revalidate: 1800 },
@@ -47,7 +48,7 @@ export async function fetchBuoyData(buoyId: string): Promise<BuoyReading | null>
       waveHeight: get('WVHT'),           // null if sensor offline (MM)
       dominantPeriod: get('DPD'),        // null if sensor offline
       averagePeriod: get('APD') ?? null,
-      meanDirection: get('MWD') ?? 0,
+      meanDirection: get('MWD'),
       waterTemp: get('WTMP'),
       airTemp: get('ATMP'),
       windSpeed: get('WSPD'),
