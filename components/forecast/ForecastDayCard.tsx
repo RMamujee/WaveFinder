@@ -70,7 +70,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
           title={day.weatherCode != null ? weatherLabel(day.weatherCode) : undefined}
           style={{ fontSize: 20, lineHeight: 1 }}
         >
-          {day.weatherCode != null ? weatherIcon(day.weatherCode) : '🌊'}
+          {day.weatherCode != null ? weatherIcon(day.weatherCode) : '〜'}
         </span>
         <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
           {day.maxTempC !== null && (
@@ -139,7 +139,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         {/* Water temp */}
         {avgWaterTempC !== null && (
           <p style={{ fontSize: 11, color: '#0e7490', marginBottom: 2 }}>
-            🌊 {fmtTemp(avgWaterTempC, unit)}
+            〜 {fmtTemp(avgWaterTempC, unit)}
           </p>
         )}
 

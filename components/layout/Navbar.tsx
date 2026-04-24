@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useUnits } from '@/contexts/UnitsContext'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -63,6 +64,7 @@ export function Navbar() {
           >
             {unit === 'imperial' ? 'mi/ft/°F' : 'km/m/°C'}
           </button>
+          <ThemeToggle />
         </div>
 
         {/* Mobile: Made by credit */}

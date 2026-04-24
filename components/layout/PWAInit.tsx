@@ -91,7 +91,7 @@ export function PWAInit() {
           fontSize: 22,
         }}
       >
-        🌊
+        〜
       </div>
 
       {/* Text */}

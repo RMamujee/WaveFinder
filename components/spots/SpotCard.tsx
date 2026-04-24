@@ -1,15 +1,26 @@
 'use client'
 
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 import { useUnits } from '@/contexts/UnitsContext'
-import { fmtHeight } from '@/lib/units'
+import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
+import { Icon } from '@/components/ui/Icon'
+
+const MiniWave = dynamic(
+  () => import('@/components/ui/MiniWave').then((m) => m.MiniWave),
+  { ssr: false }
+)
 
 interface Props {
   spot: SurfSpot
   rating?: ConditionRating
   waveHeight?: number
+  period?: number
+  wind?: number
+  tempF?: number
+  direction?: string
 }
 
 const DIFFICULTY_STYLES = {
@@ -22,51 +33,89 @@ const RATING_DOTS: Record<ConditionRating, string> = {
   poor: '#9ca3af', fair: '#f59e0b', good: '#16a34a', epic: '#7c3aed',
 }
 
-export function SpotCard({ spot, rating, waveHeight }: Props) {
+export function SpotCard({ spot, rating, waveHeight, period, wind, tempF, direction }: Props) {
   const { unit } = useUnits()
   const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES] ?? DIFFICULTY_STYLES.intermediate
+  const hasMiniStats = period != null || wind != null || tempF != null || direction != null
 
   return (
     <Link
       href={`/spots/${spot.slug}`}
-      className="group block rounded-xl p-4 transition-all"
+      className="group block rounded-xl overflow-hidden transition-all"
       style={{
         background: 'white',
         border: '1px solid var(--border)',
         boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
       }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3
-            className="font-semibold truncate transition-colors group-hover:text-[var(--ocean-600)]"
-            style={{ fontSize: '14px', color: 'var(--text)' }}
-          >
-            {spot.name}
-          </h3>
-          <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{spot.region}</p>
-        </div>
-        {rating && (
-          <div
-            className="h-2.5 w-2.5 rounded-full shrink-0 mt-1"
-            style={{ background: RATING_DOTS[rating] }}
-            title={rating}
-          />
-        )}
-      </div>
+      {/* Wave canvas */}
+      <MiniWave
+        height={waveHeight ?? 1}
+        wind={wind ?? 5}
+        width={280}
+        canvasHeight={48}
+      />
 
-      <div className="mt-3 flex items-center justify-between">
-        <span
-          className="rounded-full px-2 py-0.5 text-xs font-medium capitalize"
-          style={{ background: diffStyle.bg, color: diffStyle.color }}
-        >
-          {spot.difficulty}
-        </span>
-        {waveHeight !== undefined && (
-          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-            {fmtHeight(waveHeight, unit)}
-          </span>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3
+              className="font-semibold truncate transition-colors group-hover:text-[var(--ocean-600)]"
+              style={{ fontSize: '14px', color: 'var(--text)' }}
+            >
+              {spot.name}
+            </h3>
+            <p className="text-xs truncate" style={{ color: 'var(--text-3)' }}>{spot.region}</p>
+          </div>
+          {rating && (
+            <div
+              className="h-2.5 w-2.5 rounded-full shrink-0 mt-1"
+              style={{ background: RATING_DOTS[rating] }}
+              title={rating}
+            />
+          )}
+        </div>
+
+        {/* Micro-stats row */}
+        {hasMiniStats && (
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
+            {period != null && (
+              <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-2)' }}>
+                <Icon name="wave" size={11} strokeWidth={1.8} />
+                {period}s
+              </span>
+            )}
+            {wind != null && (
+              <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-2)' }}>
+                <Icon name="wind" size={11} strokeWidth={1.8} />
+                {fmtWind(wind, unit)}
+                {direction && ` ${direction}`}
+              </span>
+            )}
+            {tempF != null && (
+              <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-2)' }}>
+                <Icon name="temp" size={11} strokeWidth={1.8} />
+                {unit === 'imperial'
+                  ? `${Math.round(tempF)}°F`
+                  : `${Math.round((tempF - 32) * 5 / 9)}°C`}
+              </span>
+            )}
+          </div>
         )}
+
+        <div className="mt-3 flex items-center justify-between">
+          <span
+            className="rounded-full px-2 py-0.5 text-xs font-medium capitalize"
+            style={{ background: diffStyle.bg, color: diffStyle.color }}
+          >
+            {spot.difficulty}
+          </span>
+          {waveHeight !== undefined && (
+            <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              {fmtHeight(waveHeight, unit)}
+            </span>
+          )}
+        </div>
       </div>
     </Link>
   )

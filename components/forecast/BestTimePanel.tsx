@@ -10,9 +10,9 @@ interface Props {
 
 const WINDOW_ICONS: Record<string, string> = {
   dawn: '🌅',
-  morning: '☀️',
-  midday: '🌤️',
-  afternoon: '🌊',
+  morning: '○',
+  midday: '◑',
+  afternoon: '≈',
   evening: '🌇',
 }
 
@@ -20,7 +20,7 @@ const WIND_ICONS: Record<string, string> = {
   glassy: '🪞',
   'light offshore': '💨',
   'light onshore': '〰️',
-  choppy: '🌬️',
+  choppy: '≋',
 }
 
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; bar: string }> = {

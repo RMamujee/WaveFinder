@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState, useId } from 'react'
+import type { ReactNode } from 'react'
 import {
   getGear, saveGear,
   BOARD_TYPES, WETSUIT_OPTIONS,
   type GearItem, type GearBoard, type GearWetsuit, type BoardType, type WetsuitThickness,
 } from '@/lib/gear'
+import { Icon } from '@/components/ui/Icon'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -135,7 +137,7 @@ function GearCard({ item, onEdit, onDelete }: CardProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-base">{isBoard ? '🏄' : '🤿'}</span>
+            <span style={{ color: 'var(--text-3)' }}>{isBoard ? <Icon name="board" size={16} strokeWidth={1.6} /> : '🤿'}</span>
             <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{item.name}</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -218,7 +220,7 @@ export default function GearPage() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-bold" style={{ color: 'var(--text)' }}>
-              🏄 Boards <span className="font-normal text-sm ml-1" style={{ color: 'var(--text-3)' }}>({boards.length})</span>
+              <span className="inline-flex items-center gap-1.5"><Icon name="board" size={16} strokeWidth={1.6} /> Boards</span> <span className="font-normal text-sm ml-1" style={{ color: 'var(--text-3)' }}>({boards.length})</span>
             </h2>
             {adding !== 'board' && (
               <button onClick={() => { setAdding('board'); setEditingId(null) }} className="rounded-xl px-4 py-1.5 text-sm font-semibold text-white" style={{ background: 'var(--ocean-600)' }}>
@@ -235,7 +237,7 @@ export default function GearPage() {
           )}
 
           {boards.length === 0 && adding !== 'board' ? (
-            <EmptyState emoji="🏄" label="No boards yet" sub="Add your quiver to track what you ride each session." onAdd={() => setAdding('board')} addLabel="Add first board" />
+            <EmptyState emoji={<Icon name="board" size={36} strokeWidth={1.4} style={{ color: 'var(--text-3)' }} />} label="No boards yet" sub="Add your quiver to track what you ride each session." onAdd={() => setAdding('board')} addLabel="Add first board" />
           ) : (
             <div className="flex flex-col gap-3">
               {boards.map(b => editingId === b.id ? (
@@ -299,7 +301,7 @@ export default function GearPage() {
   )
 }
 
-function EmptyState({ emoji, label, sub, onAdd, addLabel }: { emoji: string; label: string; sub: string; onAdd: () => void; addLabel: string }) {
+function EmptyState({ emoji, label, sub, onAdd, addLabel }: { emoji: ReactNode; label: string; sub: string; onAdd: () => void; addLabel: string }) {
   return (
     <div className="rounded-2xl py-12 text-center" style={{ border: '2px dashed var(--border)', background: 'white' }}>
       <div className="text-3xl mb-3">{emoji}</div>

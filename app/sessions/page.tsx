@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { format, parseISO } from 'date-fns'
 import { getBoards, getWetsuits, BOARD_TYPES, WETSUIT_OPTIONS } from '@/lib/gear'
+import { Icon } from '@/components/ui/Icon'
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ function WaveRating({ value, max = 5 }: { value: number; max?: number }) {
     <span style={{ letterSpacing: '1px', fontSize: '14px' }}>
       {Array.from({ length: max }, (_, i) => (
         <span key={i} style={{ opacity: i < value ? 1 : 0.2 }}>
-          🌊
+          ◉
         </span>
       ))}
     </span>
@@ -792,7 +793,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                       }}
                       title={`${n} star${n !== 1 ? 's' : ''}`}
                     >
-                      🌊
+                      ◉
                     </button>
                   ))}
                   {form.rating > 0 && (
@@ -869,7 +870,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
               fontFamily: 'DM Sans, sans-serif',
             }}
           >
-            {mutation.isPending ? 'Logging session…' : '🌊 Log Session'}
+            {mutation.isPending ? 'Logging session…' : 'Log Session'}
           </button>
         </form>
       </div>
@@ -1012,7 +1013,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
             </h3>
             {session.region && (
               <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>
-                📍 {session.region}
+                · {session.region}
               </p>
             )}
           </div>
@@ -1045,7 +1046,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
           >
             {session.waveHeightFt !== null && (
               <Chip>
-                🌊 {session.waveHeightFt}ft
+                〜 {session.waveHeightFt}ft
                 {session.wavePeriod !== null ? ` @ ${session.wavePeriod}s` : ''}
               </Chip>
             )}
@@ -1055,7 +1056,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
               </Chip>
             )}
             {session.waterTempC !== null && (
-              <Chip>🌡 {session.waterTempC}°C</Chip>
+              <Chip>T° {session.waterTempC}°C</Chip>
             )}
           </div>
         )}
@@ -1063,7 +1064,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
         {/* Equipment row */}
         {(session.boardType || session.wetsuitMm) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {session.boardType && <Chip variant="sand">🏄 {session.boardType}</Chip>}
+            {session.boardType && <Chip variant="sand">◉ {session.boardType}</Chip>}
             {session.wetsuitMm && <Chip variant="sand">🤿 {session.wetsuitMm}</Chip>}
           </div>
         )}
@@ -1193,7 +1194,7 @@ function SessionsPageInner() {
               boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
             }}
           >
-            🌊 Session logged!
+            Session logged!
           </div>
         )}
 
@@ -1321,7 +1322,7 @@ function SessionsPageInner() {
                         }, {})
                         return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
                       })(),
-                      icon: '📍',
+                      icon: '·',
                     },
                     {
                       label: 'Fav board',
@@ -1332,7 +1333,7 @@ function SessionsPageInner() {
                         }, {})
                         return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
                       })(),
-                      icon: '🏄',
+                      icon: '◉',
                     },
                   ] as { label: string; value: string; icon: string }[]
                 ).map((stat) => (

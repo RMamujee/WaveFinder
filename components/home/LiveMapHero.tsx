@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { WaveLoader } from '@/components/layout/WaveLoader'
+import { Icon } from '@/components/ui/Icon'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 
@@ -99,14 +100,14 @@ export function LiveMapHero({ spotCount }: Props) {
             Trusted Data Sources
           </p>
           <div className="flex flex-col gap-1.5 mb-5">
-            {[
-              { name: 'NOAA NDBC Buoys', icon: '📡' },
-              { name: 'Open-Meteo Marine API', icon: '🌊' },
-              { name: 'NOAA CO-OPS Tides', icon: '🌊' },
-              { name: 'OpenStreetMap', icon: '🗺️' },
-            ].map((s) => (
+            {([
+              { name: 'NOAA NDBC Buoys',      icon: 'buoy' },
+              { name: 'Open-Meteo Marine API', icon: 'wave' },
+              { name: 'NOAA CO-OPS Tides',     icon: 'tide' },
+              { name: 'OpenStreetMap',          icon: 'map'  },
+            ] as const).map((s) => (
               <span key={s.name} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-                <span>{s.icon}</span>
+                <Icon name={s.icon} size={14} strokeWidth={1.6} />
                 <span>{s.name}</span>
               </span>
             ))}
@@ -166,8 +167,16 @@ export function LiveMapHero({ spotCount }: Props) {
           </Link>
 
           <div className="flex flex-wrap justify-center gap-x-4 gap-y-0.5">
-            {['📡 NOAA NDBC', '🌊 Open-Meteo', '🌊 NOAA Tides', '🗺️ OpenStreetMap'].map((s) => (
-              <span key={s} className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>{s}</span>
+            {([
+              { label: 'NOAA NDBC',    icon: 'buoy' },
+              { label: 'Open-Meteo',   icon: 'wave' },
+              { label: 'NOAA Tides',   icon: 'tide' },
+              { label: 'OpenStreetMap',icon: 'map'  },
+            ] as const).map((s) => (
+              <span key={s.label} className="flex items-center gap-1 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                <Icon name={s.icon} size={12} strokeWidth={1.6} />
+                {s.label}
+              </span>
             ))}
           </div>
 

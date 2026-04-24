@@ -5,14 +5,17 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
+import { TimelineSkyStrip } from '@/components/ui/TimelineSkyStrip'
+import { Icon } from '@/components/ui/Icon'
+import { solarTimes } from '@/lib/solar'
 
 // ── Region config ─────────────────────────────────────────────────────────────
 
 const REGIONS = [
-  { name: 'San Diego',             icon: '🌊', short: 'San Diego'   },
+  { name: 'San Diego',             icon: '🐬', short: 'San Diego'   },
   { name: 'Orange County',         icon: '🌴', short: 'O.C.'        },
   { name: 'Los Angeles',           icon: '🌆', short: 'L.A.'        },
-  { name: 'Ventura',               icon: '🏄', short: 'Ventura'     },
+  { name: 'Ventura',               icon: '⛵', short: 'Ventura'     },
   { name: 'Santa Barbara',         icon: '🌸', short: 'S.B.'        },
   { name: 'Central Coast',         icon: '🌾', short: 'Cen. Coast'  },
   { name: 'Monterey',              icon: '🦭', short: 'Monterey'    },
@@ -20,7 +23,7 @@ const REGIONS = [
   { name: 'North Shore',           icon: '🌺', short: 'N. Shore'    },
   { name: 'South Shore',           icon: '🤙', short: 'S. Shore'    },
   { name: 'Gold Coast',            icon: '🦘', short: 'Gold Coast'  },
-  { name: 'Sydney Northern Beaches', icon: '🏖️', short: 'Sydney'   },
+  { name: 'Sydney Northern Beaches', icon: '🐚', short: 'Sydney'   },
   { name: 'Uluwatu',               icon: '🌿', short: 'Uluwatu'     },
   { name: 'Hossegor',              icon: '🥖', short: 'Hossegor'    },
   { name: "Jeffrey's Bay",         icon: '🦁', short: "J-Bay"       },
@@ -94,11 +97,21 @@ export default function TimelinePage() {
   const [region,   setRegion]   = useState('Los Angeles')
   const [dayIdx,   setDayIdx]   = useState(0)
   const [dates,    setDates]    = useState<string[]>([])
+  const [solar,    setSolar]    = useState<{ sunrise: number; sunset: number } | null>(null)
 
   useEffect(() => {
     const h = new Date().getHours()
     setHour(Math.max(6, Math.min(21, h)))
     setDates(Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)))
+    // Use browser geolocation for solar; fall back to LA coordinates
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setSolar(solarTimes(pos.coords.latitude, pos.coords.longitude)),
+        () => setSolar(solarTimes(34.05, -118.25))
+      )
+    } else {
+      setSolar(solarTimes(34.05, -118.25))
+    }
     setMounted(true)
   }, [])
 
@@ -228,6 +241,34 @@ export default function TimelinePage() {
           </div>
         </div>
 
+        {/* ── Solar band card ── */}
+        {solar && (
+          <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--border)' }}>
+            <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+                Daylight
+              </p>
+              <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-3)' }}>
+                <span className="flex items-center gap-1">
+                  <Icon name="sun" size={12} strokeWidth={1.6} />
+                  {Math.floor(solar.sunrise)}:{String(Math.round((solar.sunrise % 1) * 60)).padStart(2, '0')}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Icon name="moon" size={12} strokeWidth={1.6} />
+                  {Math.floor(solar.sunset)}:{String(Math.round((solar.sunset % 1) * 60)).padStart(2, '0')}
+                </span>
+              </div>
+            </div>
+            <div className="px-5 pb-4">
+              <TimelineSkyStrip
+                sunrise={solar.sunrise}
+                sunset={solar.sunset}
+                currentHour={hour}
+              />
+            </div>
+          </div>
+        )}
+
         {/* ── Slider card ── */}
         <div className="rounded-2xl p-6 space-y-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -245,9 +286,10 @@ export default function TimelinePage() {
 
             <div className="flex items-center gap-3 flex-wrap">
               {waterTemp !== null && (
-                <div className="rounded-xl px-3 py-2 text-sm font-semibold"
+                <div className="rounded-xl px-3 py-2 text-sm font-semibold flex items-center gap-1.5"
                   style={{ background: 'var(--ocean-50)', color: 'var(--ocean-700)', border: '1px solid var(--ocean-100)' }}>
-                  💧 {fmtTemp(waterTemp, unit)} water
+                  <Icon name="temp" size={14} strokeWidth={1.6} />
+                  {fmtTemp(waterTemp, unit)} water
                 </div>
               )}
               {!isLoading && !isError && topScore > 0 && (
@@ -414,7 +456,8 @@ export default function TimelinePage() {
           <Link href="/spots"
             className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
             style={{ background: 'var(--ocean-600)' }}>
-            🗺️ Open live map
+            <Icon name="map" size={16} strokeWidth={1.8} />
+            Open live map
           </Link>
         </div>
       </div>

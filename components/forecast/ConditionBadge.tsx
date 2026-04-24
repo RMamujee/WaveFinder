@@ -1,6 +1,12 @@
 import type { ConditionRating } from '@/types/forecast'
 
-const CONFIG: Record<ConditionRating, { label: string; className: string }> = {
+interface RatingConfig {
+  label: string
+  className: string
+  style?: React.CSSProperties
+}
+
+const CONFIG: Record<ConditionRating, RatingConfig> = {
   poor: {
     label: 'Poor',
     className: 'bg-slate-600 text-slate-200',
@@ -15,7 +21,8 @@ const CONFIG: Record<ConditionRating, { label: string; className: string }> = {
   },
   epic: {
     label: 'EPIC',
-    className: 'bg-purple-500 text-white animate-pulse',
+    className: 'bg-purple-500 text-white',
+    style: { boxShadow: '0 0 0 3px rgba(124,58,237,0.2)' },
   },
 }
 
@@ -25,7 +32,7 @@ interface Props {
 }
 
 export function ConditionBadge({ rating, size = 'md' }: Props) {
-  const { label, className } = CONFIG[rating]
+  const { label, className, style } = CONFIG[rating]
   const sizeClass =
     size === 'sm'
       ? 'px-2 py-0.5 text-xs'
@@ -34,7 +41,7 @@ export function ConditionBadge({ rating, size = 'md' }: Props) {
         : 'px-3 py-1 text-sm font-semibold'
 
   return (
-    <span className={`inline-block rounded-full ${sizeClass} ${className}`}>
+    <span className={`inline-block rounded-full ${sizeClass} ${className}`} style={style}>
       {label}
     </span>
   )

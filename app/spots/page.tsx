@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { SpotCard } from '@/components/spots/SpotCard'
 import { WaveLoader } from '@/components/layout/WaveLoader'
+import { Icon } from '@/components/ui/Icon'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 import {
@@ -284,7 +285,7 @@ export default function SpotsPage() {
                   color: view === v ? 'white' : 'var(--text-2)',
                 }}
               >
-                {v === 'map' ? '🗺️ Map' : '☰ List'}
+                {v === 'map' ? <><Icon name="map" size={12} strokeWidth={1.6} style={{ display: 'inline' }} /> Map</> : '☰ List'}
               </button>
             ))}
           </div>

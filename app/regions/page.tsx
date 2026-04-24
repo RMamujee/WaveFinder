@@ -4,12 +4,13 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { REGION_HIERARCHY } from '@/lib/region-hierarchy'
+import { Icon } from '@/components/ui/Icon'
 
 // ── Visual config ─────────────────────────────────────────────────────────────
 
 const WORLD_REGION_COLORS: Record<string, { color: string; bg: string; border: string; icon: string }> = {
-  'North America': { color: '#1b7fcb', bg: '#eff6ff', border: '#bfdbfe', icon: '🌊' },
-  'South America': { color: '#059669', bg: '#ecfdf5', border: '#a7f3d0', icon: '🏄' },
+  'North America': { color: '#1b7fcb', bg: '#eff6ff', border: '#bfdbfe', icon: '〜' },
+  'South America': { color: '#059669', bg: '#ecfdf5', border: '#a7f3d0', icon: '◉' },
   'Europe':        { color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', icon: '🌅' },
   'Oceania':       { color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', icon: '🤙' },
   'Asia':          { color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: '🐉' },
@@ -228,7 +229,7 @@ export default function RegionsPage() {
                   key={country}
                   title={country}
                   subtitle={`${states.length} region${states.length !== 1 ? 's' : ''}`}
-                  icon={hasData ? '🏄' : '🗺️'}
+                  icon={hasData ? '◉' : '▦'}
                   color={hasData ? '#1b7fcb' : style.color}
                   bg={hasData ? '#eff6ff' : style.bg}
                   border={hasData ? '#bfdbfe' : style.border}
@@ -251,7 +252,7 @@ export default function RegionsPage() {
                   key={state}
                   title={state}
                   subtitle={`${regions.length} region${regions.length !== 1 ? 's' : ''}`}
-                  icon="🏄"
+                  icon="◉"
                   color={style.color}
                   bg={style.bg}
                   border={style.border}
@@ -277,7 +278,7 @@ export default function RegionsPage() {
                 <RegionCard
                   key={region}
                   title={region}
-                  icon={hasData ? '🌊' : '📍'}
+                  icon={hasData ? '〜' : '·'}
                   color={hasData ? '#1b7fcb' : style.color}
                   bg={hasData ? '#eff6ff' : style.bg}
                   border={hasData ? '#bfdbfe' : style.border}
@@ -295,7 +296,7 @@ export default function RegionsPage() {
             className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
             style={{ background: 'var(--ocean-600)' }}
           >
-            🗺️ Open live map — all spots
+            <Icon name="map" size={16} strokeWidth={1.8} /> Open live map — all spots
           </Link>
         </div>
       </div>

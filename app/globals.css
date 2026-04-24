@@ -156,3 +156,52 @@ body {
 .wl-foam2  { animation: wl-foam  2.4s ease-in-out 0.9s infinite; }
 .wl-foam3  { animation: wl-foam  2.4s ease-in-out 1.5s infinite; }
 .wl-label  { animation: wl-pulse 1.8s ease-in-out infinite; }
+
+/* ── Offshore (dark) theme ── */
+[data-theme="offshore"] {
+  --bg:        #0a1628;
+  --surface:   #0f2140;
+  --surface-2: #152b52;
+  --border:    #1e3a6e;
+  --text:      #e8f4ff;
+  --text-2:    #8ab4d8;
+  --text-3:    #4a7fa8;
+
+  --sand-50:   #0d1e36;
+  --sand-100:  #152b52;
+  --sand-200:  #1e3a6e;
+  --sand-300:  #2a4f8a;
+  --sand-400:  #3a6aaa;
+  --sand-500:  #4a85cc;
+
+  --ocean-50:  #071428;
+  --ocean-100: #0e2a50;
+  --ocean-200: #1a4a7a;
+  --ocean-300: #2568a8;
+  --ocean-400: #3a89cc;
+  --ocean-500: #5aaee8;
+  --ocean-600: #7ec8ff;
+  --ocean-700: #a8daff;
+  --ocean-800: #cce8ff;
+  --ocean-900: #e8f4ff;
+}
+
+[data-theme="offshore"] body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+[data-theme="offshore"] .leaflet-container {
+  background: #071428 !important;
+}
+
+[data-theme="offshore"] .leaflet-control-zoom a {
+  background: var(--surface) !important;
+  color: var(--ocean-600) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme="offshore"] .leaflet-tooltip.spot-hover-tooltip {
+  background: var(--surface);
+  border-color: var(--border);
+}

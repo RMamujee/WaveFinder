@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import type { LiveConditionReport } from '@/app/api/surf-reports/[spotSlug]/route'
 import { WaveLoader } from '@/components/layout/WaveLoader'
+import { Icon } from '@/components/ui/Icon'
 
 const TREND_ICON: Record<string, string> = {
   rising: '↑',
@@ -82,7 +83,7 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
           <WaveLoader compact label="Checking buoy…" />
         ) : !report || report.source === 'none' ? (
           <div className="py-6 text-center">
-            <div className="text-3xl mb-2">📡</div>
+            <div className="mb-2 flex justify-center" style={{ color: 'var(--text-3)' }}><Icon name="buoy" size={36} strokeWidth={1.4} /></div>
             <p className="text-sm font-medium mb-1" style={{ color: 'var(--text)' }}>No buoy nearby</p>
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>
               {report?.summary ?? 'No live buoy data available. Check the forecast charts.'}
@@ -151,7 +152,7 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
               className="rounded-xl px-4 py-3 mb-3"
               style={{ background: 'var(--ocean-50)', border: '1px solid var(--ocean-100)' }}
             >
-              <p className="text-xs font-medium mb-1" style={{ color: 'var(--ocean-700)' }}>📍 Station Report</p>
+              <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: 'var(--ocean-700)' }}><Icon name="pin" size={12} strokeWidth={1.6} /> Station Report</p>
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{report.summary}</p>
             </div>
 
