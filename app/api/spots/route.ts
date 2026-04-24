@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
 
-export const revalidate = 1800
+export const revalidate = 300
 export const maxDuration = 60
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {

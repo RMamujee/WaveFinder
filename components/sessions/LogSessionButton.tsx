@@ -12,7 +12,7 @@ export function LogSessionButton() {
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-semibold transition-all hover:-translate-y-0.5"
         style={{
-          background: 'white',
+          background: 'var(--surface)',
           border: '1.5px solid var(--border)',
           color: 'var(--text)',
           boxShadow: '0 2px 10px rgba(0,0,0,0.07)',

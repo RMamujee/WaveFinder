@@ -97,13 +97,13 @@ export function WaveChart({ days, activeDayData }: Props) {
             />
             <Tooltip
               contentStyle={{
-                background: 'white',
-                border: '1px solid #ede0cc',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
                 borderRadius: '10px',
                 fontSize: '12px',
                 boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
               }}
-              labelStyle={{ color: '#4a4a6a', marginBottom: '4px' }}
+              labelStyle={{ color: 'var(--text-2)', marginBottom: '4px' }}
               formatter={(value, name) => [
                 fmtHeightDec(value as number, unit),
                 name === 'waveHeight' ? 'Wave' : 'Swell',

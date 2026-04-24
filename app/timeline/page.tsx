@@ -153,7 +153,7 @@ export default function TimelinePage() {
   if (!mounted) {
     return (
       <div style={{ background: 'var(--sand-50)', minHeight: '100vh' }}>
-        <div className="border-b" style={{ background: 'white', borderColor: 'var(--border)' }}>
+        <div className="border-b" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
           <div className="mx-auto max-w-4xl px-5 py-8">
             <div className="h-4 w-24 rounded mb-3 animate-pulse" style={{ background: 'var(--sand-200)' }} />
             <div className="h-9 w-40 rounded-xl animate-pulse" style={{ background: 'var(--sand-200)' }} />
@@ -167,7 +167,7 @@ export default function TimelinePage() {
     <div style={{ background: 'var(--sand-50)', minHeight: '100vh' }}>
 
       {/* Header */}
-      <div className="border-b" style={{ background: 'white', borderColor: 'var(--border)' }}>
+      <div className="border-b" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
         <div className="mx-auto max-w-4xl px-5 py-8">
           <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--ocean-500)' }}>
             Interactive
@@ -243,7 +243,7 @@ export default function TimelinePage() {
 
         {/* ── Solar band card ── */}
         {solar && (
-          <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--border)' }}>
+          <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="px-5 pt-4 pb-2 flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
                 Daylight
@@ -270,7 +270,7 @@ export default function TimelinePage() {
         )}
 
         {/* ── Slider card ── */}
-        <div className="rounded-2xl p-6 space-y-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+        <div className="rounded-2xl p-6 space-y-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <div className="text-4xl font-bold"
@@ -314,14 +314,14 @@ export default function TimelinePage() {
             .tl-slider::-webkit-slider-thumb {
               -webkit-appearance: none; appearance: none;
               width: 28px; height: 28px; border-radius: 9999px;
-              background: white; border: 3px solid ${trackColor};
+              background: var(--surface); border: 3px solid ${trackColor};
               box-shadow: 0 2px 8px rgba(0,0,0,0.18); cursor: pointer;
               transition: transform 0.1s;
             }
             .tl-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
             .tl-slider::-moz-range-thumb {
               width: 28px; height: 28px; border-radius: 9999px;
-              background: white; border: 3px solid ${trackColor};
+              background: var(--surface); border: 3px solid ${trackColor};
               box-shadow: 0 2px 8px rgba(0,0,0,0.18); cursor: pointer;
             }
           `}</style>
@@ -365,7 +365,7 @@ export default function TimelinePage() {
           )}
 
           {!isLoading && !isError && sorted.length === 0 && (
-            <div className="rounded-2xl p-10 text-center" style={{ background: 'white', border: '1px solid var(--border)' }}>
+            <div className="rounded-2xl p-10 text-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
               <p style={{ color: 'var(--text-2)' }}>No spots found for {region}.</p>
             </div>
           )}
@@ -377,7 +377,7 @@ export default function TimelinePage() {
                 return (
                   <Link key={spot.id} href={`/spots/${spot.slug}`}
                     className="group flex items-center gap-4 rounded-2xl p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
-                    style={{ background: 'white', border: '1px solid var(--border)', textDecoration: 'none' }}>
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)', textDecoration: 'none' }}>
 
                     {/* Rank */}
                     <div className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold"

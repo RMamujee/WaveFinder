@@ -133,7 +133,7 @@ function GearCard({ item, onEdit, onDelete }: CardProps) {
   const board = item as GearBoard
   const wetsuit = item as GearWetsuit
   return (
-    <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid var(--border)' }}>
+    <div className="rounded-2xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -204,7 +204,7 @@ export default function GearPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--sand-50)' }}>
       {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
         <div className="mx-auto max-w-3xl px-5 py-8">
           <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--text-3)' }}>My Gear</p>
           <h1 className="text-2xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>Gear Locker</h1>
@@ -230,7 +230,7 @@ export default function GearPage() {
           </div>
 
           {adding === 'board' && (
-            <div className="rounded-2xl p-5 mb-4" style={{ background: 'white', border: '1.5px solid var(--ocean-300)' }}>
+            <div className="rounded-2xl p-5 mb-4" style={{ background: 'var(--surface)', border: '1.5px solid var(--ocean-300)' }}>
               <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text)' }}>New board</p>
               <BoardForm onSave={addBoard} onCancel={() => setAdding(null)} />
             </div>
@@ -241,7 +241,7 @@ export default function GearPage() {
           ) : (
             <div className="flex flex-col gap-3">
               {boards.map(b => editingId === b.id ? (
-                <div key={b.id} className="rounded-2xl p-5" style={{ background: 'white', border: '1.5px solid var(--ocean-300)' }}>
+                <div key={b.id} className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1.5px solid var(--ocean-300)' }}>
                   <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text)' }}>Edit board</p>
                   <BoardForm
                     initial={{ name: b.name, boardType: b.boardType, lengthFt: b.lengthFt, volume: b.volume, notes: b.notes }}
@@ -270,7 +270,7 @@ export default function GearPage() {
           </div>
 
           {adding === 'wetsuit' && (
-            <div className="rounded-2xl p-5 mb-4" style={{ background: 'white', border: '1.5px solid var(--ocean-300)' }}>
+            <div className="rounded-2xl p-5 mb-4" style={{ background: 'var(--surface)', border: '1.5px solid var(--ocean-300)' }}>
               <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text)' }}>New wetsuit</p>
               <WetsuitForm onSave={addWetsuit} onCancel={() => setAdding(null)} />
             </div>
@@ -281,7 +281,7 @@ export default function GearPage() {
           ) : (
             <div className="flex flex-col gap-3">
               {wetsuits.map(w => editingId === w.id ? (
-                <div key={w.id} className="rounded-2xl p-5" style={{ background: 'white', border: '1.5px solid var(--ocean-300)' }}>
+                <div key={w.id} className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1.5px solid var(--ocean-300)' }}>
                   <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text)' }}>Edit wetsuit</p>
                   <WetsuitForm
                     initial={{ name: w.name, thickness: w.thickness, notes: w.notes }}
@@ -303,7 +303,7 @@ export default function GearPage() {
 
 function EmptyState({ emoji, label, sub, onAdd, addLabel }: { emoji: ReactNode; label: string; sub: string; onAdd: () => void; addLabel: string }) {
   return (
-    <div className="rounded-2xl py-12 text-center" style={{ border: '2px dashed var(--border)', background: 'white' }}>
+    <div className="rounded-2xl py-12 text-center" style={{ border: '2px dashed var(--border)', background: 'var(--surface)' }}>
       <div className="text-3xl mb-3">{emoji}</div>
       <p className="font-medium mb-1 text-sm" style={{ color: 'var(--text)' }}>{label}</p>
       <p className="text-sm mb-5" style={{ color: 'var(--text-3)' }}>{sub}</p>

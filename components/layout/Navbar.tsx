@@ -27,7 +27,7 @@ export function Navbar() {
   return (
     <nav
       className="sticky top-0 z-50 border-b"
-      style={{ background: 'rgba(253,250,245,0.92)', backdropFilter: 'blur(12px)', borderColor: 'var(--border)' }}
+      style={{ background: 'var(--nav-bg)', backdropFilter: 'blur(12px)', borderColor: 'var(--border)' }}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3">
         {/* Logo */}
@@ -99,7 +99,7 @@ export function Navbar() {
 
       {/* Mobile dropdown */}
       {mobileOpen && (
-        <div className="md:hidden border-t" style={{ background: 'rgba(253,250,245,0.97)', borderColor: 'var(--border)' }}>
+        <div className="md:hidden border-t" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
           <div className="px-5 py-3 space-y-1">
             {navLinks.map((l) => (
               <Link

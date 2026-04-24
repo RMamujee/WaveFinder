@@ -65,8 +65,8 @@ export async function fetchCurrentConditions(
     })
 
     const [marineRes, windRes] = await Promise.all([
-      fetch(`${MARINE_BASE}?${marineParams}`, { next: { revalidate: 1800 }, headers: HEADERS }),
-      fetch(`${WEATHER_BASE}?${weatherParams}`, { next: { revalidate: 1800 }, headers: HEADERS }),
+      fetch(`${MARINE_BASE}?${marineParams}`, { headers: HEADERS, signal: AbortSignal.timeout(7000) }),
+      fetch(`${WEATHER_BASE}?${weatherParams}`, { headers: HEADERS, signal: AbortSignal.timeout(7000) }),
     ])
 
     if (!marineRes.ok) return null

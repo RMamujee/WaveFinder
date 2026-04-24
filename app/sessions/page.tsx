@@ -379,7 +379,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
     >
       <div
         style={{
-          background: 'white',
+          background: 'var(--surface)',
           borderRadius: '20px',
           border: '1px solid var(--border)',
           boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
@@ -398,7 +398,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
             borderBottom: '1px solid var(--border)',
             position: 'sticky',
             top: 0,
-            background: 'white',
+            background: 'var(--surface)',
             borderRadius: '20px 20px 0 0',
             zIndex: 1,
           }}
@@ -499,7 +499,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                   {showSuggestions && suggestions.length > 0 && (
                     <div style={{
                       position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                      background: 'white',
+                      background: 'var(--surface)',
                       border: '1.5px solid var(--border)',
                       borderRadius: '12px',
                       boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
@@ -898,7 +898,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
   return (
     <div
       style={{
-        background: 'white',
+        background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: '16px',
         overflow: 'hidden',
@@ -1199,7 +1199,7 @@ function SessionsPageInner() {
         )}
 
         {/* Page header */}
-        <div style={{ background: 'white', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
           <div style={{ maxWidth: '720px', margin: '0 auto', padding: '28px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '16px' }}>
               <div>
@@ -1262,7 +1262,7 @@ function SessionsPageInner() {
             // Empty state
             <div
               style={{
-                background: 'white',
+                background: 'var(--surface)',
                 border: '2px dashed var(--border)',
                 borderRadius: '20px',
                 padding: '64px 24px',
@@ -1340,7 +1340,7 @@ function SessionsPageInner() {
                   <div
                     key={stat.label}
                     style={{
-                      background: 'white',
+                      background: 'var(--surface)',
                       border: '1px solid var(--border)',
                       borderRadius: '14px',
                       padding: '14px 12px',

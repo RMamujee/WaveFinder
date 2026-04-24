@@ -25,7 +25,7 @@ export function BuoyReadings({ buoy, buoyId }: Props) {
   const age = formatDistanceToNow(parseISO(buoy.time), { addSuffix: true })
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'white' }}>
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
       <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
         <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Live Buoy — NDBC {buoyId}</h3>
         <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-3)' }}>

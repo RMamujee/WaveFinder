@@ -43,7 +43,7 @@ export function SpotCard({ spot, rating, waveHeight, period, wind, tempF, direct
       href={`/spots/${spot.slug}`}
       className="group block rounded-xl overflow-hidden transition-all"
       style={{
-        background: 'white',
+        background: 'var(--surface)',
         border: '1px solid var(--border)',
         boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
       }}

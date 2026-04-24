@@ -102,7 +102,7 @@ export function SwellPanel({ current, activeDayData }: Props) {
   return (
     <div
       className="rounded-2xl overflow-hidden flex flex-col"
-      style={{ background: 'white', border: '1px solid var(--border)' }}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
     >
       {/* Header band */}
       <div

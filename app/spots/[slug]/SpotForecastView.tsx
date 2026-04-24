@@ -278,7 +278,7 @@ export function SpotForecastView({ spot }: Props) {
 
       {/* Description */}
       {spot.description && (
-        <div style={{ borderBottom: '1px solid var(--border)', background: 'white' }}>
+        <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
           <div className="mx-auto max-w-7xl px-5 py-3">
             <p className="text-sm" style={{ color: 'var(--text-2)' }}>{spot.description}</p>
           </div>
@@ -342,7 +342,7 @@ export function SpotForecastView({ spot }: Props) {
               {bestTimes.length > 0 ? (
                 <BestTimePanel slots={bestTimes} tides={forecast.tides} />
               ) : (
-                <div className="rounded-2xl p-8 text-center text-sm" style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
+                <div className="rounded-2xl p-8 text-center text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
                   No session windows available for this day.
                 </div>
               )}
@@ -351,7 +351,7 @@ export function SpotForecastView({ spot }: Props) {
             {/* Wind Speed — col 2, row 1 */}
             <div>
               <SectionTitle>Wind Speed</SectionTitle>
-              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+              <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                 <WindChart days={forecast.forecast} activeDayData={activeDayData} />
               </div>
             </div>
@@ -362,7 +362,7 @@ export function SpotForecastView({ spot }: Props) {
                 UV Index —{' '}
                 <span style={{ fontWeight: 400 }}>{format(parseISO(activeDayData.date), 'EEE, MMM d')}</span>
               </SectionTitle>
-              <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+              <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                 <UVChart activeDayData={activeDayData} />
               </div>
             </div>
@@ -406,7 +406,7 @@ export function SpotForecastView({ spot }: Props) {
               Hourly —{' '}
               {format(parseISO(activeDayData.date), 'EEEE, MMM d')}
             </SectionTitle>
-            <div className="rounded-2xl overflow-hidden overflow-x-auto" style={{ border: '1px solid var(--border)', background: 'white' }}>
+            <div className="rounded-2xl overflow-hidden overflow-x-auto" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
               <table className="w-full text-sm" style={{ minWidth: '480px' }}>
                 <thead style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
                   <tr className="text-left">
@@ -485,7 +485,7 @@ export function SpotForecastView({ spot }: Props) {
         {forecast?.forecast && (
           <div>
             <SectionTitle>Wave Height</SectionTitle>
-            <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+            <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
               <WaveChart days={forecast.forecast} activeDayData={activeDayData} />
               <div className="flex items-center gap-4 mt-3">
                 <Legend color="#1b7fcb" label="Total wave height" />
@@ -499,7 +499,7 @@ export function SpotForecastView({ spot }: Props) {
         {forecast?.tides && forecast.tides.length > 0 && (
           <div>
             <SectionTitle>Tides</SectionTitle>
-            <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+            <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
               <TideChart tides={forecast.tides} selectedDate={activeDayData?.date} />
             </div>
           </div>

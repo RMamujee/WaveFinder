@@ -44,7 +44,7 @@ export function SeasonCalendar({ region, difficulty }: Props) {
   return (
     <div
       className="rounded-2xl p-5"
-      style={{ background: 'white', border: '1px solid var(--border)' }}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
     >
       {/* Header */}
       <div className="mb-4">

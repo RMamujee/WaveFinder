@@ -34,6 +34,7 @@
   --text:      #1a1a2e;
   --text-2:    #4a4a6a;
   --text-3:    #8888aa;
+  --nav-bg:    rgba(253,250,245,0.92);
 }
 
 * { box-sizing: border-box; }
@@ -161,6 +162,7 @@ body {
 [data-theme="offshore"] {
   --bg:        #0a1628;
   --surface:   #0f2140;
+  --nav-bg:    rgba(6,18,32,0.95);
   --surface-2: #152b52;
   --border:    #1e3a6e;
   --text:      #e8f4ff;

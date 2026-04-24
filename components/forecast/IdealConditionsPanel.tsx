@@ -150,7 +150,7 @@ export function IdealConditionsPanel({ spot, current, buoy, coastalWind }: Props
   const hasCurrent = current !== null
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--border)' }}>
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
       {/* ── Ideal conditions grid ──────────────────────────────────────────── */}
       <div className="grid grid-cols-3 divide-x" style={{ borderBottom: '1px solid var(--border)' }}>
         {/* Wind */}

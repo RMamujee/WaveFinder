@@ -38,7 +38,7 @@ export function BestTimePanel({ slots, tides }: Props) {
   return (
     <div
       className="rounded-2xl overflow-hidden"
-      style={{ border: '1px solid var(--border)', background: 'white' }}
+      style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}
     >
       {/* Header */}
       <div

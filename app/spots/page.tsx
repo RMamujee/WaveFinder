@@ -163,7 +163,7 @@ export default function SpotsPage() {
       {/* Top bar */}
       <div
         className="shrink-0 px-5 py-3"
-        style={{ borderBottom: '1px solid var(--border)', background: 'white' }}
+        style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}
       >
         <div className="mx-auto max-w-7xl flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Search */}
@@ -368,7 +368,7 @@ export default function SpotsPage() {
             <div className="absolute inset-0 flex items-center justify-center z-[999]">
               <div
                 className="rounded-xl px-4 py-3 text-sm"
-                style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
               >
                 Loading spots…
               </div>
@@ -378,7 +378,7 @@ export default function SpotsPage() {
             <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[999]">
               <div
                 className="rounded-xl px-4 py-2.5 text-xs flex items-center gap-2"
-                style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-3)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-3)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
               >
                 <div className="h-3 w-3 animate-spin rounded-full border-2 border-[var(--sand-200)] border-t-[var(--ocean-600)]" />
                 Fetching live conditions…

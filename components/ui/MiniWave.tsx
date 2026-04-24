@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 
 interface Props {
   height?: number   // wave height in metres
@@ -10,18 +10,18 @@ interface Props {
 }
 
 function useIsDarkTheme(): boolean {
-  const ref = useRef(false)
+  const [isDark, setIsDark] = useState(false)
 
   useEffect(() => {
     const root = document.documentElement
-    const check = () => { ref.current = root.dataset.theme === 'offshore' }
+    const check = () => setIsDark(root.dataset.theme === 'offshore')
     check()
     const obs = new MutationObserver(check)
     obs.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
     return () => obs.disconnect()
   }, [])
 
-  return ref.current
+  return isDark
 }
 
 export function MiniWave({ height = 1, wind = 5, width = 280, canvasHeight = 48 }: Props) {

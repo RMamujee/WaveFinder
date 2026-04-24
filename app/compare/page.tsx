@@ -200,7 +200,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
           style={{
             top: '100%',
             marginTop: '6px',
-            background: 'white',
+            background: 'var(--surface)',
             border: '1.5px solid var(--border)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
             maxHeight: '220px',
@@ -331,7 +331,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
   return (
     <div
       className="rounded-2xl overflow-hidden flex flex-col"
-      style={{ background: 'white', border: '1px solid var(--border)', borderTop: '3px solid var(--ocean-400)', minWidth: 0 }}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderTop: '3px solid var(--ocean-400)', minWidth: 0 }}
     >
       {/* Header */}
       <div className="px-5 pt-4 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>

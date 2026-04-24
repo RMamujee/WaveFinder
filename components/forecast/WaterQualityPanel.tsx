@@ -71,7 +71,7 @@ export function WaterQualityPanel({ spotSlug }: Props) {
       >
         Water Quality
       </h2>
-    <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
+    <div className="rounded-2xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div>
@@ -117,7 +117,7 @@ export function WaterQualityPanel({ spotSlug }: Props) {
             className="absolute top-0 bottom-0 w-0.5 rounded"
             style={{
               left: `${pos}%`,
-              background: 'white',
+              background: 'var(--surface)',
               boxShadow: '0 0 0 2px rgba(0,0,0,0.4)',
               transform: 'translateX(-50%)',
             }}

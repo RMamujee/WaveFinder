@@ -111,7 +111,7 @@ export function QuickLogModal({ open, onClose }: Props) {
       style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-md rounded-2xl" style={{ background: 'white', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}>
+      <div className="w-full max-w-md rounded-2xl" style={{ background: 'var(--surface)', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
@@ -163,7 +163,7 @@ export function QuickLogModal({ open, onClose }: Props) {
                 style={{ background: 'var(--sand-50)', border: spotSlug ? '1.5px solid var(--ocean-600)' : '1.5px solid var(--border)', color: 'var(--text)' }}
               />
               {showSuggestions && suggestions.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, marginTop: '4px', borderRadius: '12px', overflow: 'hidden', background: 'white', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, marginTop: '4px', borderRadius: '12px', overflow: 'hidden', background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
                   {suggestions.map((s) => (
                     <button key={s.id} onMouseDown={(e) => { e.preventDefault(); handleSpotSelect(s) }} className="w-full text-left px-4 py-2.5 hover:bg-[var(--sand-50)] transition-colors">
                       <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{s.name}</span>

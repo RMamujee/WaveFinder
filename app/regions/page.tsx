@@ -91,7 +91,7 @@ function RegionCard({ title, subtitle, icon, color, bg, border, description, onC
   const inner = (
     <div
       className="group rounded-2xl overflow-hidden flex flex-col transition-all hover:-translate-y-1 hover:shadow-lg"
-      style={{ background: 'white', border: `1px solid ${border}`, cursor: onClick || href ? 'pointer' : 'default' }}
+      style={{ background: 'var(--surface)', border: `1px solid ${border}`, cursor: onClick || href ? 'pointer' : 'default' }}
       onClick={onClick}
     >
       <div className="px-5 pt-5 pb-4" style={{ background: bg, borderBottom: `1px solid ${border}` }}>
@@ -168,7 +168,7 @@ export default function RegionsPage() {
   return (
     <div style={{ background: 'var(--sand-50)', minHeight: '100vh' }}>
       {/* Header */}
-      <div className="border-b" style={{ background: 'white', borderColor: 'var(--border)' }}>
+      <div className="border-b" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
         <div className="mx-auto max-w-6xl px-5 py-10">
           <div className="mb-4">
             <Breadcrumb

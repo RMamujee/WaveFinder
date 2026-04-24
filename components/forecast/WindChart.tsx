@@ -91,15 +91,15 @@ export function WindChart({ days, activeDayData }: Props) {
               width={40}
             />
             <Tooltip
-              contentStyle={{ background: 'white', border: '1px solid #ede0cc', borderRadius: '10px', fontSize: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}
-              labelStyle={{ color: '#4a4a6a', marginBottom: '4px' }}
+              contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}
+              labelStyle={{ color: 'var(--text-2)', marginBottom: '4px' }}
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null
                 const item = data.find((d) => d.label === label)
                 return (
-                  <div className="rounded-xl p-3 text-xs shadow-lg" style={{ background: 'white', border: '1px solid #ede0cc' }}>
-                    <p className="mb-1 font-medium" style={{ color: '#4a4a6a' }}>{label}</p>
-                    <p style={{ color: '#1a1a2e' }}>{fmtWind(payload[0]?.value as number ?? 0, unit)} {item?.dir}</p>
+                  <div className="rounded-xl p-3 text-xs shadow-lg" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                    <p className="mb-1 font-medium" style={{ color: 'var(--text-2)' }}>{label}</p>
+                    <p style={{ color: 'var(--text)' }}>{fmtWind(payload[0]?.value as number ?? 0, unit)} {item?.dir}</p>
                   </div>
                 )
               }}

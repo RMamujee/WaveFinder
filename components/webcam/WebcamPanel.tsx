@@ -29,7 +29,7 @@ export function WebcamPanel({ webcamUrl, webcamType, spotName, lat, lng }: Props
   const hasCamera = webcamType !== 'none' && webcamUrl
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'white' }}>
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
       <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
         <span className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
           {hasCamera ? 'Live Cam' : 'Map View'}

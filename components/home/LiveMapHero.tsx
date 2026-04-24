@@ -55,7 +55,7 @@ export function LiveMapHero({ spotCount }: Props) {
       {/* ── Left: text panel (desktop only) ──────────────────────────── */}
       <div
         className="hidden lg:flex shrink-0 flex-col justify-center px-10 w-[400px] border-r"
-        style={{ background: 'white', borderColor: 'var(--border)', zIndex: 2 }}
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)', zIndex: 2 }}
       >
         <div
           className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 mb-5 w-fit"
