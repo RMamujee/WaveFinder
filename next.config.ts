@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-// CSP is set per-request with a nonce in middleware.ts so 'unsafe-inline'/'unsafe-eval'
-// are not needed here. All other headers are static and safe to set globally.
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
@@ -9,6 +7,24 @@ const securityHeaders = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      // unsafe-inline required for Next.js hydration scripts and Leaflet inline styles.
+      // unsafe-eval removed — React 19 and Leaflet 1.9 do not require it in production.
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.wikimedia.org https://tile.openstreetmap.org https://server.arcgisonline.com https://*.arcgisonline.com https://*.arcgis.com https://*.basemaps.cartocdn.com https://cartodb-basemaps-*.global.ssl.fastly.net",
+      "connect-src 'self' https://*.open-meteo.com https://api.open-meteo.com https://www.ndbc.noaa.gov https://tidesandcurrents.noaa.gov https://www.waterqualitydata.us https://server.arcgisonline.com https://*.arcgisonline.com https://*.basemaps.cartocdn.com",
+      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+      "worker-src blob:",
+      "media-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+    ].join('; '),
+  },
 ]
 
 const nextConfig: NextConfig = {
