@@ -155,10 +155,8 @@ export function QuickLogModal({ open, onClose }: Props) {
                 onChange={(e) => { setSpotName(e.target.value); setSpotSlug(''); setRegion(''); setShowSuggestions(true) }}
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => {
-                  setTimeout(() => {
-                    if (!spotSlug && spotName.trim()) { setSpotName(''); setSuggestions([]) }
-                    setShowSuggestions(false)
-                  }, 200)
+                  if (!spotSlug && spotName.trim()) { setSpotName(''); setSuggestions([]) }
+                  setShowSuggestions(false)
                 }}
                 placeholder="Search WaveFinder spots…"
                 className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none"
@@ -167,7 +165,7 @@ export function QuickLogModal({ open, onClose }: Props) {
               {showSuggestions && suggestions.length > 0 && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, marginTop: '4px', borderRadius: '12px', overflow: 'hidden', background: 'white', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
                   {suggestions.map((s) => (
-                    <button key={s.id} onClick={() => handleSpotSelect(s)} className="w-full text-left px-4 py-2.5 hover:bg-[var(--sand-50)] transition-colors">
+                    <button key={s.id} onMouseDown={(e) => { e.preventDefault(); handleSpotSelect(s) }} className="w-full text-left px-4 py-2.5 hover:bg-[var(--sand-50)] transition-colors">
                       <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{s.name}</span>
                       <span className="text-xs ml-2" style={{ color: 'var(--text-3)' }}>{s.region}</span>
                     </button>

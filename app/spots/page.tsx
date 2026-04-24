@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { SpotCard } from '@/components/spots/SpotCard'
 import { WaveLoader } from '@/components/layout/WaveLoader'
@@ -62,18 +63,18 @@ export default function SpotsPage() {
   const [selectedState, setSelectedState]     = useState('')
   const [selectedRegion, setSelectedRegion]   = useState('')
   const [view, setView] = useState<ViewMode>('map')
+  const searchParams = useSearchParams()
 
   // Pre-populate from ?region= URL param (from /regions page links)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const region = params.get('region')
+    const region = searchParams.get('region')
     if (region) {
-      setSelectedRegion(decodeURIComponent(region))
+      setSelectedRegion(region)
       setView('list')
     }
-    const country = params.get('country')
-    if (country) setSelectedCountry(decodeURIComponent(country))
-  }, [])
+    const country = searchParams.get('country')
+    if (country) setSelectedCountry(country)
+  }, [searchParams])
 
   // Fetch distinct countries from DB
   const { data: metaData } = useQuery<{ countries: string[] }>({
