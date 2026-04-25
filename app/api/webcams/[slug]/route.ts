@@ -22,6 +22,7 @@ export async function GET(
   if (!spot) return NextResponse.json([], { status: 404 })
 
   const webcams = await fetchNearbyWebcams(spot.lat, spot.lng)
+  console.log(`[webcams/${slug}] found ${webcams.length} cams, key set: ${!!process.env.WINDY_WEBCAM_API_KEY}`)
 
   return NextResponse.json(webcams, {
     headers: { 'Cache-Control': 's-maxage=3600, stale-while-revalidate=600' },

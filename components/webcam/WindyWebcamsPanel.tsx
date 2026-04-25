@@ -21,6 +21,12 @@ export function WindyWebcamsPanel({ slug }: Props) {
 
   return (
     <>
+      <h2
+        className="mb-2 font-semibold text-sm"
+        style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
+      >
+        Nearby Live Cams
+      </h2>
       <div
         className="grid gap-3"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}
