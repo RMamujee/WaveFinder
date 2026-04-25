@@ -30,36 +30,33 @@ export async function fetchOSMWebcams(lat: number, lng: number): Promise<WindyWe
     const data = await res.json()
     const elements: Record<string, unknown>[] = data?.elements ?? []
 
-    return elements
-      .map((el) => {
-        const tags = (el.tags ?? {}) as Record<string, string>
-        const wLat = el.lat as number
-        const wLng = el.lon as number
+    const results: WindyWebcam[] = []
 
-        const rawUrl = tags.url ?? tags.image ?? ''
-        const website = tags.website ?? tags['contact:website'] ?? ''
-        const isImg = IMAGE_EXT.test(rawUrl)
+    for (const el of elements) {
+      const tags = (el.tags ?? {}) as Record<string, string>
+      const rawUrl = tags.url ?? tags.image ?? ''
+      const website = tags.website ?? tags['contact:website'] ?? ''
+      if (!rawUrl && !website) continue
 
-        // Skip nodes with no usable URL at all
-        if (!rawUrl && !website) return null
+      const wLat = el.lat as number
+      const wLng = el.lon as number
+      const isImg = IMAGE_EXT.test(rawUrl)
 
-        return {
-          webcamId: `osm-${String(el.id ?? '')}`,
-          title: tags.name ?? tags['name:en'] ?? 'Beach Webcam',
-          thumbnail: isImg ? rawUrl : '',
-          previewUrl: isImg ? rawUrl : '',
-          // Prefer a website for the player; fall back to raw URL
-          playerEmbedUrl: website || rawUrl,
-          lat: wLat,
-          lng: wLng,
-          city: tags['addr:city'] ?? tags.operator ?? '',
-          distanceKm: haversineKm(lat, lng, wLat, wLng),
-          source: 'osm' as const,
-        } satisfies WindyWebcam
+      results.push({
+        webcamId: `osm-${String(el.id ?? '')}`,
+        title: tags.name ?? tags['name:en'] ?? 'Beach Webcam',
+        thumbnail: isImg ? rawUrl : '',
+        previewUrl: isImg ? rawUrl : '',
+        playerEmbedUrl: website || rawUrl,
+        lat: wLat,
+        lng: wLng,
+        city: tags['addr:city'] ?? tags.operator ?? '',
+        distanceKm: haversineKm(lat, lng, wLat, wLng),
+        source: 'osm' as const,
       })
-      .filter((c): c is WindyWebcam => c !== null)
-      .sort((a, b) => a.distanceKm - b.distanceKm)
-      .slice(0, 6)
+    }
+
+    return results.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 6)
   } catch {
     return []
   }
