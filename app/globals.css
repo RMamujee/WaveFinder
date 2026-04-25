@@ -109,6 +109,15 @@ body {
   to { transform: rotate(360deg); }
 }
 
+@keyframes user-location-pulse {
+  0%   { transform: scale(0.6); opacity: 0.7; }
+  70%  { transform: scale(3);   opacity: 0;   }
+  100% { transform: scale(3);   opacity: 0;   }
+}
+.user-location-pulse {
+  animation: user-location-pulse 2s ease-out infinite;
+}
+
 @keyframes wave-drift {
   0%   { transform: translateX(0) scaleY(1); }
   50%  { transform: translateX(-30px) scaleY(0.95); }
