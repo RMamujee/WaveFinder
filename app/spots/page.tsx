@@ -142,7 +142,10 @@ export default function SpotsPage() {
   // Stage 1: base spots
   const { data: baseSpots = [], isLoading } = useQuery<SpotWithRating[]>({
     queryKey: ['spots', effectiveSearch, difficulty, selectedCountry],
-    queryFn: () => fetch(`/api/spots?${apiParams}`).then((r) => r.json()),
+    queryFn: () => fetch(`/api/spots?${apiParams}`).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json()
+    }),
     staleTime: 30 * 60 * 1000,
   })
 
@@ -151,8 +154,12 @@ export default function SpotsPage() {
   condParams.set('withConditions', 'true')
   const { data: conditionData } = useQuery<SpotWithRating[]>({
     queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry],
-    queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => r.json()),
-    staleTime: 30 * 60 * 1000,
+    queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json()
+    }),
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
     enabled: baseSpots.length > 0,
   })
 

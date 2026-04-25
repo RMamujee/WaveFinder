@@ -59,7 +59,7 @@ export async function GET(req: Request) {
   const bucketKeys = [...buckets.keys()]
   const omResults = await Promise.all(
     bucketKeys.map((k) =>
-      withTimeout(fetchCurrentConditions(buckets.get(k)!.lat, buckets.get(k)!.lng), 8000)
+      withTimeout(fetchCurrentConditions(buckets.get(k)!.lat, buckets.get(k)!.lng), 12000)
     )
   )
   const omMap = new Map<string, Awaited<ReturnType<typeof fetchCurrentConditions>>>()
