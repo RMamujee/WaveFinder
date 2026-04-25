@@ -37,7 +37,7 @@ import { fmtHeight, fmtWind, fmtTemp, fmtTide } from '@/lib/units'
 interface Props { spot: SurfSpot }
 
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; accent: string }> = {
-  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', accent: '#9ca3af' },
+  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#4b5563', accent: '#9ca3af' },
   fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', accent: '#f59e0b' },
   good:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', accent: '#16a34a' },
   epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', accent: '#7c3aed' },

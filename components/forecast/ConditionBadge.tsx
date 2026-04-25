@@ -15,7 +15,7 @@ const CONFIG: Record<ConditionRating, { label: string; className: string }> = {
   },
   epic: {
     label: 'EPIC',
-    className: 'bg-purple-500 text-white animate-pulse',
+    className: 'bg-purple-700 text-white animate-pulse',
   },
 }
 

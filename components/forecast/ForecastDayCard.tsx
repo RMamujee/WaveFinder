@@ -14,7 +14,7 @@ interface Props {
 }
 
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; dot: string; bar: string }> = {
-  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af', bar: '#d1d5db' },
+  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#4b5563', dot: '#9ca3af', bar: '#d1d5db' },
   fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', dot: '#f59e0b', bar: '#fbbf24' },
   good:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', dot: '#16a34a', bar: '#22c55e' },
   epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', dot: '#7c3aed', bar: '#8b5cf6' },
