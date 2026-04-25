@@ -423,11 +423,8 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         )}
 
-        {/* Nearby live cams from Windy — auto-discovered within 20 km */}
-        <div>
-          <SectionTitle>Nearby Live Cams</SectionTitle>
-          <WindyWebcamsPanel slug={spot.slug} />
-        </div>
+        {/* Nearby live cams from Windy — auto-discovered within 20 km, title rendered inside panel */}
+        <WindyWebcamsPanel slug={spot.slug} />
 
         {/* Row 3: Hourly table — full width */}
         {forecast?.forecast && activeDayData && (
