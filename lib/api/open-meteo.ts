@@ -7,6 +7,7 @@ const HEADERS = {
   'Accept': 'application/json',
 }
 
+
 export interface OpenMeteoMarineResponse {
   hourly: {
     time: string[]
@@ -43,10 +44,23 @@ export interface CurrentMarineConditions {
   windDirection: number
 }
 
+// Module-level cache — survives across requests on the same warm Vercel
+// function instance, drastically reducing Open-Meteo call volume for the
+// /api/spots?withConditions=true endpoint which fans out to 100+ locations.
+const _condCache = new Map<string, { result: CurrentMarineConditions | null; exp: number }>()
+const COND_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
 export async function fetchCurrentConditions(
   lat: number,
   lng: number
 ): Promise<CurrentMarineConditions | null> {
+  // Round to 2 decimal places (~1 km) for cache key — finer than the 1-decimal
+  // bucket used in the route, so accuracy is preserved while still deduplicating
+  // repeated calls from re-fetches or concurrent requests on a warm instance.
+  const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`
+  const cached = _condCache.get(cacheKey)
+  if (cached && Date.now() < cached.exp) return cached.result
+
   try {
     // Use hourly endpoint (same model as spot forecast pages) and pick the nearest future hour.
     // The previous `current=` endpoint returned an instantaneous interpolated reading that
@@ -69,12 +83,18 @@ export async function fetchCurrentConditions(
     })
 
     // Use allSettled so a slow/blocked weather API doesn't kill the marine result.
+    // 5 s marine / 4 s weather: fast enough to keep batch latency low while still
+    // giving Open-Meteo a reasonable window. Timeouts return null and are handled
+    // by the nearest-neighbour fallback in the route.
     const [marineSettled, windSettled] = await Promise.allSettled([
-      fetch(`${MARINE_BASE}?${marineParams}`, { signal: AbortSignal.timeout(10000), headers: HEADERS }),
-      fetch(`${WEATHER_BASE}?${weatherParams}`, { signal: AbortSignal.timeout(8000),  headers: HEADERS }),
+      fetch(`${MARINE_BASE}?${marineParams}`, { signal: AbortSignal.timeout(5000), headers: HEADERS }),
+      fetch(`${WEATHER_BASE}?${weatherParams}`, { signal: AbortSignal.timeout(4000), headers: HEADERS }),
     ])
 
-    if (marineSettled.status === 'rejected' || !marineSettled.value.ok) return null
+    if (marineSettled.status === 'rejected' || !marineSettled.value.ok) {
+      _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 }) // cache miss for 1 min
+      return null
+    }
 
     const marine = await marineSettled.value.json()
 
@@ -90,7 +110,10 @@ export async function fetchCurrentConditions(
     }
 
     const hourly = marine?.hourly
-    if (!hourly?.time?.length) return null
+    if (!hourly?.time?.length) {
+      _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 })
+      return null
+    }
 
     // Pick the nearest future hour — mirrors findNearestFutureHour from lib/forecast/merge.ts
     const now = new Date()
@@ -108,14 +131,17 @@ export async function fetchCurrentConditions(
       ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
       : 0
 
-    return {
+    const result: CurrentMarineConditions = {
       waveHeight,
       wavePeriod,
       swellDirection,
       windSpeed:     wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
       windDirection: wind?.current?.wind_direction_10m ?? windWaveDir,
     }
+    _condCache.set(cacheKey, { result, exp: Date.now() + COND_CACHE_TTL })
+    return result
   } catch {
+    _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 }) // cache errors for 1 min
     return null
   }
 }
