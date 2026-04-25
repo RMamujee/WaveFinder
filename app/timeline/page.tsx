@@ -1,18 +1,19 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
+import { Icon } from '@/components/ui/Icon'
 
 // ── Region config ─────────────────────────────────────────────────────────────
 
 const REGIONS = [
-  { name: 'San Diego',             icon: '🌊', short: 'San Diego'   },
-  { name: 'Orange County',         icon: '🌴', short: 'O.C.'        },
-  { name: 'Los Angeles',           icon: '🌆', short: 'L.A.'        },
-  { name: 'Ventura',               icon: '🏄', short: 'Ventura'     },
+  { name: 'San Diego',             icon: <Icon name="wave" size={22} />,   short: 'San Diego'   },
+  { name: 'Orange County',         icon: '🌴',                                short: 'O.C.'        },
+  { name: 'Los Angeles',           icon: '🌆',                                short: 'L.A.'        },
+  { name: 'Ventura',               icon: <Icon name="surfer" size={22} />,   short: 'Ventura'     },
   { name: 'Santa Barbara',         icon: '🌸', short: 'S.B.'        },
   { name: 'Central Coast',         icon: '🌾', short: 'Cen. Coast'  },
   { name: 'Monterey',              icon: '🦭', short: 'Monterey'    },
@@ -55,6 +56,102 @@ function dayLabel(ds: string, i: number): string {
   return new Date(ds + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
   })
+}
+
+// ── Sunrise / sunset calculator (simple astronomical formula) ─────────────────
+
+function sunTimes(dateStr: string): { rise: number; set: number } {
+  const lat = 34.0 // default midpoint latitude (California / global avg)
+  const date = new Date(dateStr + 'T12:00:00')
+  const doy = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000)
+  const B = (360 / 365) * (doy - 81) * (Math.PI / 180)
+  const eqTime = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B)
+  const decl = 23.45 * Math.sin(B) * (Math.PI / 180)
+  const latRad = lat * (Math.PI / 180)
+  const hourAngle = Math.acos(-Math.tan(latRad) * Math.tan(decl)) * (180 / Math.PI)
+  const noon = 12 - eqTime / 60
+  return {
+    rise: noon - hourAngle / 15,
+    set: noon + hourAngle / 15,
+  }
+}
+
+// ── Sunrise/sunset bar component ──────────────────────────────────────────────
+
+function SunriseSunsetBar({ dateStr, hour }: { dateStr: string; hour: number }) {
+  if (!dateStr) return null
+  const { rise, set } = sunTimes(dateStr)
+
+  const risePct = (rise / 23) * 100
+  const setPct = (set / 23) * 100
+  const nowPct = (hour / 23) * 100
+
+  const isDaytime = hour >= rise && hour <= set
+  const isGoldenHour = (hour >= rise && hour <= rise + 1) || (hour >= set - 1 && hour <= set)
+
+  return (
+    <div style={{ marginTop: '8px' }}>
+      {/* Day/night gradient bar */}
+      <div style={{ position: 'relative', height: '28px', borderRadius: '14px', overflow: 'hidden', background: '#0f172a' }}>
+        {/* Night → dawn gradient */}
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: `${risePct}%`,
+          background: 'linear-gradient(to right, #0f172a 0%, #1e3a5f 70%, #f97316 100%)',
+        }} />
+        {/* Day (full daylight) */}
+        <div style={{
+          position: 'absolute', left: `${risePct}%`, top: 0, bottom: 0,
+          width: `${setPct - risePct}%`,
+          background: 'linear-gradient(to right, #f97316 0%, #fbbf24 8%, #87ceeb 20%, #60a5fa 40%, #60a5fa 60%, #87ceeb 80%, #fbbf24 92%, #f97316 100%)',
+        }} />
+        {/* Dusk → night gradient */}
+        <div style={{
+          position: 'absolute', left: `${setPct}%`, top: 0, bottom: 0, right: 0,
+          background: 'linear-gradient(to right, #f97316 0%, #1e3a5f 30%, #0f172a 100%)',
+        }} />
+
+        {/* Sunrise icon */}
+        <div style={{
+          position: 'absolute', left: `${risePct}%`, top: '50%', transform: 'translate(-50%, -50%)',
+          color: '#fbbf24', display: 'flex', alignItems: 'center',
+        }}>
+          <Icon name="sun" size={14} strokeWidth={2} />
+        </div>
+
+        {/* Sunset icon */}
+        <div style={{
+          position: 'absolute', left: `${setPct}%`, top: '50%', transform: 'translate(-50%, -50%)',
+          color: '#fb923c', display: 'flex', alignItems: 'center',
+        }}>
+          <Icon name="moon" size={12} strokeWidth={2} />
+        </div>
+
+        {/* Current hour marker */}
+        <div style={{
+          position: 'absolute', left: `${nowPct}%`, top: 0, bottom: 0,
+          width: '2px',
+          background: 'white',
+          transform: 'translateX(-50%)',
+          opacity: 0.9,
+          boxShadow: '0 0 4px rgba(255,255,255,0.8)',
+        }} />
+      </div>
+
+      {/* Labels */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+        <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>
+          Sunrise {Math.floor(rise)}:{String(Math.round((rise % 1) * 60)).padStart(2, '0')}
+        </span>
+        <span style={{ fontSize: '10px', fontWeight: 600, color: isDaytime ? (isGoldenHour ? '#f97316' : '#1b7fcb') : '#6b7280' }}>
+          {isDaytime ? (isGoldenHour ? <><Icon name="sun" size={11} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle' }} /> Golden hour</> : <><Icon name="sun" size={11} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle' }} /> Daytime</>) : <><Icon name="moon" size={11} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle' }} /> Night</>}
+        </span>
+        <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>
+          Sunset {Math.floor(set)}:{String(Math.round((set % 1) * 60)).padStart(2, '0')}
+        </span>
+      </div>
+    </div>
+  )
 }
 
 function scoreColor(s: number) {
@@ -291,6 +388,7 @@ export default function TimelinePage() {
               <span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>11 PM</span>
             </div>
           </div>
+          <SunriseSunsetBar dateStr={selectedDate} hour={hour} />
         </div>
 
         {/* ── Spot rows ── */}
@@ -353,27 +451,20 @@ export default function TimelinePage() {
                         {/* Wave height */}
                         <span className="flex items-center gap-1 text-xs font-medium"
                           style={{ color: 'var(--ocean-600)' }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M2 12c1.5-3 4-4.5 6.5-4.5S13 9 15.5 9 20 6 22 3" />
-                            <path d="M2 19c1.5-3 4-4.5 6.5-4.5S13 16 15.5 16 20 13 22 10" />
-                          </svg>
+                          <Icon name="wave" size={12} strokeWidth={2} />
                           {fmtHeight(hd!.waveHeight, unit)}
                         </span>
                         {/* Wind */}
                         <span className="flex items-center gap-1 text-xs font-medium"
                           style={{ color: 'var(--text-2)' }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
-                          </svg>
+                          <Icon name="wind" size={12} strokeWidth={2} />
                           {hd!.windDirectionLabel} {fmtWind(hd!.windSpeed, unit)}
                         </span>
                         {/* Water temp */}
                         {waterTemp !== null && (
                           <span className="flex items-center gap-1 text-xs font-medium"
                             style={{ color: '#0891b2' }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
-                            </svg>
+                            <Icon name="temp" size={12} strokeWidth={2} />
                             {fmtTemp(waterTemp, unit)}
                           </span>
                         )}
@@ -397,12 +488,9 @@ export default function TimelinePage() {
                       {scoreLabel(hd!.ratingScore)}
                     </div>
 
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    <Icon name="arrowRight" size={14} strokeWidth={2}
                       className="flex-shrink-0 transition-transform group-hover:translate-x-0.5"
-                      style={{ color: 'var(--text-3)' }}>
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
+                      style={{ color: 'var(--text-3)' }} />
                   </Link>
                 )
               })}
@@ -414,7 +502,7 @@ export default function TimelinePage() {
           <Link href="/spots"
             className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
             style={{ background: 'var(--ocean-600)' }}>
-            🗺️ Open live map
+            <Icon name="map" size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} /> Open live map
           </Link>
         </div>
       </div>

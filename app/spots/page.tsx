@@ -13,6 +13,7 @@ import {
   getRegionsForState,
   getAllRegionsForCountry,
 } from '@/lib/region-hierarchy'
+import { Icon } from '@/components/ui/Icon'
 
 interface SpotWithRating extends SurfSpot {
   currentRating?: ConditionRating | 'unknown'
@@ -272,7 +273,7 @@ export default function SpotsPage() {
               className="rounded-lg px-3 py-2 text-xs font-medium transition-colors h-9"
               style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-3)' }}
             >
-              ✕ Clear
+              <Icon name="close" size={11} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} /> Clear
             </button>
           )}
 
@@ -307,7 +308,7 @@ export default function SpotsPage() {
                   color: view === v ? 'white' : 'var(--text-2)',
                 }}
               >
-                {v === 'map' ? '🗺️ Map' : '☰ List'}
+                {v === 'map' ? <><Icon name="map" size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />Map</> : <><Icon name="list" size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />List</>}
               </button>
             ))}
           </div>

@@ -3,6 +3,7 @@
 import type { ForecastHour } from '@/types/forecast'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtTemp, fmtHeightDec, type UnitSystem } from '@/lib/units'
+import { Icon } from '@/components/ui/Icon'
 
 interface Props {
   activeDayHours: ForecastHour[]
@@ -151,7 +152,7 @@ export function GearPanel({ activeDayHours, waterTempC }: Props) {
       {/* Board */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <span style={{ fontSize: '16px' }}>🏄</span>
+          <Icon name="board" size={16} style={{ color: 'var(--text-3)' }} />
           <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
             Board
           </span>

@@ -1,26 +1,28 @@
 'use client'
 
+import React from 'react'
 import type { BestTimeSlot } from '@/lib/forecast/best-time'
 import type { ConditionRating, TidePoint } from '@/types/forecast'
+import { Icon } from '@/components/ui/Icon'
 
 interface Props {
   slots: BestTimeSlot[]
   tides?: TidePoint[]
 }
 
-const WINDOW_ICONS: Record<string, string> = {
+const WINDOW_ICONS: Record<string, React.ReactNode> = {
   dawn: '🌅',
-  morning: '☀️',
+  morning: <Icon name="sun" size={20} />,
   midday: '🌤️',
-  afternoon: '🌊',
+  afternoon: <Icon name="wave" size={20} />,
   evening: '🌇',
 }
 
-const WIND_ICONS: Record<string, string> = {
+const WIND_ICONS: Record<string, React.ReactNode> = {
   glassy: '🪞',
   'light offshore': '💨',
   'light onshore': '〰️',
-  choppy: '🌬️',
+  choppy: <Icon name="wind" size={16} />,
 }
 
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; bar: string }> = {
@@ -144,7 +146,7 @@ export function BestTimePanel({ slots, tides }: Props) {
                     <Stat label="Period" value={`${slot.avgPeriod}s`} />
                     <Stat
                       label="Wind"
-                      value={`${WIND_ICONS[slot.windQuality]} ${slot.windQuality}`}
+                      value={<>{WIND_ICONS[slot.windQuality]}{' '}{slot.windQuality}</>}
                     />
                   </div>
 
@@ -162,7 +164,7 @@ export function BestTimePanel({ slots, tides }: Props) {
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <span className="text-xs" style={{ color: 'var(--text-3)' }}>{label}: </span>

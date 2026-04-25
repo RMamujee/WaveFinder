@@ -1,10 +1,12 @@
 'use client'
 
+import React from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { format, parseISO } from 'date-fns'
 import { getBoards, getWetsuits, BOARD_TYPES, WETSUIT_OPTIONS } from '@/lib/gear'
+import { Icon } from '@/components/ui/Icon'
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -93,10 +95,10 @@ function formatDuration(minutes: number): string {
 
 function WaveRating({ value, max = 5 }: { value: number; max?: number }) {
   return (
-    <span style={{ letterSpacing: '1px', fontSize: '14px' }}>
+    <span style={{ display: 'inline-flex', gap: '2px' }}>
       {Array.from({ length: max }, (_, i) => (
-        <span key={i} style={{ opacity: i < value ? 1 : 0.2 }}>
-          🌊
+        <span key={i} style={{ opacity: i < value ? 1 : 0.2, color: 'var(--ocean-500)' }}>
+          <Icon name="wave" size={14} />
         </span>
       ))}
     </span>
@@ -431,11 +433,10 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '16px',
                 color: 'var(--text-3)',
               }}
             >
-              ✕
+              <Icon name="close" size={16} strokeWidth={2} />
             </button>
           </div>
         </div>
@@ -785,14 +786,16 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                         border: 'none',
                         cursor: 'pointer',
                         padding: '2px 4px',
-                        fontSize: '22px',
                         opacity: n <= form.rating ? 1 : 0.2,
                         transition: 'opacity 0.15s, transform 0.15s',
                         transform: n <= form.rating ? 'scale(1.1)' : 'scale(1)',
+                        color: 'var(--ocean-500)',
+                        display: 'flex',
+                        alignItems: 'center',
                       }}
                       title={`${n} star${n !== 1 ? 's' : ''}`}
                     >
-                      🌊
+                      <Icon name="wave" size={22} />
                     </button>
                   ))}
                   {form.rating > 0 && (
@@ -869,7 +872,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
               fontFamily: 'DM Sans, sans-serif',
             }}
           >
-            {mutation.isPending ? 'Logging session…' : '🌊 Log Session'}
+            {mutation.isPending ? 'Logging session…' : <><Icon name="wave" size={14} />{' '}Log Session</>}
           </button>
         </form>
       </div>
@@ -1012,7 +1015,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
             </h3>
             {session.region && (
               <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>
-                📍 {session.region}
+                <Icon name="pin" size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} /> {session.region}
               </p>
             )}
           </div>
@@ -1045,7 +1048,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
           >
             {session.waveHeightFt !== null && (
               <Chip>
-                🌊 {session.waveHeightFt}ft
+                <Icon name="wave" size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />{session.waveHeightFt}ft
                 {session.wavePeriod !== null ? ` @ ${session.wavePeriod}s` : ''}
               </Chip>
             )}
@@ -1055,7 +1058,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
               </Chip>
             )}
             {session.waterTempC !== null && (
-              <Chip>🌡 {session.waterTempC}°C</Chip>
+              <Chip><Icon name="temp" size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />{session.waterTempC}°C</Chip>
             )}
           </div>
         )}
@@ -1063,7 +1066,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
         {/* Equipment row */}
         {(session.boardType || session.wetsuitMm) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {session.boardType && <Chip variant="sand">🏄 {session.boardType}</Chip>}
+            {session.boardType && <Chip variant="sand"><Icon name="board" size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />{session.boardType}</Chip>}
             {session.wetsuitMm && <Chip variant="sand">🤿 {session.wetsuitMm}</Chip>}
           </div>
         )}
@@ -1193,7 +1196,7 @@ function SessionsPageInner() {
               boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
             }}
           >
-            🌊 Session logged!
+            <Icon name="wave" size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} /> Session logged!
           </div>
         )}
 
@@ -1306,11 +1309,11 @@ function SessionsPageInner() {
               <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
                 {(
                   [
-                    { label: 'Sessions', value: sessions.length.toString(), icon: '📔' },
+                    { label: 'Sessions', value: sessions.length.toString(), icon: <span style={{ fontSize: '18px' }}>📔</span> },
                     {
                       label: 'Hours in water',
                       value: ((sessions.reduce((a, s) => a + (s.duration ?? 0), 0)) / 60).toFixed(1),
-                      icon: '⏱',
+                      icon: <span style={{ fontSize: '18px' }}>⏱</span>,
                     },
                     {
                       label: 'Fav break',
@@ -1321,7 +1324,7 @@ function SessionsPageInner() {
                         }, {})
                         return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
                       })(),
-                      icon: '📍',
+                      icon: <Icon name="pin" size={18} style={{ color: 'var(--ocean-500)' }} />,
                     },
                     {
                       label: 'Fav board',
@@ -1332,9 +1335,9 @@ function SessionsPageInner() {
                         }, {})
                         return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
                       })(),
-                      icon: '🏄',
+                      icon: <Icon name="board" size={18} style={{ color: 'var(--ocean-500)' }} />,
                     },
-                  ] as { label: string; value: string; icon: string }[]
+                  ] as { label: string; value: string; icon: React.ReactNode }[]
                 ).map((stat) => (
                   <div
                     key={stat.label}
@@ -1346,7 +1349,7 @@ function SessionsPageInner() {
                       textAlign: 'center',
                     }}
                   >
-                    <div style={{ fontSize: '18px', marginBottom: '3px' }}>{stat.icon}</div>
+                    <div style={{ marginBottom: '3px', display: 'flex', justifyContent: 'center' }}>{stat.icon}</div>
                     <div
                       style={{
                         fontSize: '16px',

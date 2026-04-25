@@ -6,6 +6,7 @@ import { degreesToCompass } from '@/lib/forecast/rating'
 import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
+import { Icon } from '@/components/ui/Icon'
 
 interface Props {
   day: ForecastDay
@@ -70,7 +71,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
           title={day.weatherCode != null ? weatherLabel(day.weatherCode) : undefined}
           style={{ fontSize: 20, lineHeight: 1 }}
         >
-          {day.weatherCode != null ? weatherIcon(day.weatherCode) : '🌊'}
+          {day.weatherCode != null ? weatherIcon(day.weatherCode) : <Icon name="wave" size={20} />}
         </span>
         <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
           {day.maxTempC !== null && (
@@ -138,8 +139,9 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
 
         {/* Water temp */}
         {avgWaterTempC !== null && (
-          <p style={{ fontSize: 11, color: '#0e7490', marginBottom: 2 }}>
-            🌊 {fmtTemp(avgWaterTempC, unit)}
+          <p style={{ fontSize: 11, color: '#0e7490', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+            <Icon name="droplet" size={11} strokeWidth={1.8} />
+            {fmtTemp(avgWaterTempC, unit)}
           </p>
         )}
 

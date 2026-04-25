@@ -9,6 +9,7 @@ import { weatherIcon, tempF } from '@/lib/forecast/weather-code'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
+import { Icon } from '@/components/ui/Icon'
 
 // ── Fuzzy search ──────────────────────────────────────────────────────────────
 
@@ -359,7 +360,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                 WebkitTapHighlightColor: 'transparent',
               }}
             >
-              {isExpanded ? '▲ Less' : '▼ More'}
+              {isExpanded ? '▲ Less' : <><Icon name="chevronDown" size={12} /> More</>}
             </button>
           </div>
         </div>

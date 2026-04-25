@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
+import { Icon } from '@/components/ui/Icon'
 
 interface SpotWithRating extends SurfSpot {
   currentRating?: ConditionRating | 'unknown'
@@ -100,13 +101,13 @@ export function LiveMapHero({ spotCount }: Props) {
           </p>
           <div className="flex flex-col gap-1.5 mb-5">
             {[
-              { name: 'NOAA NDBC Buoys', icon: '📡' },
-              { name: 'Open-Meteo Marine API', icon: '🌊' },
-              { name: 'NOAA CO-OPS Tides', icon: '🌊' },
-              { name: 'OpenStreetMap', icon: '🗺️' },
+              { name: 'NOAA NDBC Buoys', icon: 'buoy' as const },
+              { name: 'Open-Meteo Marine API', icon: 'wave' as const },
+              { name: 'NOAA CO-OPS Tides', icon: 'tide' as const },
+              { name: 'OpenStreetMap', icon: 'map' as const },
             ].map((s) => (
               <span key={s.name} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-                <span>{s.icon}</span>
+                <Icon name={s.icon} size={13} strokeWidth={1.8} />
                 <span>{s.name}</span>
               </span>
             ))}
@@ -166,8 +167,16 @@ export function LiveMapHero({ spotCount }: Props) {
           </Link>
 
           <div className="flex flex-wrap justify-center gap-x-4 gap-y-0.5">
-            {['📡 NOAA NDBC', '🌊 Open-Meteo', '🌊 NOAA Tides', '🗺️ OpenStreetMap'].map((s) => (
-              <span key={s} className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>{s}</span>
+            {([
+              { icon: 'buoy', label: 'NOAA NDBC' },
+              { icon: 'wave', label: 'Open-Meteo' },
+              { icon: 'tide', label: 'NOAA Tides' },
+              { icon: 'map', label: 'OpenStreetMap' },
+            ] as const).map((s) => (
+              <span key={s.label} className="flex items-center gap-1 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                <Icon name={s.icon} size={11} strokeWidth={1.8} />
+                {s.label}
+              </span>
             ))}
           </div>
 

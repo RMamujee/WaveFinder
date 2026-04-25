@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Icon } from '@/components/ui/Icon'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -88,10 +89,10 @@ export function PWAInit() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 22,
+          color: 'white',
         }}
       >
-        🌊
+        <Icon name="wave" size={22} />
       </div>
 
       {/* Text */}
