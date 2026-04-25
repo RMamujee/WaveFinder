@@ -43,15 +43,20 @@ export interface CurrentMarineConditions {
   windDirection: number
 }
 
+// Module-level cache — survives across requests on the same warm instance,
+// reducing Open-Meteo call volume for the conditions fan-out (~100+ locations).
+const _condCache = new Map<string, { result: CurrentMarineConditions | null; exp: number }>()
+const COND_CACHE_TTL = 5 * 60 * 1000
+
 export async function fetchCurrentConditions(
   lat: number,
   lng: number
 ): Promise<CurrentMarineConditions | null> {
+  const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`
+  const cached = _condCache.get(cacheKey)
+  if (cached && Date.now() < cached.exp) return cached.result
+
   try {
-    // Use hourly endpoint (same model as spot forecast pages) and pick the nearest future hour.
-    // The previous `current=` endpoint returned an instantaneous interpolated reading that
-    // differed from what findNearestFutureHour returns on the spot page. Using hourly data
-    // ensures map node heights exactly match what each spot's forecast page shows.
     const marineParams = new URLSearchParams({
       latitude: lat.toString(),
       longitude: lng.toString(),
@@ -68,28 +73,34 @@ export async function fetchCurrentConditions(
       timezone: 'auto',
     })
 
-    const [marineRes, windRes] = await Promise.all([
-      fetch(`${MARINE_BASE}?${marineParams}`, { next: { revalidate: 1800 }, headers: HEADERS }),
-      fetch(`${WEATHER_BASE}?${weatherParams}`, { next: { revalidate: 1800 }, headers: HEADERS }),
+    const [marineSettled, windSettled] = await Promise.allSettled([
+      fetch(`${MARINE_BASE}?${marineParams}`, { signal: AbortSignal.timeout(5000), headers: HEADERS }),
+      fetch(`${WEATHER_BASE}?${weatherParams}`, { signal: AbortSignal.timeout(4000), headers: HEADERS }),
     ])
 
-    if (!marineRes.ok) return null
+    if (marineSettled.status === 'rejected' || !marineSettled.value.ok) {
+      _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 })
+      return null
+    }
 
-    const marine = await marineRes.json()
+    const marine = await marineSettled.value.json()
 
     // Parse wind separately — weather API may return HTML (Cloudflare block) even with 200 OK
     let wind: { current?: { wind_speed_10m?: number; wind_direction_10m?: number } } | null = null
     try {
-      if (windRes.ok) {
-        const windText = await windRes.text()
+      if (windSettled.status === 'fulfilled' && windSettled.value.ok) {
+        const windText = await windSettled.value.text()
         wind = JSON.parse(windText)
       }
     } catch {
-      // Weather API returned non-JSON (e.g. Cloudflare HTML) — fall back to marine wind fields
+      // fall back to marine wind fields
     }
 
     const hourly = marine?.hourly
-    if (!hourly?.time?.length) return null
+    if (!hourly?.time?.length) {
+      _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 })
+      return null
+    }
 
     // Pick the nearest future hour — mirrors findNearestFutureHour from lib/forecast/merge.ts
     const now = new Date()
@@ -107,14 +118,17 @@ export async function fetchCurrentConditions(
       ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
       : 0
 
-    return {
+    const result: CurrentMarineConditions = {
       waveHeight,
       wavePeriod,
       swellDirection,
       windSpeed:     wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
       windDirection: wind?.current?.wind_direction_10m ?? windWaveDir,
     }
+    _condCache.set(cacheKey, { result, exp: Date.now() + COND_CACHE_TTL })
+    return result
   } catch {
+    _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 })
     return null
   }
 }

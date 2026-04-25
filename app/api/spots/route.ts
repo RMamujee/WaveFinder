@@ -4,12 +4,8 @@ import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
 import { inferBottomType } from '@/lib/bottom-type'
 
-export const revalidate = 1800
+export const dynamic = 'force-dynamic'
 export const maxDuration = 60
-
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
-}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -52,19 +48,23 @@ export async function GET(req: Request) {
   // forecast you see after clicking through. Offshore buoys with attenuation
   // factors were producing values that diverged from the per-spot forecast.
   //
-  // Spots within ~11 km of each other share one API call (1-decimal lat/lng bucket)
-  // — this keeps parallel calls to ~35–50 for the full world dataset.
+  // Spots within ~11 km of each other share one API call (1-decimal lat/lng bucket).
+  // Batches of 40 keep worst-case latency under 15 s (3 batches × 5 s timeout).
   const buckets = new Map<string, { lat: number; lng: number }>()
   for (const spot of spots) {
     const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
     if (!buckets.has(key)) buckets.set(key, { lat: spot.lat, lng: spot.lng })
   }
   const bucketKeys = [...buckets.keys()]
-  const omResults = await Promise.all(
-    bucketKeys.map((k) =>
-      withTimeout(fetchCurrentConditions(buckets.get(k)!.lat, buckets.get(k)!.lng), 8000)
+  const BATCH = 40
+  const omResults: (Awaited<ReturnType<typeof fetchCurrentConditions>>)[] = []
+  for (let i = 0; i < bucketKeys.length; i += BATCH) {
+    const slice = bucketKeys.slice(i, i + BATCH)
+    const batch = await Promise.all(
+      slice.map((k) => fetchCurrentConditions(buckets.get(k)!.lat, buckets.get(k)!.lng).catch(() => null))
     )
-  )
+    omResults.push(...batch)
+  }
   const omMap = new Map<string, Awaited<ReturnType<typeof fetchCurrentConditions>>>()
   bucketKeys.forEach((k, i) => omMap.set(k, omResults[i]))
 
@@ -145,6 +145,6 @@ export async function GET(req: Request) {
     bottomType: inferBottomType(rest.description),
   }))
   return NextResponse.json(response, {
-    headers: { 'Cache-Control': 's-maxage=900, stale-while-revalidate=900' },
+    headers: { 'Cache-Control': 's-maxage=180, stale-while-revalidate=60' },
   })
 }
