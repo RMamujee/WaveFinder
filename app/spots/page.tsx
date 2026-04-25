@@ -158,8 +158,10 @@ export default function SpotsPage() {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     }),
-    staleTime: 5 * 60 * 1000,
-    retry: 2,
+    staleTime: 0,
+    gcTime: 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: true,
     enabled: baseSpots.length > 0,
   })
 
