@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useUnits } from '@/contexts/UnitsContext'
@@ -9,23 +9,86 @@ import { Icon } from '@/components/ui/Icon'
 
 // ── Region config ─────────────────────────────────────────────────────────────
 
-const REGIONS = [
-  { name: 'San Diego',             icon: <Icon name="wave" size={22} />,   short: 'San Diego'   },
-  { name: 'Orange County',         icon: '🌴',                                short: 'O.C.'        },
-  { name: 'Los Angeles',           icon: '🌆',                                short: 'L.A.'        },
-  { name: 'Ventura',               icon: <Icon name="surfer" size={22} />,   short: 'Ventura'     },
-  { name: 'Santa Barbara',         icon: '🌸', short: 'S.B.'        },
-  { name: 'Central Coast',         icon: '🌾', short: 'Cen. Coast'  },
-  { name: 'Monterey',              icon: '🦭', short: 'Monterey'    },
-  { name: 'NorCal',                icon: '🌉', short: 'NorCal'      },
-  { name: 'North Shore',           icon: '🌺', short: 'N. Shore'    },
-  { name: 'South Shore',           icon: '🤙', short: 'S. Shore'    },
-  { name: 'Gold Coast',            icon: '🦘', short: 'Gold Coast'  },
-  { name: 'Sydney Northern Beaches', icon: '🏖️', short: 'Sydney'   },
-  { name: 'Uluwatu',               icon: '🌿', short: 'Uluwatu'     },
-  { name: 'Hossegor',              icon: '🥖', short: 'Hossegor'    },
-  { name: "Jeffrey's Bay",         icon: '🦁', short: "J-Bay"       },
+interface Region {
+  name: string
+  short: string
+  icon: React.ReactNode
+  lat: number
+}
+
+const REGIONS: Region[] = [
+  // ── California ───────────────────────────────────────────────────────────────
+  { name: 'San Diego',               short: 'San Diego',    icon: <Icon name="wave" size={22} />,   lat: 32.7  },
+  { name: 'Orange County',           short: 'O.C.',         icon: '🌴',                              lat: 33.6  },
+  { name: 'Los Angeles',             short: 'L.A.',         icon: '🌆',                              lat: 34.0  },
+  { name: 'Ventura',                 short: 'Ventura',      icon: <Icon name="surfer" size={22} />,  lat: 34.3  },
+  { name: 'Santa Barbara',           short: 'S.B.',         icon: '🌸',                              lat: 34.4  },
+  { name: 'Central Coast',           short: 'Cen. Coast',   icon: '🌾',                              lat: 35.4  },
+  { name: 'Monterey',                short: 'Monterey',     icon: '🦭',                              lat: 36.6  },
+  { name: 'NorCal',                  short: 'NorCal',       icon: '🌉',                              lat: 37.8  },
+  // ── Pacific Northwest ────────────────────────────────────────────────────────
+  { name: 'Oregon',                  short: 'Oregon',       icon: '🌲',                              lat: 44.6  },
+  { name: 'Washington',              short: 'Washington',   icon: '🏔️',                             lat: 47.8  },
+  // ── East Coast USA ───────────────────────────────────────────────────────────
+  { name: 'New York',                short: 'New York',     icon: '🗽',                              lat: 40.7  },
+  { name: 'Cape Hatteras',           short: 'Hatteras',     icon: '🦅',                              lat: 35.2  },
+  { name: 'Florida',                 short: 'Florida',      icon: '🐊',                              lat: 28.4  },
+  // ── Hawaii ───────────────────────────────────────────────────────────────────
+  { name: 'North Shore',             short: 'N. Shore',     icon: '🌺',                              lat: 21.6  },
+  { name: 'South Shore',             short: 'S. Shore',     icon: '🤙',                              lat: 21.3  },
+  { name: 'Maui',                    short: 'Maui',         icon: '🐋',                              lat: 20.8  },
+  // ── Mexico ───────────────────────────────────────────────────────────────────
+  { name: 'Baja Norte',              short: 'Baja Norte',   icon: '🌵',                              lat: 30.0  },
+  { name: 'Puerto Escondido',        short: 'P. Esc.',      icon: '🌴',                              lat: 15.9  },
+  // ── South America ────────────────────────────────────────────────────────────
+  { name: 'Chicama',                 short: 'Chicama',      icon: '🦙',                              lat: -8.0  },
+  { name: 'Pichilemu',               short: 'Pichilemu',    icon: '🐧',                              lat: -34.4 },
+  // ── Europe ───────────────────────────────────────────────────────────────────
+  { name: 'Hossegor',                short: 'Hossegor',     icon: '🥖',                              lat: 43.7  },
+  { name: 'Nazaré',                  short: 'Nazaré',       icon: '🏰',                              lat: 39.6  },
+  { name: 'Ericeira',                short: 'Ericeira',     icon: '🌿',                              lat: 38.9  },
+  { name: 'Mundaka',                 short: 'Mundaka',      icon: '⚓',                              lat: 43.4  },
+  { name: 'Canary Islands',          short: 'Canaries',     icon: '🌋',                              lat: 28.1  },
+  { name: 'Bundoran',                short: 'Bundoran',     icon: '🍀',                              lat: 54.5  },
+  { name: 'Thurso',                  short: 'Thurso',       icon: '⛰️',                             lat: 58.6  },
+  // ── Africa ───────────────────────────────────────────────────────────────────
+  { name: 'Taghazout',               short: 'Taghazout',    icon: '🏜️',                             lat: 30.5  },
+  { name: "Jeffrey's Bay",           short: "J-Bay",        icon: '🦁',                              lat: -34.1 },
+  { name: 'Cape Town',               short: 'Cape Town',    icon: '🐧',                              lat: -34.0 },
+  // ── Australia ────────────────────────────────────────────────────────────────
+  { name: 'Gold Coast',              short: 'Gold Coast',   icon: '🦘',                              lat: -28.0 },
+  { name: 'Sydney Northern Beaches', short: 'Sydney',       icon: '🏖️',                             lat: -33.8 },
+  { name: 'Margaret River',          short: 'Marg. River',  icon: '🍷',                              lat: -33.9 },
+  { name: 'Victoria',                short: 'Victoria',     icon: '🐨',                              lat: -38.6 },
+  // ── Indonesia ────────────────────────────────────────────────────────────────
+  { name: 'Uluwatu',                 short: 'Uluwatu',      icon: '🌿',                              lat: -8.8  },
+  { name: 'G-Land',                  short: 'G-Land',       icon: '🌴',                              lat: -8.4  },
+  { name: 'Mentawai',                short: 'Mentawai',     icon: '🐬',                              lat: -1.5  },
+  // ── Pacific Islands ──────────────────────────────────────────────────────────
+  { name: 'Tahiti',                  short: 'Tahiti',       icon: '🌺',                              lat: -17.9 },
+  { name: 'Fiji',                    short: 'Fiji',         icon: '🐠',                              lat: -18.1 },
+  { name: 'Maldives',                short: 'Maldives',     icon: '🏝️',                             lat: 4.2   },
+  // ── Asia ─────────────────────────────────────────────────────────────────────
+  { name: 'Siargao',                 short: 'Siargao',      icon: '🥥',                              lat: 9.8   },
+  { name: 'Chiba',                   short: 'Chiba',        icon: '🗻',                              lat: 35.6  },
 ]
+
+const REGION_GROUPS: { label: string; names: string[] }[] = [
+  { label: 'California',        names: ['San Diego', 'Orange County', 'Los Angeles', 'Ventura', 'Santa Barbara', 'Central Coast', 'Monterey', 'NorCal'] },
+  { label: 'Pacific Northwest', names: ['Oregon', 'Washington'] },
+  { label: 'East Coast',        names: ['New York', 'Cape Hatteras', 'Florida'] },
+  { label: 'Hawaii',            names: ['North Shore', 'South Shore', 'Maui'] },
+  { label: 'Mexico',            names: ['Baja Norte', 'Puerto Escondido'] },
+  { label: 'South America',     names: ['Chicama', 'Pichilemu'] },
+  { label: 'Europe',            names: ['Hossegor', 'Nazaré', 'Ericeira', 'Mundaka', 'Canary Islands', 'Bundoran', 'Thurso'] },
+  { label: 'Africa',            names: ['Taghazout', "Jeffrey's Bay", 'Cape Town'] },
+  { label: 'Australia',         names: ['Gold Coast', 'Sydney Northern Beaches', 'Margaret River', 'Victoria'] },
+  { label: 'Indonesia',         names: ['Uluwatu', 'G-Land', 'Mentawai'] },
+  { label: 'Pacific Islands',   names: ['Tahiti', 'Fiji', 'Maldives'] },
+  { label: 'Asia',              names: ['Siargao', 'Chiba'] },
+]
+
+const REGION_BY_NAME = Object.fromEntries(REGIONS.map(r => [r.name, r]))
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -58,96 +121,135 @@ function dayLabel(ds: string, i: number): string {
   })
 }
 
-// ── Sunrise / sunset calculator (simple astronomical formula) ─────────────────
+function fmtSunTime(h: number): string {
+  return `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`
+}
 
-function sunTimes(dateStr: string): { rise: number; set: number } {
-  const lat = 34.0 // default midpoint latitude (California / global avg)
+// ── Sunrise / sunset calculator ───────────────────────────────────────────────
+
+function sunTimes(dateStr: string, lat: number): { rise: number; set: number } {
   const date = new Date(dateStr + 'T12:00:00')
   const doy = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000)
   const B = (360 / 365) * (doy - 81) * (Math.PI / 180)
   const eqTime = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B)
   const decl = 23.45 * Math.sin(B) * (Math.PI / 180)
   const latRad = lat * (Math.PI / 180)
-  const hourAngle = Math.acos(-Math.tan(latRad) * Math.tan(decl)) * (180 / Math.PI)
+  const cosHA = -Math.tan(latRad) * Math.tan(decl)
+  if (cosHA < -1) return { rise: 0, set: 23 }    // polar day
+  if (cosHA >  1) return { rise: 12, set: 12 }    // polar night
+  const hourAngle = Math.acos(cosHA) * (180 / Math.PI)
   const noon = 12 - eqTime / 60
-  return {
-    rise: noon - hourAngle / 15,
-    set: noon + hourAngle / 15,
-  }
+  return { rise: noon - hourAngle / 15, set: noon + hourAngle / 15 }
 }
 
-// ── Sunrise/sunset bar component ──────────────────────────────────────────────
+// ── Sunrise/sunset bar (draggable) ────────────────────────────────────────────
 
-function SunriseSunsetBar({ dateStr, hour }: { dateStr: string; hour: number }) {
+function SunriseSunsetBar({
+  dateStr, hour, lat, onHourChange,
+}: {
+  dateStr: string
+  hour: number
+  lat: number
+  onHourChange: (h: number) => void
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
   if (!dateStr) return null
-  const { rise, set } = sunTimes(dateStr)
 
+  const { rise, set } = sunTimes(dateStr, lat)
   const risePct = (rise / 23) * 100
-  const setPct = (set / 23) * 100
-  const nowPct = (hour / 23) * 100
+  const setPct  = (set  / 23) * 100
+  const nowPct  = (hour / 23) * 100
 
-  const isDaytime = hour >= rise && hour <= set
+  const isDaytime    = hour >= rise && hour <= set
   const isGoldenHour = (hour >= rise && hour <= rise + 1) || (hour >= set - 1 && hour <= set)
+  const thumbColor   = isGoldenHour ? '#f97316' : isDaytime ? '#60a5fa' : '#475569'
+  const thumbIcon    = isDaytime ? 'sun' : 'moon'
+
+  function seekFromPointer(e: React.PointerEvent<Element>) {
+    if (!trackRef.current) return
+    const { left, width } = trackRef.current.getBoundingClientRect()
+    const pct = Math.max(0, Math.min(1, (e.clientX - left) / width))
+    onHourChange(Math.round(pct * 23))
+  }
 
   return (
-    <div style={{ marginTop: '8px' }}>
-      {/* Day/night gradient bar */}
-      <div style={{ position: 'relative', height: '28px', borderRadius: '14px', overflow: 'hidden', background: '#0f172a' }}>
-        {/* Night → dawn gradient */}
+    <div style={{ marginTop: 10, userSelect: 'none' }}>
+      {/* Track container — overflow visible so thumb peeks out */}
+      <div
+        ref={trackRef}
+        style={{ position: 'relative', height: 38, cursor: 'pointer', touchAction: 'none' }}
+        onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); seekFromPointer(e) }}
+        onPointerMove={e => { if (e.buttons) seekFromPointer(e) }}
+      >
+        {/* Gradient bar — clipped inside */}
         <div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: `${risePct}%`,
-          background: 'linear-gradient(to right, #0f172a 0%, #1e3a5f 70%, #f97316 100%)',
-        }} />
-        {/* Day (full daylight) */}
-        <div style={{
-          position: 'absolute', left: `${risePct}%`, top: 0, bottom: 0,
-          width: `${setPct - risePct}%`,
-          background: 'linear-gradient(to right, #f97316 0%, #fbbf24 8%, #87ceeb 20%, #60a5fa 40%, #60a5fa 60%, #87ceeb 80%, #fbbf24 92%, #f97316 100%)',
-        }} />
-        {/* Dusk → night gradient */}
-        <div style={{
-          position: 'absolute', left: `${setPct}%`, top: 0, bottom: 0, right: 0,
-          background: 'linear-gradient(to right, #f97316 0%, #1e3a5f 30%, #0f172a 100%)',
-        }} />
-
-        {/* Sunrise icon */}
-        <div style={{
-          position: 'absolute', left: `${risePct}%`, top: '50%', transform: 'translate(-50%, -50%)',
-          color: '#fbbf24', display: 'flex', alignItems: 'center',
+          position: 'absolute', left: 0, right: 0,
+          top: '50%', transform: 'translateY(-50%)',
+          height: 28, borderRadius: 14, overflow: 'hidden',
         }}>
-          <Icon name="sun" size={14} strokeWidth={2} />
+          {/* night → dawn */}
+          <div style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0,
+            width: `${risePct}%`,
+            background: 'linear-gradient(to right, #0f172a, #1e3a5f 70%, #f97316)',
+          }} />
+          {/* daylight */}
+          <div style={{
+            position: 'absolute', left: `${risePct}%`, top: 0, bottom: 0,
+            width: `${Math.max(0, setPct - risePct)}%`,
+            background: 'linear-gradient(to right, #f97316, #fbbf24 8%, #87ceeb 20%, #60a5fa 40%, #60a5fa 60%, #87ceeb 80%, #fbbf24 92%, #f97316)',
+          }} />
+          {/* dusk → night */}
+          <div style={{
+            position: 'absolute', left: `${setPct}%`, top: 0, bottom: 0, right: 0,
+            background: 'linear-gradient(to right, #f97316, #1e3a5f 30%, #0f172a)',
+          }} />
+          {/* sunrise tick */}
+          <div style={{
+            position: 'absolute', left: `${risePct}%`, top: 0, bottom: 0,
+            width: 1, background: 'rgba(255,255,255,0.45)', transform: 'translateX(-50%)',
+          }} />
+          {/* sunset tick */}
+          <div style={{
+            position: 'absolute', left: `${setPct}%`, top: 0, bottom: 0,
+            width: 1, background: 'rgba(255,255,255,0.45)', transform: 'translateX(-50%)',
+          }} />
         </div>
 
-        {/* Sunset icon */}
+        {/* Draggable thumb */}
         <div style={{
-          position: 'absolute', left: `${setPct}%`, top: '50%', transform: 'translate(-50%, -50%)',
-          color: '#fb923c', display: 'flex', alignItems: 'center',
-        }}>
-          <Icon name="moon" size={12} strokeWidth={2} />
-        </div>
-
-        {/* Current hour marker */}
-        <div style={{
-          position: 'absolute', left: `${nowPct}%`, top: 0, bottom: 0,
-          width: '2px',
+          position: 'absolute',
+          left: `${nowPct}%`, top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 34, height: 34, borderRadius: '50%',
           background: 'white',
-          transform: 'translateX(-50%)',
-          opacity: 0.9,
-          boxShadow: '0 0 4px rgba(255,255,255,0.8)',
-        }} />
+          border: `2.5px solid ${thumbColor}`,
+          boxShadow: `0 2px 12px rgba(0,0,0,0.25), 0 0 0 4px ${thumbColor}28`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: thumbColor,
+          zIndex: 10,
+          pointerEvents: 'none',
+          transition: 'border-color 0.15s, color 0.15s, box-shadow 0.15s',
+        }}>
+          <Icon name={thumbIcon} size={15} strokeWidth={2} />
+        </div>
       </div>
 
       {/* Labels */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-        <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>
-          Sunrise {Math.floor(rise)}:{String(Math.round((rise % 1) * 60)).padStart(2, '0')}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+          <Icon name="sun" size={10} strokeWidth={2} style={{ color: '#fbbf24' }} />
+          {fmtSunTime(rise)}
         </span>
-        <span style={{ fontSize: '10px', fontWeight: 600, color: isDaytime ? (isGoldenHour ? '#f97316' : '#1b7fcb') : '#6b7280' }}>
-          {isDaytime ? (isGoldenHour ? <><Icon name="sun" size={11} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle' }} /> Golden hour</> : <><Icon name="sun" size={11} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle' }} /> Daytime</>) : <><Icon name="moon" size={11} strokeWidth={2} style={{ display: 'inline', verticalAlign: 'middle' }} /> Night</>}
+        <span style={{
+          fontSize: 10, fontWeight: 600,
+          color: isGoldenHour ? '#f97316' : isDaytime ? '#1b7fcb' : '#6b7280',
+        }}>
+          {isGoldenHour ? 'Golden hour' : isDaytime ? 'Daytime' : 'Night'}
         </span>
-        <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>
-          Sunset {Math.floor(set)}:{String(Math.round((set % 1) * 60)).padStart(2, '0')}
+        <span style={{ fontSize: 10, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+          {fmtSunTime(set)}
+          <Icon name="moon" size={10} strokeWidth={2} style={{ color: '#94a3b8' }} />
         </span>
       </div>
     </div>
@@ -169,7 +271,6 @@ function scoreLabel(s: number) {
   if (s >= 20) return 'Fair'
   return 'Poor'
 }
-
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -199,7 +300,8 @@ export default function TimelinePage() {
     setMounted(true)
   }, [])
 
-  const selectedDate = dates[dayIdx] ?? ''
+  const selectedDate   = dates[dayIdx] ?? ''
+  const currentRegion  = REGION_BY_NAME[region] ?? REGIONS[0]
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['best-spots', region, selectedDate],
@@ -219,7 +321,7 @@ export default function TimelinePage() {
   const spots: Spot[]      = data?.spots        ?? []
   const swell: SwellHour[] = data?.regionalSwell ?? []
 
-  const swellNow = swell.find(s => hrFromTime(s.time) === hour) ?? swell[0]
+  const swellNow  = swell.find(s => hrFromTime(s.time) === hour) ?? swell[0]
   const waterTemp = swellNow?.seaSurfaceTemperature ?? null
 
   const sorted = useMemo(() =>
@@ -267,39 +369,51 @@ export default function TimelinePage() {
 
       <div className="mx-auto max-w-4xl px-5 py-8 space-y-6">
 
-        {/* ── Region icon picker ── */}
+        {/* ── Region picker (grouped) ── */}
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-3)' }}>
+          <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'var(--text-3)' }}>
             Region
           </p>
-          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))' }}>
-            {REGIONS.map(r => {
-              const active = region === r.name
+          <div className="space-y-4">
+            {REGION_GROUPS.map(group => {
+              const groupRegions = group.names.map(n => REGION_BY_NAME[n]).filter(Boolean)
               return (
-                <button
-                  key={r.name}
-                  onClick={() => setRegion(r.name)}
-                  className="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 transition-all"
-                  style={{
-                    background:  active ? 'var(--ocean-600)' : 'white',
-                    border:      `1px solid ${active ? 'var(--ocean-600)' : 'var(--border)'}`,
-                    boxShadow:   active ? '0 2px 10px rgba(27,127,203,0.25)' : 'none',
-                    transform:   active ? 'translateY(-1px)' : 'none',
-                  }}
-                >
-                  <span style={{ fontSize: '22px', lineHeight: 1 }}>{r.icon}</span>
-                  <span
-                    className="text-center font-semibold leading-tight"
-                    style={{
-                      fontSize: '10px',
-                      color: active ? 'white' : 'var(--text-2)',
-                      maxWidth: '68px',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {r.short}
-                  </span>
-                </button>
+                <div key={group.label}>
+                  <p className="text-xs font-semibold mb-2 px-0.5" style={{ color: 'var(--text-3)', letterSpacing: '0.03em' }}>
+                    {group.label}
+                  </p>
+                  <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))' }}>
+                    {groupRegions.map(r => {
+                      const active = region === r.name
+                      return (
+                        <button
+                          key={r.name}
+                          onClick={() => setRegion(r.name)}
+                          className="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 transition-all"
+                          style={{
+                            background: active ? 'var(--ocean-600)' : 'white',
+                            border:     `1px solid ${active ? 'var(--ocean-600)' : 'var(--border)'}`,
+                            boxShadow:  active ? '0 2px 10px rgba(27,127,203,0.25)' : 'none',
+                            transform:  active ? 'translateY(-1px)' : 'none',
+                          }}
+                        >
+                          <span style={{ fontSize: 22, lineHeight: 1, color: active ? 'white' : 'inherit' }}>{r.icon}</span>
+                          <span
+                            className="text-center font-semibold leading-tight"
+                            style={{
+                              fontSize: 10,
+                              color: active ? 'white' : 'var(--text-2)',
+                              maxWidth: 68,
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {r.short}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               )
             })}
           </div>
@@ -388,7 +502,14 @@ export default function TimelinePage() {
               <span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>11 PM</span>
             </div>
           </div>
-          <SunriseSunsetBar dateStr={selectedDate} hour={hour} />
+
+          {/* Draggable sunrise/sunset bar — synced to hour state */}
+          <SunriseSunsetBar
+            dateStr={selectedDate}
+            hour={hour}
+            lat={currentRegion.lat}
+            onHourChange={setHour}
+          />
         </div>
 
         {/* ── Spot rows ── */}
@@ -448,22 +569,16 @@ export default function TimelinePage() {
                         {spot.name}
                       </div>
                       <div className="flex items-center gap-3 mt-1 flex-wrap">
-                        {/* Wave height */}
-                        <span className="flex items-center gap-1 text-xs font-medium"
-                          style={{ color: 'var(--ocean-600)' }}>
+                        <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--ocean-600)' }}>
                           <Icon name="wave" size={12} strokeWidth={2} />
                           {fmtHeight(hd!.waveHeight, unit)}
                         </span>
-                        {/* Wind */}
-                        <span className="flex items-center gap-1 text-xs font-medium"
-                          style={{ color: 'var(--text-2)' }}>
+                        <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--text-2)' }}>
                           <Icon name="wind" size={12} strokeWidth={2} />
                           {hd!.windDirectionLabel} {fmtWind(hd!.windSpeed, unit)}
                         </span>
-                        {/* Water temp */}
                         {waterTemp !== null && (
-                          <span className="flex items-center gap-1 text-xs font-medium"
-                            style={{ color: '#0891b2' }}>
+                          <span className="flex items-center gap-1 text-xs font-medium" style={{ color: '#0891b2' }}>
                             <Icon name="temp" size={12} strokeWidth={2} />
                             {fmtTemp(waterTemp, unit)}
                           </span>
