@@ -98,7 +98,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   const containerRef = useRef<HTMLDivElement>(null)
   const dropdownRef  = useRef<HTMLDivElement>(null)
 
-  // Close on outside tap — works on both desktop (pointerdown) and iOS (touchstart)
+  // Close on outside tap — pointerdown covers both mouse and touch on all modern browsers
   useEffect(() => {
     const close = (e: Event) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -107,10 +107,8 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
       }
     }
     document.addEventListener('pointerdown', close)
-    document.addEventListener('touchstart', close, { passive: true })
     return () => {
       document.removeEventListener('pointerdown', close)
-      document.removeEventListener('touchstart', close)
     }
   }, [])
 
@@ -222,10 +220,10 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
               <button
                 key={spot.slug}
                 type="button"
-                // Use onPointerDown to fire before blur (desktop + Android)
-                onPointerDown={(e) => { e.preventDefault(); handleSelect(spot) }}
-                // Use onTouchEnd as fallback for iOS (avoids 300ms delay)
-                onTouchEnd={(e) => { e.preventDefault(); handleSelect(spot) }}
+                // stopPropagation prevents the document pointerdown close-handler from
+                // seeing this event — on Android e.target can mis-resolve, causing the
+                // dropdown to close before handleSelect fires
+                onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handleSelect(spot) }}
                 onMouseEnter={() => setHighlighted(i)}
                 className="w-full text-left px-4 py-3 flex items-center justify-between gap-3"
                 style={{
@@ -374,6 +372,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
           <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>Select day</p>
           <div
             className="flex gap-1 pb-0.5"
+            data-no-swipe="true"
             style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
           >
             {days.map((day) => (
@@ -455,7 +454,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                     <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide" style={{ background: 'var(--sand-100)', color: 'var(--text-3)' }}>
                       Hourly — {shortDay(activeDayObj.date)}
                     </div>
-                    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <div data-no-swipe="true" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                       <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
@@ -552,7 +551,7 @@ function MobileSwipeCompare({
   const [idx, setIdx] = useState(0)
   const containerRef  = useRef<HTMLDivElement>(null)
   // Store mutable gesture state in a ref so event handlers don't go stale
-  const gesture = useRef({ startX: 0, startY: 0, decided: false, isHoriz: false })
+  const gesture = useRef({ startX: 0, startY: 0, decided: false, isHoriz: false, skip: false })
   // Keep a ref of the count so the touchend closure always has the latest value
   const countRef = useRef(activeSlugs.length)
   useEffect(() => { countRef.current = activeSlugs.length }, [activeSlugs.length])
@@ -569,11 +568,14 @@ function MobileSwipeCompare({
     if (!el) return
 
     const onStart = (e: TouchEvent) => {
-      gesture.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, decided: false, isHoriz: false }
+      // Don't intercept touches that start inside a scrollable child (day picker, hourly table)
+      const skip = !!(e.target as HTMLElement).closest?.('[data-no-swipe]')
+      gesture.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, decided: false, isHoriz: false, skip }
     }
 
     const onMove = (e: TouchEvent) => {
       const g = gesture.current
+      if (g.skip) return
       if (!g.decided) {
         const dx = Math.abs(e.touches[0].clientX - g.startX)
         const dy = Math.abs(e.touches[0].clientY - g.startY)
