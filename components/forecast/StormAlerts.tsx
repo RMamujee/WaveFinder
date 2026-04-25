@@ -53,14 +53,14 @@ export function StormAlerts({ alerts }: Props) {
                   {alert.event}
                 </span>
                 {alert.expires && (
-                  <span className="text-xs shrink-0" style={{ color: s.text, opacity: 0.7 }}>
+                  <span className="text-xs shrink-0" style={{ color: s.text, opacity: 0.85 }}>
                     Until {fmtExpires(alert.expires)}
                   </span>
                 )}
                 <svg
                   width="14" height="14" viewBox="0 0 24 24" fill="none"
                   stroke={s.text} strokeWidth="2"
-                  style={{ transform: isOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s', flexShrink: 0, opacity: 0.7 }}
+                  style={{ transform: isOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s', flexShrink: 0, opacity: 0.85 }}
                 >
                   <path d="m6 9 6 6 6-6" />
                 </svg>
