@@ -46,8 +46,9 @@ export async function GET(req: Request) {
   // forecast you see after clicking through. Offshore buoys with attenuation
   // factors were producing values that diverged from the per-spot forecast.
   //
-  // Spots within ~11 km of each other share one API call (1-decimal lat/lng bucket)
-  // — this keeps parallel calls to ~35–50 for the full world dataset.
+  // Spots within ~11 km of each other share one API call (1-decimal lat/lng bucket).
+  // 212 spots → ~100–130 unique buckets.  The in-memory cache in fetchCurrentConditions
+  // turns subsequent requests (within 5 min on the same warm instance) into instant hits.
   const buckets = new Map<string, { lat: number; lng: number }>()
   for (const spot of spots) {
     const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
@@ -55,9 +56,9 @@ export async function GET(req: Request) {
   }
   const bucketKeys = [...buckets.keys()]
 
-  // Process in batches of 25 to avoid overwhelming Open-Meteo with too many
-  // simultaneous connections from a single serverless function instance.
-  const BATCH = 25
+  // Process in batches of 40.  Each call times out at 5 s, so worst-case a
+  // batch of 40 takes 5 s.  ~120 unique buckets → 3 batches → ≤15 s total.
+  const BATCH = 40
   const omResults: (Awaited<ReturnType<typeof fetchCurrentConditions>>)[] = []
   for (let i = 0; i < bucketKeys.length; i += BATCH) {
     const slice = bucketKeys.slice(i, i + BATCH)
