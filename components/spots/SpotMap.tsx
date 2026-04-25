@@ -21,6 +21,7 @@ interface Props {
   centerLat?: number
   centerLng?: number
   zoom?: number
+  userLocation?: { lat: number; lng: number } | null
 }
 
 const RATING_COLORS: Record<ConditionRating | 'unknown', { bg: string; border: string; text: string }> = {
@@ -170,18 +171,22 @@ function popupHtml(spot: SpotWithRating): string {
   </div>`
 }
 
-export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 }: Props) {
+export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7, userLocation }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<import('leaflet').Map | null>(null)
   const clusterRef      = useRef<unknown>(null)
   const parkingLayerRef = useRef<import('leaflet').LayerGroup | null>(null)
   const seamarkLayerRef = useRef<import('leaflet').TileLayer | null>(null)
   const [seamarkOn, setSeamarkOn] = useState(false)
+  const userMarkerRef   = useRef<import('leaflet').Marker | null>(null)
   // Always holds the latest spots so async Leaflet init reads enriched data
   // even when conditions arrive between when the effect was scheduled and when
   // the async Leaflet imports finish.
-  const spotsRef       = useRef<SpotWithRating[]>(spots)
-  spotsRef.current     = spots
+  const spotsRef        = useRef<SpotWithRating[]>(spots)
+  spotsRef.current      = spots
+  // Keep latest userLocation available to the async init closure
+  const userLocationRef = useRef(userLocation)
+  userLocationRef.current = userLocation
 
   // Show or hide parking layer based on current zoom level
   function syncParkingVisibility(map: import('leaflet').Map, L: typeof import('leaflet'), parkingLayer: import('leaflet').LayerGroup) {
@@ -331,6 +336,34 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
     syncParkingVisibility(map, L, parkingLayer)
   }
 
+  // Place / update the blue "you are here" dot — called both from the init effect
+  // (to restore after re-init) and from the userLocation effect (live updates).
+  async function applyUserLocation(
+    map: import('leaflet').Map,
+    L: typeof import('leaflet'),
+    pos: { lat: number; lng: number } | null | undefined
+  ) {
+    if (userMarkerRef.current) {
+      map.removeLayer(userMarkerRef.current)
+      userMarkerRef.current = null
+    }
+    if (!pos) return
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="position:relative;width:22px;height:22px;">
+        <div class="user-location-pulse" style="position:absolute;inset:0;border-radius:50%;background:rgba(37,99,235,0.35);pointer-events:none;"></div>
+        <div style="position:absolute;inset:0;border-radius:50%;background:#2563eb;border:2.5px solid white;box-shadow:0 2px 10px rgba(37,99,235,0.55);"></div>
+      </div>`,
+      iconSize:   [22, 22],
+      iconAnchor: [11, 11],
+    })
+
+    const marker = L.marker([pos.lat, pos.lng], { icon, zIndexOffset: 2000, interactive: false })
+    marker.addTo(map)
+    userMarkerRef.current = marker
+  }
+
   // Initial map setup
   useEffect(() => {
     if (typeof window === 'undefined' || !mapRef.current) return
@@ -369,6 +402,9 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
       // Use spotsRef so we get the most recent enriched data — conditions may
       // have arrived (synchronous cache hit) while we were awaiting Leaflet imports.
       await rebuildCluster(map, L, MarkerClusterGroup, spotsRef.current)
+
+      // Restore user location dot if it was set before re-init
+      await applyUserLocation(map, L, userLocationRef.current)
 
       // Show/hide parking markers on zoom
       map.on('zoomend', () => {
@@ -432,6 +468,25 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
     })().catch(console.error)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spots.map(s => `${s.id}:${s.currentRating ?? '?'}:${s.currentWaveHeight ?? 'x'}`).join('|')])
+
+  // Update blue dot and pan map when user location changes
+  useEffect(() => {
+    if (!mapInstance.current) return
+    const map = mapInstance.current
+    ;(async () => {
+      const L = (await import('leaflet')).default
+      if (!mapInstance.current) return
+      await applyUserLocation(map, L, userLocation)
+      if (userLocation) {
+        map.setView(
+          [userLocation.lat, userLocation.lng],
+          Math.max(map.getZoom(), 12),
+          { animate: true }
+        )
+      }
+    })().catch(console.error)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userLocation])
 
   return (
     <div className="relative h-full w-full" style={{ minHeight: '100%' }}>
