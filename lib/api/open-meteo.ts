@@ -48,11 +48,15 @@ export async function fetchCurrentConditions(
   lng: number
 ): Promise<CurrentMarineConditions | null> {
   try {
-    // Marine API only accepts marine variables — weather vars (wind_speed_10m etc.) cause 400
+    // Use hourly endpoint (same model as spot forecast pages) and pick the nearest future hour.
+    // The previous `current=` endpoint returned an instantaneous interpolated reading that
+    // differed from what findNearestFutureHour returns on the spot page. Using hourly data
+    // ensures map node heights exactly match what each spot's forecast page shows.
     const marineParams = new URLSearchParams({
       latitude: lat.toString(),
       longitude: lng.toString(),
-      current: 'wave_height,wave_period,swell_wave_direction,wind_wave_height,wind_wave_direction',
+      hourly: 'wave_height,wave_period,swell_wave_direction,wind_wave_height,wind_wave_direction',
+      forecast_days: '1',
       timezone: 'auto',
     })
 
@@ -84,21 +88,31 @@ export async function fetchCurrentConditions(
       // Weather API returned non-JSON (e.g. Cloudflare HTML) — fall back to marine wind fields
     }
 
-    const c = marine?.current
-    if (!c) return null
+    const hourly = marine?.hourly
+    if (!hourly?.time?.length) return null
+
+    // Pick the nearest future hour — mirrors findNearestFutureHour from lib/forecast/merge.ts
+    const now = new Date()
+    let idx = (hourly.time as string[]).findIndex((t: string) => new Date(t) >= now)
+    if (idx === -1) idx = (hourly.time as string[]).length - 1
+
+    const waveHeight     = (hourly.wave_height as number[])[idx] ?? 0
+    const wavePeriod     = (hourly.wave_period as number[])[idx] ?? 0
+    const swellDirection = (hourly.swell_wave_direction as number[])[idx] ?? 0
+    const windWaveH      = (hourly.wind_wave_height as number[])[idx] ?? 0
+    const windWaveDir    = (hourly.wind_wave_direction as number[])[idx] ?? 0
 
     // Estimate wind speed from wind-wave height when weather API is unavailable
-    const windWaveH = c.wind_wave_height ?? 0
     const estimatedWindSpeed = windWaveH > 0
       ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
       : 0
 
     return {
-      waveHeight:     c.wave_height ?? 0,
-      wavePeriod:     c.wave_period ?? 0,
-      swellDirection: c.swell_wave_direction ?? 0,
-      windSpeed:      wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
-      windDirection:  wind?.current?.wind_direction_10m ?? c.wind_wave_direction ?? 0,
+      waveHeight,
+      wavePeriod,
+      swellDirection,
+      windSpeed:     wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
+      windDirection: wind?.current?.wind_direction_10m ?? windWaveDir,
     }
   } catch {
     return null

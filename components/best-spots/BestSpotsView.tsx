@@ -212,7 +212,7 @@ export function BestSpotsView() {
   return (
     <div
       style={{
-        minHeight: 'calc(100vh - 57px)',
+        minHeight: 'calc(100dvh - 57px)',
         background: '#111111',
         color: '#e5e7eb',
       }}
