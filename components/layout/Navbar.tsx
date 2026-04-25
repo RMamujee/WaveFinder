@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useUnits } from '@/contexts/UnitsContext'
+import { Icon } from '@/components/ui/Icon'
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -31,7 +32,7 @@ export function Navbar() {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group" onClick={() => setMobileOpen(false)}>
-          <Image src="/logo.png" alt="WaveFinder" width={36} height={36} className="rounded-lg" />
+          <Image src="/logo.png" alt="WaveFinder" width={34} height={34} priority style={{ objectFit: 'contain', display: 'block' }} />
           <span className="text-lg font-bold tracking-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ocean-700)' }}>
             Wave<span style={{ color: 'var(--seafoam)', fontStyle: 'italic' }}>Finder</span>
           </span>
@@ -84,13 +85,9 @@ export function Navbar() {
           aria-label="Toggle menu"
         >
           {mobileOpen ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
+            <Icon name="close" size={20} strokeWidth={2} />
           ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+            <Icon name="menu" size={20} strokeWidth={2} />
           )}
         </button>
       </div>
