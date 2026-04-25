@@ -42,14 +42,21 @@ export async function GET(
     ? windResult.value
     : { hourly: { time: [] as string[], wind_speed_10m: [] as number[], wind_direction_10m: [] as number[], wind_gusts_10m: [] as number[], temperature_2m: [] as number[], weather_code: [] as number[], precipitation_probability: [] as number[] } }
 
-  const hours = mergeForecastData(
-    marineResult.value,
-    windData,
-    spot.facingDirection,
-    spot.lat
-  )
-
-  const forecast = groupHoursByDay(hours)
+  let hours, forecast
+  try {
+    hours = mergeForecastData(
+      marineResult.value,
+      windData,
+      spot.facingDirection,
+      spot.lat
+    )
+    forecast = groupHoursByDay(hours)
+  } catch (mergeErr) {
+    return NextResponse.json(
+      { error: 'Failed to process forecast data', detail: String(mergeErr) },
+      { status: 502 }
+    )
+  }
   const tides = tidesResult.status === 'fulfilled' ? tidesResult.value : []
   const buoy = buoyResult.status === 'fulfilled' ? buoyResult.value : null
   const coastalWind = coastalWindResult.status === 'fulfilled' ? coastalWindResult.value : null
