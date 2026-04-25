@@ -187,6 +187,9 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
   // Keep latest userLocation available to the async init closure
   const userLocationRef = useRef(userLocation)
   userLocationRef.current = userLocation
+  // Track seamarkOn across async boundaries so the init effect can restore it
+  const seamarkOnRef = useRef(seamarkOn)
+  seamarkOnRef.current = seamarkOn
 
   // Show or hide parking layer based on current zoom level
   function syncParkingVisibility(map: import('leaflet').Map, L: typeof import('leaflet'), parkingLayer: import('leaflet').LayerGroup) {
@@ -407,6 +410,19 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       // Restore user location dot if it was set before re-init
       await applyUserLocation(map, L, userLocationRef.current)
 
+      // Restore seamark overlay if it was on before re-init
+      if (seamarkOnRef.current) {
+        if (!seamarkLayerRef.current) {
+          seamarkLayerRef.current = L.tileLayer(
+            'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+            { attribution: '© <a href="https://www.openseamap.org">OpenSeaMap</a>', opacity: 0.8, maxZoom: 18 }
+          )
+        }
+        if (!map.hasLayer(seamarkLayerRef.current)) {
+          seamarkLayerRef.current.addTo(map)
+        }
+      }
+
       // Show/hide parking markers on zoom
       map.on('zoomend', () => {
         if (parkingLayerRef.current) {
@@ -465,7 +481,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const MCG2 = (L as any).MarkerClusterGroup
       if (!mapInstance.current) return
-      await rebuildCluster(mapInstance.current, L, MCG2, spots)
+      await rebuildCluster(mapInstance.current, L, MCG2, spotsRef.current)
     })().catch(console.error)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spots.map(s => `${s.id}:${s.currentRating ?? '?'}:${s.currentWaveHeight ?? 'x'}`).join('|')])
