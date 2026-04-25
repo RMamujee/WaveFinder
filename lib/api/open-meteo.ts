@@ -68,20 +68,21 @@ export async function fetchCurrentConditions(
       timezone: 'auto',
     })
 
-    const [marineRes, windRes] = await Promise.all([
-      fetch(`${MARINE_BASE}?${marineParams}`, { next: { revalidate: 1800 }, headers: HEADERS }),
-      fetch(`${WEATHER_BASE}?${weatherParams}`, { next: { revalidate: 1800 }, headers: HEADERS }),
+    // Use allSettled so a slow/blocked weather API doesn't kill the marine result.
+    const [marineSettled, windSettled] = await Promise.allSettled([
+      fetch(`${MARINE_BASE}?${marineParams}`, { signal: AbortSignal.timeout(10000), headers: HEADERS }),
+      fetch(`${WEATHER_BASE}?${weatherParams}`, { signal: AbortSignal.timeout(8000),  headers: HEADERS }),
     ])
 
-    if (!marineRes.ok) return null
+    if (marineSettled.status === 'rejected' || !marineSettled.value.ok) return null
 
-    const marine = await marineRes.json()
+    const marine = await marineSettled.value.json()
 
     // Parse wind separately — weather API may return HTML (Cloudflare block) even with 200 OK
     let wind: { current?: { wind_speed_10m?: number; wind_direction_10m?: number } } | null = null
     try {
-      if (windRes.ok) {
-        const windText = await windRes.text()
+      if (windSettled.status === 'fulfilled' && windSettled.value.ok) {
+        const windText = await windSettled.value.text()
         wind = JSON.parse(windText)
       }
     } catch {
