@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
+import { inferBottomType } from '@/lib/bottom-type'
 
 export const revalidate = 1800
 export const maxDuration = 60
@@ -41,7 +42,9 @@ export async function GET(req: Request) {
     orderBy: { name: 'asc' },
   })
 
-  if (!withConditions) return NextResponse.json(spots)
+  if (!withConditions) {
+    return NextResponse.json(spots.map((s) => ({ ...s, bottomType: inferBottomType(s.description) })))
+  }
 
   // ── Conditions: Open-Meteo current conditions at actual beach coordinates ─────
   // Open-Meteo's nearshore marine model is the same source used by the individual
@@ -137,7 +140,10 @@ export async function GET(req: Request) {
     spot.wavePower         = computeWavePower(wh, period)
   }
 
-  const response = enriched.map(({ _needsFallback: _, ...rest }) => rest)
+  const response = enriched.map(({ _needsFallback: _, ...rest }) => ({
+    ...rest,
+    bottomType: inferBottomType(rest.description),
+  }))
   return NextResponse.json(response, {
     headers: { 'Cache-Control': 's-maxage=900, stale-while-revalidate=900' },
   })

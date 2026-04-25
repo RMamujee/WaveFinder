@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { inferBottomType } from '@/lib/bottom-type'
 
 export async function GET(
   _req: Request,
@@ -15,5 +16,5 @@ export async function GET(
     return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
   }
 
-  return NextResponse.json(spot)
+  return NextResponse.json({ ...spot, bottomType: inferBottomType(spot.description) })
 }

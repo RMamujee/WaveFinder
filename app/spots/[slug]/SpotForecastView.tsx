@@ -32,6 +32,7 @@ import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
 import { format, parseISO } from 'date-fns'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp, fmtTide } from '@/lib/units'
+import { bottomTypeStyle } from '@/lib/bottom-type'
 
 interface Props { spot: SurfSpot }
 
@@ -163,6 +164,17 @@ export function SpotForecastView({ spot }: Props) {
                 >
                   {spot.difficulty}
                 </span>
+                {spot.bottomType && (() => {
+                  const btStyle = bottomTypeStyle(spot.bottomType)
+                  return (
+                    <span
+                      className="rounded-full px-2.5 py-1 text-xs font-semibold shrink-0"
+                      style={{ background: btStyle.bg, color: btStyle.color }}
+                    >
+                      {spot.bottomType}
+                    </span>
+                  )
+                })()}
               </div>
               <p className="text-sm mb-5" style={{ color: 'var(--text-2)' }}>
                 {spot.region}, {spot.country}

@@ -6,6 +6,7 @@ import { SpotCard } from '@/components/spots/SpotCard'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import type { SurfSpot } from '@/types/spot'
+import { inferBottomType } from '@/lib/bottom-type'
 
 type PrismaSpot = Awaited<ReturnType<typeof prisma.surfSpot.findUniqueOrThrow>>
 
@@ -27,6 +28,7 @@ function toSurfSpot(s: PrismaSpot): SurfSpot {
     webcamUrl: s.webcamUrl,
     webcamType: s.webcamType,
     parkingOptions: s.parkingOptions as SurfSpot['parkingOptions'] ?? null,
+    bottomType: inferBottomType(s.description),
   }
 }
 

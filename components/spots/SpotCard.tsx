@@ -5,6 +5,7 @@ import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight } from '@/lib/units'
+import { bottomTypeStyle } from '@/lib/bottom-type'
 
 interface Props {
   spot: SurfSpot
@@ -55,15 +56,28 @@ export function SpotCard({ spot, rating, waveHeight }: Props) {
         )}
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
-        <span
-          className="rounded-full px-2 py-0.5 text-xs font-medium capitalize"
-          style={{ background: diffStyle.bg, color: diffStyle.color }}
-        >
-          {spot.difficulty}
-        </span>
+      <div className="mt-3 flex items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <span
+            className="rounded-full px-2 py-0.5 text-xs font-medium capitalize shrink-0"
+            style={{ background: diffStyle.bg, color: diffStyle.color }}
+          >
+            {spot.difficulty}
+          </span>
+          {spot.bottomType && (() => {
+            const btStyle = bottomTypeStyle(spot.bottomType)
+            return (
+              <span
+                className="rounded-full px-2 py-0.5 text-xs font-medium shrink-0"
+                style={{ background: btStyle.bg, color: btStyle.color }}
+              >
+                {spot.bottomType}
+              </span>
+            )
+          })()}
+        </div>
         {waveHeight !== undefined && (
-          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+          <span className="text-sm font-semibold shrink-0" style={{ color: 'var(--text)' }}>
             {fmtHeight(waveHeight, unit)}
           </span>
         )}
