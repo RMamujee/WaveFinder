@@ -336,37 +336,19 @@ function SunriseSunsetBar({
   }
 
   return (
-    <div style={{ userSelect: 'none' }}>
-      {/* Label row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
-          <Icon name="sun" size={11} strokeWidth={2} style={{ color: '#fbbf24' }} />
-          {fmtSunTime(rise)}
-        </span>
-        <span style={{
-          fontSize: 11, fontWeight: 700,
-          color: isGoldenHour ? '#f97316' : isDaytime ? '#1b7fcb' : '#6b7280',
-        }}>
-          {isGoldenHour ? 'Golden hour' : isDaytime ? 'Daytime' : 'Night'}
-        </span>
-        <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
-          {fmtSunTime(set)}
-          <Icon name="moon" size={11} strokeWidth={2} style={{ color: '#94a3b8' }} />
-        </span>
-      </div>
-
-      {/* Track — outer has overflow:visible for thumb, inner gradient is clipped */}
+    <div style={{ marginTop: 8, userSelect: 'none' }}>
+      {/* Track — outer overflow:visible so the thumb peeks out */}
       <div
         ref={trackRef}
-        style={{ position: 'relative', height: 48, cursor: 'grab', touchAction: 'none' }}
+        style={{ position: 'relative', height: 38, cursor: 'grab', touchAction: 'none' }}
         onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); seekFromPointer(e) }}
         onPointerMove={e => { if (e.buttons) seekFromPointer(e) }}
       >
-        {/* Gradient bar */}
+        {/* Gradient bar — clipped */}
         <div style={{
           position: 'absolute', left: 0, right: 0,
           top: '50%', transform: 'translateY(-50%)',
-          height: 32, borderRadius: 16, overflow: 'hidden',
+          height: 28, borderRadius: 14, overflow: 'hidden',
         }}>
           {/* night → dawn */}
           <div style={{
@@ -385,29 +367,26 @@ function SunriseSunsetBar({
             position: 'absolute', left: `${setPct}%`, top: 0, bottom: 0, right: 0,
             background: 'linear-gradient(to right, #f97316, #1e3a5f 30%, #0f172a)',
           }} />
-          {/* tick marks at sunrise + sunset */}
-          <div style={{
-            position: 'absolute', left: `${risePct}%`, top: 0, bottom: 0,
-            width: 1, background: 'rgba(255,255,255,0.5)', transform: 'translateX(-50%)',
-          }} />
-          <div style={{
-            position: 'absolute', left: `${setPct}%`, top: 0, bottom: 0,
-            width: 1, background: 'rgba(255,255,255,0.5)', transform: 'translateX(-50%)',
-          }} />
         </div>
 
-        {/* Floating time label above thumb */}
+        {/* Sun icon pinned at sunrise */}
         <div style={{
-          position: 'absolute',
-          left: `${nowPct}%`, top: 0,
-          transform: 'translateX(-50%)',
-          fontSize: 10, fontWeight: 700,
-          color: thumbColor,
-          whiteSpace: 'nowrap',
-          lineHeight: 1,
-          pointerEvents: 'none',
+          position: 'absolute', left: `${risePct}%`, top: '50%',
+          transform: 'translate(-50%, -50%)',
+          color: '#fbbf24', display: 'flex', alignItems: 'center',
+          pointerEvents: 'none', zIndex: 5,
         }}>
-          {hrLabel(hour)}
+          <Icon name="sun" size={14} strokeWidth={2} />
+        </div>
+
+        {/* Moon icon pinned at sunset */}
+        <div style={{
+          position: 'absolute', left: `${setPct}%`, top: '50%',
+          transform: 'translate(-50%, -50%)',
+          color: '#fb923c', display: 'flex', alignItems: 'center',
+          pointerEvents: 'none', zIndex: 5,
+        }}>
+          <Icon name="moon" size={12} strokeWidth={2} />
         </div>
 
         {/* Draggable thumb */}
@@ -415,27 +394,34 @@ function SunriseSunsetBar({
           position: 'absolute',
           left: `${nowPct}%`, top: '50%',
           transform: 'translate(-50%, -50%)',
-          width: 38, height: 38, borderRadius: '50%',
+          width: 34, height: 34, borderRadius: '50%',
           background: 'white',
           border: `2.5px solid ${thumbColor}`,
-          boxShadow: `0 2px 12px rgba(0,0,0,0.22), 0 0 0 5px ${thumbColor}22`,
+          boxShadow: `0 2px 12px rgba(0,0,0,0.25), 0 0 0 4px ${thumbColor}28`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: thumbColor,
           zIndex: 10,
           pointerEvents: 'none',
           transition: 'border-color 0.15s, color 0.15s, box-shadow 0.15s',
         }}>
-          <Icon name={thumbIcon} size={16} strokeWidth={2} />
+          <Icon name={thumbIcon} size={15} strokeWidth={2} />
         </div>
       </div>
 
-      {/* Hour tick labels */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between',
-        fontSize: 9, color: 'var(--text-3)',
-        marginTop: 4, paddingLeft: 2, paddingRight: 2,
-      }}>
-        <span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>11p</span>
+      {/* Labels: Sunrise time | day status | Sunset time */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
+          Sunrise {fmtSunTime(rise)}
+        </span>
+        <span style={{
+          fontSize: 10, fontWeight: 600,
+          color: isGoldenHour ? '#f97316' : isDaytime ? '#1b7fcb' : '#6b7280',
+        }}>
+          {isGoldenHour ? 'Golden hour' : isDaytime ? 'Daytime' : 'Night'}
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
+          Sunset {fmtSunTime(set)}
+        </span>
       </div>
     </div>
   )
