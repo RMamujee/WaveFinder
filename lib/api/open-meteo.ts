@@ -181,7 +181,19 @@ export async function fetchMarineForecast(
     throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
   }
 
-  return await res.json() as OpenMeteoMarineResponse
+  let data: unknown
+  try {
+    data = await res.json()
+  } catch {
+    throw new Error('Open-Meteo marine API returned non-JSON response')
+  }
+
+  const marine = data as OpenMeteoMarineResponse
+  if (!Array.isArray(marine?.hourly?.time) || marine.hourly.time.length === 0) {
+    throw new Error('Open-Meteo marine API returned empty or malformed hourly data')
+  }
+
+  return marine
 }
 
 export async function fetchWindForecast(
