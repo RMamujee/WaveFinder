@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
 
-export const revalidate = 1800
+export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
@@ -137,8 +137,16 @@ export async function GET(req: Request) {
     spot.wavePower         = computeWavePower(wh, period)
   }
 
+  // If the vast majority of spots have no data it means Open-Meteo timed out
+  // wholesale (e.g. cold-start Vercel latency).  Return 503 so the client
+  // retries — don't cache all-unknown data for 15 minutes.
+  const unknownCount = enriched.filter((s) => s.currentRating === 'unknown').length
+  if (unknownCount > 0 && unknownCount === enriched.length) {
+    return NextResponse.json({ error: 'conditions_unavailable' }, { status: 503 })
+  }
+
   const response = enriched.map(({ _needsFallback: _, ...rest }) => rest)
   return NextResponse.json(response, {
-    headers: { 'Cache-Control': 's-maxage=900, stale-while-revalidate=900' },
+    headers: { 'Cache-Control': 's-maxage=180, stale-while-revalidate=60' },
   })
 }
