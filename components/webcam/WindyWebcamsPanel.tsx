@@ -6,9 +6,10 @@ import type { WindyWebcam } from '@/lib/api/windy-webcams'
 
 interface Props {
   slug: string
+  spotName: string
 }
 
-export function WindyWebcamsPanel({ slug }: Props) {
+export function WindyWebcamsPanel({ slug, spotName }: Props) {
   const [active, setActive] = useState<WindyWebcam | null>(null)
 
   const { data: webcams = [], isLoading } = useQuery<WindyWebcam[]>({
@@ -17,16 +18,38 @@ export function WindyWebcamsPanel({ slug }: Props) {
     staleTime: 60 * 60 * 1000,
   })
 
-  if (isLoading || webcams.length === 0) return null
+  const youtubeSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(spotName + ' surf cam live')}`
+
+  if (isLoading) return null
+
+  if (webcams.length === 0) {
+    return (
+      <div
+        className="rounded-2xl px-5 py-4 flex items-center justify-between"
+        style={{ background: 'white', border: '1px solid var(--border)' }}
+      >
+        <p className="text-sm" style={{ color: 'var(--text-3)' }}>
+          No nearby cameras found via Windy.
+        </p>
+        <a
+          href={youtubeSearchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold shrink-0 ml-4"
+          style={{ background: '#ff0000', color: 'white' }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+            <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8z"/>
+            <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="#ff0000"/>
+          </svg>
+          Search YouTube
+        </a>
+      </div>
+    )
+  }
 
   return (
     <>
-      <h2
-        className="mb-2 font-semibold text-sm"
-        style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
-      >
-        Nearby Live Cams
-      </h2>
       <div
         className="grid gap-3"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}
@@ -35,10 +58,11 @@ export function WindyWebcamsPanel({ slug }: Props) {
           <button
             key={cam.webcamId}
             onClick={() => setActive(cam)}
-            className="group relative rounded-xl overflow-hidden text-left transition-all"
+            className="group relative rounded-xl overflow-hidden text-left transition-all hover:shadow-md"
             style={{ border: '1px solid var(--border)', background: 'var(--sand-100)', aspectRatio: '16/9' }}
           >
             {cam.thumbnail ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={cam.thumbnail}
                 alt={cam.title}
@@ -100,6 +124,7 @@ export function WindyWebcamsPanel({ slug }: Props) {
                 allowFullScreen
               />
             ) : (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={active.previewUrl || active.thumbnail} alt={active.title} className="w-full h-full object-cover" />
             )}
 

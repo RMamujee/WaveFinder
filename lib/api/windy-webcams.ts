@@ -16,18 +16,19 @@ export interface WindyWebcam {
 export async function fetchNearbyWebcams(
   lat: number,
   lng: number,
-  radiusKm = 20
+  radiusKm = 10
 ): Promise<WindyWebcam[]> {
   const apiKey = process.env.WINDY_WEBCAM_API_KEY
   if (!apiKey) return []
 
   try {
+    // v3 API: field name is "images" (not "image"); player.day/live are direct URL strings
     const params = new URLSearchParams({
       lat: lat.toString(),
       lng: lng.toString(),
       radius: radiusKm.toString(),
-      limit: '8',
-      show: 'webcam:image,player,location',
+      limit: '6',
+      show: 'webcam:images,player,location',
     })
 
     const res = await fetch(`${WINDY_BASE}?${params}`, {
@@ -43,15 +44,15 @@ export async function fetchNearbyWebcams(
       .filter((w) => w.status === 'active')
       .map((w) => {
         const loc = (w.location ?? {}) as Record<string, unknown>
-        const img = ((w.image ?? {}) as Record<string, unknown>)
-        const currentImg = ((img.current ?? {}) as Record<string, unknown>)
+        // v3: top-level key is "images", not "image"
+        const imgs = ((w.images ?? {}) as Record<string, unknown>)
+        const currentImg = ((imgs.current ?? {}) as Record<string, unknown>)
+        // v3: player.day and player.live are direct URL strings, not {embed, iframe} objects
         const player = ((w.player ?? {}) as Record<string, unknown>)
-        const dayPlayer = ((player.day ?? {}) as Record<string, unknown>)
-        const lifetimePlayer = ((player.lifetime ?? {}) as Record<string, unknown>)
+        const embedUrl = String(player.live ?? player.day ?? '')
 
         const wLat = Number(loc.latitude ?? 0)
         const wLng = Number(loc.longitude ?? 0)
-        // Haversine approximation (good enough at <50 km)
         const dlat = (wLat - lat) * (Math.PI / 180)
         const dlng = (wLng - lng) * (Math.PI / 180)
         const a =
@@ -62,9 +63,9 @@ export async function fetchNearbyWebcams(
         return {
           webcamId: String(w.webcamId ?? ''),
           title: String(w.title ?? 'Webcam'),
-          thumbnail: String(currentImg.thumbnail ?? currentImg.icon ?? ''),
-          previewUrl: String(currentImg.preview ?? currentImg.thumbnail ?? ''),
-          playerEmbedUrl: String(dayPlayer.embed ?? lifetimePlayer.embed ?? ''),
+          thumbnail: String(currentImg.preview ?? currentImg.icon ?? ''),
+          previewUrl: String(currentImg.preview ?? currentImg.icon ?? ''),
+          playerEmbedUrl: embedUrl,
           lat: wLat,
           lng: wLng,
           city: String(loc.city ?? loc.region ?? ''),
@@ -72,6 +73,7 @@ export async function fetchNearbyWebcams(
           source: 'windy' as const,
         }
       })
+      .filter((w) => w.playerEmbedUrl || w.thumbnail)
       .sort((a, b) => a.distanceKm - b.distanceKm)
   } catch {
     return []
