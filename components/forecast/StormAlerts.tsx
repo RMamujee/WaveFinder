@@ -60,7 +60,7 @@ export function StormAlerts({ alerts }: Props) {
                 <svg
                   width="14" height="14" viewBox="0 0 24 24" fill="none"
                   stroke={s.text} strokeWidth="2"
-                  style={{ transform: isOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s', shrink: 0, opacity: 0.7 }}
+                  style={{ transform: isOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s', flexShrink: 0, opacity: 0.7 }}
                 >
                   <path d="m6 9 6 6 6-6" />
                 </svg>
