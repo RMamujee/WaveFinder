@@ -24,7 +24,7 @@ interface Props {
 }
 
 const RATING_COLORS: Record<ConditionRating | 'unknown', { bg: string; border: string; text: string }> = {
-  poor:    { bg: '#e5e7eb', border: '#9ca3af', text: '#6b7280' },
+  poor:    { bg: '#fee2e2', border: '#ef4444', text: '#b91c1c' },
   fair:    { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
   good:    { bg: '#d1fae5', border: '#16a34a', text: '#15803d' },
   epic:    { bg: '#ede9fe', border: '#7c3aed', text: '#6d28d9' },
@@ -131,21 +131,42 @@ function popupHtml(spot: SpotWithRating): string {
   const heightM  = hasWave ? h!.toFixed(1) : null
   const period   = spot.currentPeriod != null ? Math.round(spot.currentPeriod!) : null
   const power    = spot.wavePower != null ? Math.round(spot.wavePower!) : null
-  const heightStr = hasWave ? `${heightM}m (${heightFt}ft)` : h === 0 ? 'Flat' : '—'
 
-  return `<div style="width:210px;padding:14px;font-family:'DM Sans',sans-serif;">
-    <div style="font-size:11px;color:#8888aa;margin-bottom:2px;text-transform:uppercase;letter-spacing:0.05em;">${spot.region}</div>
-    <div style="font-size:15px;font-weight:600;color:#1a1a2e;margin-bottom:8px;">${spot.name}</div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div>
-        <div style="font-size:13px;font-weight:600;color:#1a1a2e;">${heightStr}</div>
-        ${period ? `<div style="font-size:11px;color:#8888aa;">${period}s period${power ? ` · ${power} kW/m` : ''}</div>` : ''}
+  const statsHtml = hasWave ? `
+    <div style="display:flex;gap:0;background:#f8fafc;border-radius:10px;overflow:hidden;margin-bottom:10px;border:1px solid #e2e8f0;">
+      <div style="flex:1;text-align:center;padding:10px 6px;">
+        <div style="font-size:20px;font-weight:800;color:#1a1a2e;line-height:1;">${heightFt}<span style="font-size:11px;font-weight:600;color:#8888aa;">ft</span></div>
+        <div style="font-size:9px;font-weight:600;color:#8888aa;text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;">Height</div>
       </div>
-      <div style="background:${colors.bg};border:1.5px solid ${colors.border};color:${colors.text};
-        border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;">${RATING_LABELS[rating]}</div>
+      ${period ? `<div style="flex:1;text-align:center;padding:10px 6px;border-left:1px solid #e2e8f0;">
+        <div style="font-size:20px;font-weight:800;color:#1a1a2e;line-height:1;">${period}<span style="font-size:11px;font-weight:600;color:#8888aa;">s</span></div>
+        <div style="font-size:9px;font-weight:600;color:#8888aa;text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;">Period</div>
+      </div>` : ''}
+      ${power ? `<div style="flex:1;text-align:center;padding:10px 6px;border-left:1px solid #e2e8f0;">
+        <div style="font-size:20px;font-weight:800;color:#1a1a2e;line-height:1;">${power}</div>
+        <div style="font-size:9px;font-weight:600;color:#8888aa;text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;">kW/m</div>
+      </div>` : ''}
     </div>
+    ${spot.currentWindSpeed != null ? `<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">💨 ${Math.round(spot.currentWindSpeed! * 0.621371)} mph ${spot.currentWindDir ?? ''}</div>` : ''}
+  ` : h === 0
+    ? `<div style="font-size:13px;color:#8888aa;font-style:italic;margin-bottom:10px;text-align:center;padding:10px;background:#f8fafc;border-radius:10px;">Flat — no rideable waves today</div>`
+    : `<div style="font-size:13px;color:#8888aa;font-style:italic;margin-bottom:10px;text-align:center;padding:10px;background:#f8fafc;border-radius:10px;">No live data available</div>`
+
+  return `<div style="width:250px;padding:14px 16px;font-family:'DM Sans',sans-serif;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">
+      <div style="min-width:0;">
+        <div style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:1px;">${spot.region}</div>
+        <div style="font-size:16px;font-weight:700;color:#1a1a2e;line-height:1.2;word-break:break-word;">${spot.name}</div>
+        <div style="font-size:11px;color:${DIFFICULTY_COLOR[spot.difficulty] ?? '#6b7280'};font-weight:600;text-transform:capitalize;margin-top:2px;">${spot.difficulty}</div>
+      </div>
+      <div style="flex-shrink:0;background:${colors.bg};border:2px solid ${colors.border};color:${colors.text};
+        border-radius:20px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap;">${RATING_LABELS[rating]}</div>
+    </div>
+    ${statsHtml}
     <a href="/spots/${spot.slug}" style="display:block;background:#1b7fcb;color:white;text-align:center;
-      padding:7px 0;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;">View Forecast →</a>
+      padding:11px 0;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.01em;">
+      View Full Forecast →
+    </a>
   </div>`
 }
 
@@ -279,14 +300,14 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
         html: `<div data-rating="${rating}" title="${spot.name}"
           style="display:flex;flex-direction:column;align-items:center;cursor:pointer;">
           <div style="background:${colors.bg};border:2.5px solid ${colors.border};border-radius:50%;
-            width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+            width:38px;height:38px;display:flex;align-items:center;justify-content:center;
             font-family:'DM Sans',sans-serif;font-size:${fontSize};font-weight:800;color:${colors.text};
             box-shadow:0 2px 8px rgba(0,0,0,0.15);letter-spacing:-0.3px;line-height:1;">${label}</div>
           <div style="width:2px;height:6px;background:${colors.border};margin-top:1px;"></div>
         </div>`,
-        iconSize: [36, 44],
-        iconAnchor: [18, 44],
-        popupAnchor: [0, -48],
+        iconSize: [38, 46],
+        iconAnchor: [19, 46],
+        popupAnchor: [0, -50],
       })
 
       // Place markers at shore-nudged position + ±360° world copies
@@ -296,7 +317,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
           permanent: false, sticky: false, direction: 'top',
           offset: [0, -48], opacity: 1, className: 'spot-hover-tooltip',
         })
-        marker.bindPopup(popupHtml(spot), { maxWidth: 230, minWidth: 210 })
+        marker.bindPopup(popupHtml(spot), { maxWidth: 268, minWidth: 250 })
         group.addLayer(marker)
       }
     }
