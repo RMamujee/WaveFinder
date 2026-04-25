@@ -14,6 +14,7 @@ interface SpotWithRating extends SurfSpot {
   currentWindSpeed?: number | null
   currentWindDir?: string | null
   wavePower?: number | null
+  bottomType?: string | null
 }
 
 interface Props {
@@ -40,6 +41,15 @@ const DIFFICULTY_COLOR: Record<string, string> = {
   beginner:     '#15803d',
   intermediate: '#b45309',
   advanced:     '#b91c1c',
+}
+
+
+const BOTTOM_TYPE_META: Record<string, { label: string; bg: string; border: string; text: string }> = {
+  sand:   { label: 'Sand Bottom',   bg: '#fef9c3', border: '#ca8a04', text: '#713f12' },
+  reef:   { label: 'Reef Break',    bg: '#ffedd5', border: '#c2410c', text: '#7c2d12' },
+  rock:   { label: 'Rock Bottom',   bg: '#e2e8f0', border: '#475569', text: '#1e293b' },
+  coral:  { label: 'Coral Reef',    bg: '#fce7f3', border: '#be185d', text: '#831843' },
+  mixed:  { label: 'Mixed Bottom',  bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a' },
 }
 
 const PARKING_ZOOM_THRESHOLD = 13
@@ -84,6 +94,11 @@ function parkingPopupHtml(p: ParkingOption): string {
   </div>`
 }
 
+
+function bottomTypeMeta(bottomType?: string | null) {
+  return BOTTOM_TYPE_META[bottomType ?? ''] ?? BOTTOM_TYPE_META['mixed']
+}
+
 function tooltipHtml(spot: SpotWithRating): string {
   const rating = spot.currentRating ?? 'unknown'
   const colors = RATING_COLORS[rating]
@@ -119,7 +134,9 @@ function tooltipHtml(spot: SpotWithRating): string {
     ${waveSection}
     <div style="display:inline-flex;align-items:center;background:${colors.bg};border:1.5px solid ${colors.border};
       color:${colors.text};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;">${RATING_LABELS[rating]}</div>
-    <div style="font-size:10px;color:#8888aa;margin-top:6px;">Click for full forecast →</div>
+    <div style="display:inline-flex;align-items:center;background:${bottomTypeMeta(spot.bottomType).bg};border:1px solid ${bottomTypeMeta(spot.bottomType).border};
+      color:${bottomTypeMeta(spot.bottomType).text};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:600;margin-left:4px;">${bottomTypeMeta(spot.bottomType).label}</div>
+    <div style="font-size:10px;color:#8888aa;margin-top:6px;">Tap for full forecast →</div>
   </div>`
 }
 
@@ -164,6 +181,13 @@ function popupHtml(spot: SpotWithRating): string {
         border-radius:20px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap;">${RATING_LABELS[rating]}</div>
     </div>
     ${statsHtml}
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+      <span style="font-size:10px;font-weight:600;color:#8888aa;text-transform:uppercase;letter-spacing:0.05em;">Bottom</span>
+      <span style="background:${bottomTypeMeta(spot.bottomType).bg};border:1px solid ${bottomTypeMeta(spot.bottomType).border};
+        color:${bottomTypeMeta(spot.bottomType).text};border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;">
+        ${bottomTypeMeta(spot.bottomType).label}
+      </span>
+    </div>
     <a href="/spots/${spot.slug}" style="display:block;background:#1b7fcb;color:white;text-align:center;
       padding:11px 0;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.01em;">
       View Full Forecast →
@@ -410,17 +434,13 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       // Restore user location dot if it was set before re-init
       await applyUserLocation(map, L, userLocationRef.current)
 
-      // Restore seamark overlay if it was on before re-init
+      // Restore ocean features overlay if it was on before re-init
       if (seamarkOnRef.current) {
-        if (!seamarkLayerRef.current) {
-          seamarkLayerRef.current = L.tileLayer(
-            'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
-            { attribution: '© <a href="https://www.openseamap.org">OpenSeaMap</a>', opacity: 0.8, maxZoom: 18 }
-          )
-        }
-        if (!map.hasLayer(seamarkLayerRef.current)) {
-          seamarkLayerRef.current.addTo(map)
-        }
+        seamarkLayerRef.current = L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
+          { attribution: '&copy; <a href="https://www.esri.com">Esri</a>, Garmin, GEBCO, NOAA NGDC', opacity: 0.8, maxZoom: 18 }
+        )
+        seamarkLayerRef.current.addTo(map)
       }
 
       // Show/hide parking markers on zoom
@@ -453,9 +473,9 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       if (seamarkOn) {
         if (!seamarkLayerRef.current) {
           seamarkLayerRef.current = L.tileLayer(
-            'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+            'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
             {
-              attribution: '© <a href="https://www.openseamap.org">OpenSeaMap</a>',
+              attribution: '&copy; <a href="https://www.esri.com">Esri</a>, Garmin, GEBCO, NOAA NGDC',
               opacity: 0.8,
               maxZoom: 18,
             }
@@ -512,7 +532,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       {/* OpenSeaMap toggle — bottom-right, above Leaflet zoom controls */}
       <button
         onClick={() => setSeamarkOn((v) => !v)}
-        title={seamarkOn ? 'Hide nautical chart overlay' : 'Show reefs, rocks & kelp (OpenSeaMap)'}
+        title={seamarkOn ? 'Hide ocean features overlay' : 'Show reefs, rocks & shoals (ESRI Ocean)'}
         className="absolute z-[1000] flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all"
         style={{
           bottom: '80px',
@@ -527,7 +547,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
           <path d="M3 17l4-8 4 4 4-6 4 10" />
           <path d="M3 20h18" strokeDasharray="2 2" />
         </svg>
-        Seamarks
+        Ocean
       </button>
     </div>
   )
