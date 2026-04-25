@@ -18,10 +18,10 @@ interface Region {
 
 const REGIONS: Region[] = [
   // ── California ───────────────────────────────────────────────────────────────
-  { name: 'San Diego',               short: 'San Diego',    icon: <Icon name="wave" size={22} />,   lat: 32.7  },
+  { name: 'San Diego',               short: 'San Diego',    icon: <Icon name="wave" size={20} />,   lat: 32.7  },
   { name: 'Orange County',           short: 'O.C.',         icon: '🌴',                              lat: 33.6  },
   { name: 'Los Angeles',             short: 'L.A.',         icon: '🌆',                              lat: 34.0  },
-  { name: 'Ventura',                 short: 'Ventura',      icon: <Icon name="surfer" size={22} />,  lat: 34.3  },
+  { name: 'Ventura',                 short: 'Ventura',      icon: <Icon name="surfer" size={20} />,  lat: 34.3  },
   { name: 'Santa Barbara',           short: 'S.B.',         icon: '🌸',                              lat: 34.4  },
   { name: 'Central Coast',           short: 'Cen. Coast',   icon: '🌾',                              lat: 35.4  },
   { name: 'Monterey',                short: 'Monterey',     icon: '🦭',                              lat: 36.6  },
@@ -90,6 +90,8 @@ const REGION_GROUPS: { label: string; names: string[] }[] = [
 
 const REGION_BY_NAME = Object.fromEntries(REGIONS.map(r => [r.name, r]))
 
+const FAV_KEY = 'wavefinder_favorite_region'
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getLocalDateStr(offset = 0): string {
@@ -107,10 +109,10 @@ function hrFromTime(t: string): number {
 }
 
 function hrLabel(h: number): string {
-  if (h === 0)  return '12:00 AM'
-  if (h < 12)   return `${h}:00 AM`
-  if (h === 12) return '12:00 PM'
-  return `${h - 12}:00 PM`
+  if (h === 0)  return '12 AM'
+  if (h < 12)   return `${h} AM`
+  if (h === 12) return '12 PM'
+  return `${h - 12} PM`
 }
 
 function dayLabel(ds: string, i: number): string {
@@ -135,14 +137,175 @@ function sunTimes(dateStr: string, lat: number): { rise: number; set: number } {
   const decl = 23.45 * Math.sin(B) * (Math.PI / 180)
   const latRad = lat * (Math.PI / 180)
   const cosHA = -Math.tan(latRad) * Math.tan(decl)
-  if (cosHA < -1) return { rise: 0, set: 23 }    // polar day
-  if (cosHA >  1) return { rise: 12, set: 12 }    // polar night
+  if (cosHA < -1) return { rise: 0, set: 23 }
+  if (cosHA >  1) return { rise: 12, set: 12 }
   const hourAngle = Math.acos(cosHA) * (180 / Math.PI)
   const noon = 12 - eqTime / 60
   return { rise: noon - hourAngle / 15, set: noon + hourAngle / 15 }
 }
 
-// ── Sunrise/sunset bar (draggable) ────────────────────────────────────────────
+// ── Region dropdown ───────────────────────────────────────────────────────────
+
+function RegionRow({ r, isActive, isFav, onSelect, onToggleFav }: {
+  r: Region
+  isActive: boolean
+  isFav: boolean
+  onSelect: () => void
+  onToggleFav: () => void
+}) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      background: isActive ? '#eff6ff' : 'transparent',
+    }}>
+      <button
+        onClick={onSelect}
+        style={{
+          flex: 1, display: 'flex', alignItems: 'center', gap: 10,
+          padding: '9px 14px', background: 'none', border: 'none',
+          cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{r.icon}</span>
+        <span style={{ fontSize: 14, fontWeight: isActive ? 600 : 400, color: isActive ? 'var(--ocean-700)' : 'var(--text)' }}>
+          {r.name}
+        </span>
+      </button>
+      <button
+        onClick={e => { e.stopPropagation(); onToggleFav() }}
+        style={{
+          padding: '9px 14px', background: 'none', border: 'none',
+          cursor: 'pointer', color: isFav ? '#f59e0b' : '#d1d5db',
+          flexShrink: 0, display: 'flex', alignItems: 'center',
+          transition: 'color 0.15s',
+        }}
+        title={isFav ? 'Remove favorite' : 'Save as favorite'}
+      >
+        <Icon name={isFav ? 'starFilled' : 'star'} size={15} />
+      </button>
+    </div>
+  )
+}
+
+function RegionDropdown({ region, favorite, onSelect, onToggleFavorite }: {
+  region: string
+  favorite: string | null
+  onSelect: (name: string) => void
+  onToggleFavorite: (name: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const currentRegion = REGION_BY_NAME[region] ?? REGIONS[0]
+  const isFav = favorite === region
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      {/* Trigger button */}
+      <button
+        onClick={() => setIsOpen(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+          padding: '12px 16px', borderRadius: 16,
+          background: 'white', border: `1.5px solid ${isOpen ? 'var(--ocean-400)' : 'var(--border)'}`,
+          cursor: 'pointer', textAlign: 'left',
+          boxShadow: isOpen ? '0 0 0 3px var(--ocean-100)' : 'none',
+          transition: 'border-color 0.15s, box-shadow 0.15s',
+        }}
+      >
+        <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>{currentRegion.icon}</span>
+        <span style={{ flex: 1, fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>
+          {currentRegion.name}
+        </span>
+        {isFav && (
+          <Icon name="starFilled" size={14} strokeWidth={2} style={{ color: '#f59e0b', flexShrink: 0 }} />
+        )}
+        <Icon
+          name="chevronDown"
+          size={16}
+          style={{
+            color: 'var(--text-3)', flexShrink: 0,
+            transform: isOpen ? 'rotate(180deg)' : 'none',
+            transition: 'transform 0.2s',
+          }}
+        />
+      </button>
+
+      {/* Dropdown panel */}
+      {isOpen && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
+          background: 'white', border: '1.5px solid var(--border)',
+          borderRadius: 16, zIndex: 200,
+          maxHeight: '62vh', overflowY: 'auto',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
+        }}>
+          {/* Favorites section */}
+          {favorite && REGION_BY_NAME[favorite] && (
+            <>
+              <div style={{
+                padding: '10px 14px 4px', fontSize: 10, fontWeight: 700,
+                color: '#d97706', letterSpacing: '0.08em', textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                <Icon name="starFilled" size={10} style={{ color: '#f59e0b' }} />
+                Favorite
+              </div>
+              <RegionRow
+                r={REGION_BY_NAME[favorite]}
+                isActive={region === favorite}
+                isFav={true}
+                onSelect={() => { onSelect(favorite); setIsOpen(false) }}
+                onToggleFav={() => onToggleFavorite(favorite)}
+              />
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+            </>
+          )}
+
+          {/* Grouped regions */}
+          {REGION_GROUPS.map(group => (
+            <div key={group.label}>
+              <div style={{
+                padding: '8px 14px 3px', fontSize: 10, fontWeight: 700,
+                color: 'var(--text-3)', letterSpacing: '0.08em', textTransform: 'uppercase',
+              }}>
+                {group.label}
+              </div>
+              {group.names.map(name => {
+                const r = REGION_BY_NAME[name]
+                if (!r) return null
+                return (
+                  <RegionRow
+                    key={name}
+                    r={r}
+                    isActive={region === name}
+                    isFav={favorite === name}
+                    onSelect={() => { onSelect(name); setIsOpen(false) }}
+                    onToggleFav={() => onToggleFavorite(name)}
+                  />
+                )
+              })}
+            </div>
+          ))}
+
+          {/* Bottom padding */}
+          <div style={{ height: 8 }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Sunrise/sunset bar (sole time control, draggable) ─────────────────────────
 
 function SunriseSunsetBar({
   dateStr, hour, lat, onHourChange,
@@ -162,8 +325,8 @@ function SunriseSunsetBar({
 
   const isDaytime    = hour >= rise && hour <= set
   const isGoldenHour = (hour >= rise && hour <= rise + 1) || (hour >= set - 1 && hour <= set)
-  const thumbColor   = isGoldenHour ? '#f97316' : isDaytime ? '#60a5fa' : '#475569'
-  const thumbIcon    = isDaytime ? 'sun' : 'moon'
+  const thumbColor   = isGoldenHour ? '#f97316' : isDaytime ? '#3b82f6' : '#475569'
+  const thumbIcon: 'sun' | 'moon' = isDaytime ? 'sun' : 'moon'
 
   function seekFromPointer(e: React.PointerEvent<Element>) {
     if (!trackRef.current) return
@@ -173,19 +336,37 @@ function SunriseSunsetBar({
   }
 
   return (
-    <div style={{ marginTop: 10, userSelect: 'none' }}>
-      {/* Track container — overflow visible so thumb peeks out */}
+    <div style={{ userSelect: 'none' }}>
+      {/* Label row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+          <Icon name="sun" size={11} strokeWidth={2} style={{ color: '#fbbf24' }} />
+          {fmtSunTime(rise)}
+        </span>
+        <span style={{
+          fontSize: 11, fontWeight: 700,
+          color: isGoldenHour ? '#f97316' : isDaytime ? '#1b7fcb' : '#6b7280',
+        }}>
+          {isGoldenHour ? 'Golden hour' : isDaytime ? 'Daytime' : 'Night'}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+          {fmtSunTime(set)}
+          <Icon name="moon" size={11} strokeWidth={2} style={{ color: '#94a3b8' }} />
+        </span>
+      </div>
+
+      {/* Track — outer has overflow:visible for thumb, inner gradient is clipped */}
       <div
         ref={trackRef}
-        style={{ position: 'relative', height: 38, cursor: 'pointer', touchAction: 'none' }}
+        style={{ position: 'relative', height: 48, cursor: 'grab', touchAction: 'none' }}
         onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); seekFromPointer(e) }}
         onPointerMove={e => { if (e.buttons) seekFromPointer(e) }}
       >
-        {/* Gradient bar — clipped inside */}
+        {/* Gradient bar */}
         <div style={{
           position: 'absolute', left: 0, right: 0,
           top: '50%', transform: 'translateY(-50%)',
-          height: 28, borderRadius: 14, overflow: 'hidden',
+          height: 32, borderRadius: 16, overflow: 'hidden',
         }}>
           {/* night → dawn */}
           <div style={{
@@ -204,16 +385,29 @@ function SunriseSunsetBar({
             position: 'absolute', left: `${setPct}%`, top: 0, bottom: 0, right: 0,
             background: 'linear-gradient(to right, #f97316, #1e3a5f 30%, #0f172a)',
           }} />
-          {/* sunrise tick */}
+          {/* tick marks at sunrise + sunset */}
           <div style={{
             position: 'absolute', left: `${risePct}%`, top: 0, bottom: 0,
-            width: 1, background: 'rgba(255,255,255,0.45)', transform: 'translateX(-50%)',
+            width: 1, background: 'rgba(255,255,255,0.5)', transform: 'translateX(-50%)',
           }} />
-          {/* sunset tick */}
           <div style={{
             position: 'absolute', left: `${setPct}%`, top: 0, bottom: 0,
-            width: 1, background: 'rgba(255,255,255,0.45)', transform: 'translateX(-50%)',
+            width: 1, background: 'rgba(255,255,255,0.5)', transform: 'translateX(-50%)',
           }} />
+        </div>
+
+        {/* Floating time label above thumb */}
+        <div style={{
+          position: 'absolute',
+          left: `${nowPct}%`, top: 0,
+          transform: 'translateX(-50%)',
+          fontSize: 10, fontWeight: 700,
+          color: thumbColor,
+          whiteSpace: 'nowrap',
+          lineHeight: 1,
+          pointerEvents: 'none',
+        }}>
+          {hrLabel(hour)}
         </div>
 
         {/* Draggable thumb */}
@@ -221,40 +415,33 @@ function SunriseSunsetBar({
           position: 'absolute',
           left: `${nowPct}%`, top: '50%',
           transform: 'translate(-50%, -50%)',
-          width: 34, height: 34, borderRadius: '50%',
+          width: 38, height: 38, borderRadius: '50%',
           background: 'white',
           border: `2.5px solid ${thumbColor}`,
-          boxShadow: `0 2px 12px rgba(0,0,0,0.25), 0 0 0 4px ${thumbColor}28`,
+          boxShadow: `0 2px 12px rgba(0,0,0,0.22), 0 0 0 5px ${thumbColor}22`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: thumbColor,
           zIndex: 10,
           pointerEvents: 'none',
           transition: 'border-color 0.15s, color 0.15s, box-shadow 0.15s',
         }}>
-          <Icon name={thumbIcon} size={15} strokeWidth={2} />
+          <Icon name={thumbIcon} size={16} strokeWidth={2} />
         </div>
       </div>
 
-      {/* Labels */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-        <span style={{ fontSize: 10, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
-          <Icon name="sun" size={10} strokeWidth={2} style={{ color: '#fbbf24' }} />
-          {fmtSunTime(rise)}
-        </span>
-        <span style={{
-          fontSize: 10, fontWeight: 600,
-          color: isGoldenHour ? '#f97316' : isDaytime ? '#1b7fcb' : '#6b7280',
-        }}>
-          {isGoldenHour ? 'Golden hour' : isDaytime ? 'Daytime' : 'Night'}
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
-          {fmtSunTime(set)}
-          <Icon name="moon" size={10} strokeWidth={2} style={{ color: '#94a3b8' }} />
-        </span>
+      {/* Hour tick labels */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between',
+        fontSize: 9, color: 'var(--text-3)',
+        marginTop: 4, paddingLeft: 2, paddingRight: 2,
+      }}>
+        <span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>11p</span>
       </div>
     </div>
   )
 }
+
+// ── Score helpers ─────────────────────────────────────────────────────────────
 
 function scoreColor(s: number) {
   if (s >= 75) return '#7c3aed'
@@ -279,9 +466,7 @@ interface SpotHour {
   waveHeight: number; windSpeed: number; windDirectionLabel: string
 }
 interface Spot { id: string; name: string; slug: string; hours: SpotHour[] }
-interface SwellHour {
-  time: string; seaSurfaceTemperature: number | null
-}
+interface SwellHour { time: string; seaSurfaceTemperature: number | null }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -292,16 +477,29 @@ export default function TimelinePage() {
   const [region,   setRegion]   = useState('Los Angeles')
   const [dayIdx,   setDayIdx]   = useState(0)
   const [dates,    setDates]    = useState<string[]>([])
+  const [favorite, setFavorite] = useState<string | null>(null)
 
   useEffect(() => {
     const h = new Date().getHours()
     setHour(Math.max(6, Math.min(21, h)))
     setDates(Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)))
+    const saved = localStorage.getItem(FAV_KEY)
+    if (saved && REGION_BY_NAME[saved]) {
+      setFavorite(saved)
+      setRegion(saved)
+    }
     setMounted(true)
   }, [])
 
-  const selectedDate   = dates[dayIdx] ?? ''
-  const currentRegion  = REGION_BY_NAME[region] ?? REGIONS[0]
+  function toggleFavorite(name: string) {
+    const next = favorite === name ? null : name
+    setFavorite(next)
+    if (next) localStorage.setItem(FAV_KEY, next)
+    else localStorage.removeItem(FAV_KEY)
+  }
+
+  const selectedDate  = dates[dayIdx] ?? ''
+  const currentRegion = REGION_BY_NAME[region] ?? REGIONS[0]
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['best-spots', region, selectedDate],
@@ -318,7 +516,7 @@ export default function TimelinePage() {
     staleTime: 30 * 60 * 1000,
   })
 
-  const spots: Spot[]      = data?.spots        ?? []
+  const spots: Spot[]      = data?.spots         ?? []
   const swell: SwellHour[] = data?.regionalSwell ?? []
 
   const swellNow  = swell.find(s => hrFromTime(s.time) === hour) ?? swell[0]
@@ -332,9 +530,8 @@ export default function TimelinePage() {
     [spots, hour]
   )
 
-  const topScore  = sorted[0]?.hd?.ratingScore ?? 0
+  const topScore   = sorted[0]?.hd?.ratingScore ?? 0
   const trackColor = !isLoading && topScore > 0 ? scoreColor(topScore) : 'var(--ocean-600)'
-  const pct        = (hour / 23) * 100
 
   if (!mounted) {
     return (
@@ -362,61 +559,24 @@ export default function TimelinePage() {
             Timeline
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-2)' }}>
-            Pick a region, drag the bar to any hour, see ranked spots.
+            Pick a region, drag the bar to explore any hour.
           </p>
         </div>
       </div>
 
       <div className="mx-auto max-w-4xl px-5 py-8 space-y-6">
 
-        {/* ── Region picker (grouped) ── */}
+        {/* ── Region dropdown ── */}
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'var(--text-3)' }}>
+          <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-3)' }}>
             Region
           </p>
-          <div className="space-y-4">
-            {REGION_GROUPS.map(group => {
-              const groupRegions = group.names.map(n => REGION_BY_NAME[n]).filter(Boolean)
-              return (
-                <div key={group.label}>
-                  <p className="text-xs font-semibold mb-2 px-0.5" style={{ color: 'var(--text-3)', letterSpacing: '0.03em' }}>
-                    {group.label}
-                  </p>
-                  <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))' }}>
-                    {groupRegions.map(r => {
-                      const active = region === r.name
-                      return (
-                        <button
-                          key={r.name}
-                          onClick={() => setRegion(r.name)}
-                          className="flex flex-col items-center gap-1 rounded-2xl py-3 px-1 transition-all"
-                          style={{
-                            background: active ? 'var(--ocean-600)' : 'white',
-                            border:     `1px solid ${active ? 'var(--ocean-600)' : 'var(--border)'}`,
-                            boxShadow:  active ? '0 2px 10px rgba(27,127,203,0.25)' : 'none',
-                            transform:  active ? 'translateY(-1px)' : 'none',
-                          }}
-                        >
-                          <span style={{ fontSize: 22, lineHeight: 1, color: active ? 'white' : 'inherit' }}>{r.icon}</span>
-                          <span
-                            className="text-center font-semibold leading-tight"
-                            style={{
-                              fontSize: 10,
-                              color: active ? 'white' : 'var(--text-2)',
-                              maxWidth: 68,
-                              wordBreak: 'break-word',
-                            }}
-                          >
-                            {r.short}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <RegionDropdown
+            region={region}
+            favorite={favorite}
+            onSelect={setRegion}
+            onToggleFavorite={toggleFavorite}
+          />
         </div>
 
         {/* ── Day picker ── */}
@@ -439,7 +599,7 @@ export default function TimelinePage() {
           </div>
         </div>
 
-        {/* ── Slider card ── */}
+        {/* ── Time card ── */}
         <div className="rounded-2xl p-6 space-y-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
@@ -453,7 +613,6 @@ export default function TimelinePage() {
                 })}
               </div>
             </div>
-
             <div className="flex items-center gap-3 flex-wrap">
               {waterTemp !== null && (
                 <div className="rounded-xl px-3 py-2 text-sm font-semibold"
@@ -470,40 +629,6 @@ export default function TimelinePage() {
             </div>
           </div>
 
-          {/* Styled range slider */}
-          <style>{`
-            .tl-slider {
-              -webkit-appearance: none; appearance: none;
-              width: 100%; height: 10px; border-radius: 9999px;
-              outline: none; cursor: pointer;
-              background: linear-gradient(to right,
-                ${trackColor} 0%, ${trackColor} ${pct}%,
-                #e2e8f0 ${pct}%, #e2e8f0 100%);
-            }
-            .tl-slider::-webkit-slider-thumb {
-              -webkit-appearance: none; appearance: none;
-              width: 28px; height: 28px; border-radius: 9999px;
-              background: white; border: 3px solid ${trackColor};
-              box-shadow: 0 2px 8px rgba(0,0,0,0.18); cursor: pointer;
-              transition: transform 0.1s;
-            }
-            .tl-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
-            .tl-slider::-moz-range-thumb {
-              width: 28px; height: 28px; border-radius: 9999px;
-              background: white; border: 3px solid ${trackColor};
-              box-shadow: 0 2px 8px rgba(0,0,0,0.18); cursor: pointer;
-            }
-          `}</style>
-          <div className="space-y-2">
-            <input type="range" min={0} max={23} step={1}
-              value={hour} onChange={e => setHour(parseInt(e.target.value, 10))}
-              className="tl-slider" />
-            <div className="flex justify-between text-xs px-0.5" style={{ color: 'var(--text-3)' }}>
-              <span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>11 PM</span>
-            </div>
-          </div>
-
-          {/* Draggable sunrise/sunset bar — synced to hour state */}
           <SunriseSunsetBar
             dateStr={selectedDate}
             hour={hour}
@@ -556,13 +681,11 @@ export default function TimelinePage() {
                     className="group flex items-center gap-4 rounded-2xl p-4 transition-all hover:shadow-md hover:-translate-y-0.5"
                     style={{ background: 'white', border: '1px solid var(--border)', textDecoration: 'none' }}>
 
-                    {/* Rank */}
                     <div className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold"
                       style={{ background: idx < 3 ? 'var(--ocean-600)' : 'var(--sand-100)', color: idx < 3 ? 'white' : 'var(--text-3)' }}>
                       {idx + 1}
                     </div>
 
-                    {/* Name + stats */}
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold truncate"
                         style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
@@ -586,7 +709,6 @@ export default function TimelinePage() {
                       </div>
                     </div>
 
-                    {/* Score bar */}
                     <div className="hidden sm:flex flex-col gap-1 w-24">
                       <div className="h-1.5 rounded-full" style={{ background: '#e5e7eb' }}>
                         <div className="h-full rounded-full"
@@ -597,7 +719,6 @@ export default function TimelinePage() {
                       </div>
                     </div>
 
-                    {/* Rating */}
                     <div className="flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold"
                       style={{ background: color, color: 'white' }}>
                       {scoreLabel(hd!.ratingScore)}
