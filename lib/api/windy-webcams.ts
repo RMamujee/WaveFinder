@@ -10,6 +10,7 @@ export interface WindyWebcam {
   lng: number
   city: string
   distanceKm: number
+  source: 'windy' | 'osm' | 'youtube'
 }
 
 export async function fetchNearbyWebcams(
@@ -68,6 +69,7 @@ export async function fetchNearbyWebcams(
           lng: wLng,
           city: String(loc.city ?? loc.region ?? ''),
           distanceKm,
+          source: 'windy' as const,
         }
       })
       .sort((a, b) => a.distanceKm - b.distanceKm)

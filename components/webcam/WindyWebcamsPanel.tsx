@@ -59,7 +59,9 @@ export function WindyWebcamsPanel({ slug }: Props) {
             >
               <p className="text-white text-xs font-semibold truncate leading-tight">{cam.title}</p>
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                {cam.city ? `${cam.city} · ` : ''}{cam.distanceKm} km away
+                {cam.source === 'youtube'
+                  ? '▶ YouTube Live'
+                  : `${cam.city ? `${cam.city} · ` : ''}${cam.distanceKm} km away`}
               </p>
             </div>
 
@@ -114,7 +116,9 @@ export function WindyWebcamsPanel({ slug }: Props) {
             <div className="absolute bottom-0 left-0 right-0 px-4 py-3" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)' }}>
               <p className="text-white text-sm font-semibold">{active.title}</p>
               <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                {active.city ? `${active.city} · ` : ''}{active.distanceKm} km from spot · Powered by Windy
+                {active.source === 'youtube'
+                ? 'YouTube Live Stream'
+                : `${active.city ? `${active.city} · ` : ''}${active.distanceKm} km from spot · ${active.source === 'osm' ? 'OpenStreetMap' : 'Windy'}`}
               </p>
             </div>
           </div>
