@@ -387,6 +387,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       const map = L.map(mapRef.current, {
         center: [centerLat, centerLng],
         zoom,
+        minZoom: 2,
         zoomControl: true,
         scrollWheelZoom: true,
         worldCopyJump: true,
