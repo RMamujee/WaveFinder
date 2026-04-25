@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
@@ -150,10 +150,12 @@ function popupHtml(spot: SpotWithRating): string {
 }
 
 export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 }: Props) {
-  const mapRef         = useRef<HTMLDivElement>(null)
-  const mapInstance    = useRef<import('leaflet').Map | null>(null)
-  const clusterRef     = useRef<unknown>(null)
+  const mapRef          = useRef<HTMLDivElement>(null)
+  const mapInstance     = useRef<import('leaflet').Map | null>(null)
+  const clusterRef      = useRef<unknown>(null)
   const parkingLayerRef = useRef<import('leaflet').LayerGroup | null>(null)
+  const seamarkLayerRef = useRef<import('leaflet').TileLayer | null>(null)
+  const [seamarkOn, setSeamarkOn] = useState(false)
   // Always holds the latest spots so async Leaflet init reads enriched data
   // even when conditions arrive between when the effect was scheduled and when
   // the async Leaflet imports finish.
@@ -362,10 +364,39 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
         mapInstance.current = null
         clusterRef.current = null
         parkingLayerRef.current = null
+        seamarkLayerRef.current = null
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerLat, centerLng, zoom])
+
+  // Add / remove OpenSeaMap seamark overlay when toggle changes
+  useEffect(() => {
+    if (!mapInstance.current) return
+    ;(async () => {
+      const L = (await import('leaflet')).default
+      if (!mapInstance.current) return
+      if (seamarkOn) {
+        if (!seamarkLayerRef.current) {
+          seamarkLayerRef.current = L.tileLayer(
+            'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+            {
+              attribution: '© <a href="https://www.openseamap.org">OpenSeaMap</a>',
+              opacity: 0.8,
+              maxZoom: 18,
+            }
+          )
+        }
+        if (!mapInstance.current.hasLayer(seamarkLayerRef.current)) {
+          seamarkLayerRef.current.addTo(mapInstance.current)
+        }
+      } else {
+        if (seamarkLayerRef.current && mapInstance.current.hasLayer(seamarkLayerRef.current)) {
+          mapInstance.current.removeLayer(seamarkLayerRef.current)
+        }
+      }
+    })().catch(console.error)
+  }, [seamarkOn])
 
   // Update cluster when condition data arrives
   useEffect(() => {
@@ -381,5 +412,30 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spots.map(s => `${s.id}:${s.currentRating ?? '?'}:${s.currentWaveHeight ?? 'x'}`).join('|')])
 
-  return <div ref={mapRef} className="h-full w-full" style={{ minHeight: '100%' }} />
+  return (
+    <div className="relative h-full w-full" style={{ minHeight: '100%' }}>
+      <div ref={mapRef} className="h-full w-full" style={{ minHeight: '100%' }} />
+
+      {/* OpenSeaMap toggle — bottom-right, above Leaflet zoom controls */}
+      <button
+        onClick={() => setSeamarkOn((v) => !v)}
+        title={seamarkOn ? 'Hide nautical chart overlay' : 'Show reefs, rocks & kelp (OpenSeaMap)'}
+        className="absolute z-[1000] flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all"
+        style={{
+          bottom: '80px',
+          right: '10px',
+          background: seamarkOn ? 'var(--ocean-600)' : 'rgba(255,255,255,0.95)',
+          color: seamarkOn ? 'white' : 'var(--text-2)',
+          border: `1px solid ${seamarkOn ? 'var(--ocean-600)' : 'var(--border)'}`,
+          boxShadow: '0 1px 5px rgba(0,0,0,0.2)',
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 17l4-8 4 4 4-6 4 10" />
+          <path d="M3 20h18" strokeDasharray="2 2" />
+        </svg>
+        Seamarks
+      </button>
+    </div>
+  )
 }

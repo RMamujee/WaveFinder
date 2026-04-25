@@ -15,7 +15,10 @@ import { ForecastDayCard } from '@/components/forecast/ForecastDayCard'
 import { BuoyReadings } from '@/components/forecast/BuoyReadings'
 import { SwellPanel } from '@/components/forecast/SwellPanel'
 import { WebcamPanel } from '@/components/webcam/WebcamPanel'
+import { WindyWebcamsPanel } from '@/components/webcam/WindyWebcamsPanel'
+import { StormAlerts } from '@/components/forecast/StormAlerts'
 import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
+import type { NWSAlert } from '@/lib/api/noaa-alerts'
 import { SurfReports } from '@/components/forecast/SurfReports'
 import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
@@ -89,6 +92,12 @@ export function SpotForecastView({ spot }: Props) {
     },
     staleTime: 60 * 60 * 1000,
     retry: 1,
+  })
+
+  const { data: alerts = [] } = useQuery<NWSAlert[]>({
+    queryKey: ['alerts', spot.slug],
+    queryFn: () => fetch(`/api/alerts/${spot.slug}`).then((r) => r.json()),
+    staleTime: 30 * 60 * 1000,
   })
 
   const activeDayData: ForecastDay | undefined =
@@ -285,6 +294,9 @@ export function SpotForecastView({ spot }: Props) {
         </div>
       )}
 
+      {/* Storm / coastal alerts from NOAA Weather.gov */}
+      {alerts.length > 0 && <StormAlerts alerts={alerts} />}
+
       {/* Body */}
       {isPending && <WaveLoader label="Fetching forecast…" />}
       {error && !isPending && (
@@ -385,7 +397,7 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         )}
 
-        {/* Live cam — only shown when the spot has a webcam URL */}
+        {/* Curated live cam — only when spot has a manually set webcam URL */}
         {spot.webcamType !== 'none' && !!spot.webcamUrl && (
           <div>
             <SectionTitle>Live Cam</SectionTitle>
@@ -398,6 +410,12 @@ export function SpotForecastView({ spot }: Props) {
             />
           </div>
         )}
+
+        {/* Nearby live cams from Windy — auto-discovered within 20 km */}
+        <div>
+          <SectionTitle>Nearby Live Cams</SectionTitle>
+          <WindyWebcamsPanel slug={spot.slug} />
+        </div>
 
         {/* Row 3: Hourly table — full width */}
         {forecast?.forecast && activeDayData && (
