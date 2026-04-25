@@ -29,6 +29,7 @@ export interface SurfSpot {
   webcamUrl?: string | null
   webcamType?: string | null
   parkingOptions?: ParkingOption[] | null
+  bottomType?: string | null
 }
 
 export interface SurfSpotWithRating extends SurfSpot {

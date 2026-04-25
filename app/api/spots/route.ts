@@ -6,6 +6,18 @@ import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+function inferBottomType(description?: string | null, name?: string | null): string {
+  const text = ((description ?? '') + ' ' + (name ?? '')).toLowerCase()
+  if (/coral/.test(text)) return 'coral'
+  if (/reef/.test(text)) return 'reef'
+  if (/rock(?:y)?(?:\s+(?:reef|bottom|point|shore|ledge|shelf))?|cobble(?:stone)?/.test(text)) return 'rock'
+  if (/sand(?:y|bar|bank)?|beach\s+break/.test(text)) return 'sand'
+  if (/point\s+break/.test(text)) return 'rock'
+  if (/river\s*mouth/.test(text)) return 'sand'
+  if (/beach|break/.test(text)) return 'sand'
+  return 'mixed'
+}
+
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -38,7 +50,7 @@ export async function GET(req: Request) {
     orderBy: { name: 'asc' },
   })
 
-  if (!withConditions) return NextResponse.json(spots)
+  if (!withConditions) return NextResponse.json(spots.map(s => ({ ...s, bottomType: inferBottomType(s.description, s.name) })))
 
   // ── Conditions: Open-Meteo current conditions at actual beach coordinates ─────
   // Open-Meteo's nearshore marine model is the same source used by the individual
@@ -144,7 +156,7 @@ export async function GET(req: Request) {
     spot.wavePower         = computeWavePower(wh, period)
   }
 
-  const response = enriched.map(({ _needsFallback: _, ...rest }) => rest)
+  const response = enriched.map(({ _needsFallback: _, ...rest }) => ({ ...rest, bottomType: inferBottomType(rest.description, rest.name) }))
   return NextResponse.json(response, {
     headers: { 'Cache-Control': 's-maxage=180, stale-while-revalidate=60' },
   })
