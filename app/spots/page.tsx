@@ -158,7 +158,7 @@ export default function SpotsPage() {
   const hasFilter = !!(selectedCountry || selectedState || selectedRegion || search)
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 57px)' }}>
+    <div className="flex flex-col" style={{ height: 'calc(100dvh - 57px)' }}>
       {/* Top bar */}
       <div
         className="shrink-0 px-5 py-3"
