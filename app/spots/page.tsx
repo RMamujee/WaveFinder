@@ -9,6 +9,7 @@ import { WaveLoader } from '@/components/layout/WaveLoader'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 import {
+  REGION_HIERARCHY,
   getStatesForCountry,
   getRegionsForState,
   getAllRegionsForCountry,
@@ -54,6 +55,33 @@ const COUNTRY_MAP_CENTERS: Record<string, { lat: number; lng: number; zoom: numb
   'Japan':          { lat: 36.0,  lng: 138.0,  zoom: 5 },
 }
 
+// ── GPS → nearest country / state / region ───────────────────────────────────
+
+function geoAutoSelect(
+  lat: number,
+  lng: number,
+  spots: SpotWithRating[]
+): { country: string; state: string; region: string } | null {
+  if (!spots.length) return null
+  let nearest = spots[0]
+  let minDist = Infinity
+  for (const s of spots) {
+    const d = Math.hypot(s.lat - lat, s.lng - lng)
+    if (d < minDist) { minDist = d; nearest = s }
+  }
+  const { country } = nearest
+  for (const worldRegion of Object.values(REGION_HIERARCHY)) {
+    const countryData = worldRegion[country]
+    if (!countryData) continue
+    for (const [state, regions] of Object.entries(countryData)) {
+      for (const region of regions) {
+        if (nearest.region.includes(region)) return { country, state, region }
+      }
+    }
+  }
+  return { country, state: '', region: '' }
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SpotsPage() {
@@ -77,8 +105,16 @@ export default function SpotsPage() {
     setLocating('loading')
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        const { latitude, longitude } = pos.coords
+        setUserLocation({ lat: latitude, lng: longitude })
         setLocating('located')
+        const match = geoAutoSelect(latitude, longitude, baseSpots)
+        if (match) {
+          setSelectedCountry(match.country)
+          setSelectedState(match.state)
+          setSelectedRegion(match.region)
+          setSearch('')
+        }
       },
       () => {
         setLocating('error')
