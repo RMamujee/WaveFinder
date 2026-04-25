@@ -37,9 +37,10 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
 
 body {
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: 'DM Sans', sans-serif;
@@ -156,3 +157,17 @@ body {
 .wl-foam2  { animation: wl-foam  2.4s ease-in-out 0.9s infinite; }
 .wl-foam3  { animation: wl-foam  2.4s ease-in-out 1.5s infinite; }
 .wl-label  { animation: wl-pulse 1.8s ease-in-out infinite; }
+
+/* ── Mobile scroll fixes ── */
+/* Smooth momentum scrolling on iOS for all overflow-y scroll containers */
+.overflow-y-auto,
+.overflow-y-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Horizontal scroll containers — prevent vertical interference on iOS */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
