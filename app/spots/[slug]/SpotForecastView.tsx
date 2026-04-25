@@ -26,6 +26,7 @@ import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel
 import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
+import { BOTTOM_TYPE_STYLE } from '@/lib/bottom-type'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
@@ -145,7 +146,7 @@ export function SpotForecastView({ spot }: Props) {
           <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
             {/* Left: name + current reading */}
             <div>
-              <div className="flex items-center gap-3 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h1
                   style={{
                     fontFamily: 'Playfair Display, serif',
@@ -163,6 +164,17 @@ export function SpotForecastView({ spot }: Props) {
                 >
                   {spot.difficulty}
                 </span>
+                {spot.bottomType && (() => {
+                  const bt = BOTTOM_TYPE_STYLE[spot.bottomType] ?? BOTTOM_TYPE_STYLE.mixed
+                  return (
+                    <span
+                      className="rounded-full px-2.5 py-1 text-xs font-semibold shrink-0"
+                      style={{ background: bt.bg, color: bt.color }}
+                    >
+                      {bt.label} bottom
+                    </span>
+                  )
+                })()}
               </div>
               <p className="text-sm mb-5" style={{ color: 'var(--text-2)' }}>
                 {spot.region}, {spot.country}
