@@ -2,21 +2,10 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
+import { inferBottomType } from '@/lib/bottom-type'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
-
-function inferBottomType(description?: string | null, name?: string | null): string {
-  const text = ((description ?? '') + ' ' + (name ?? '')).toLowerCase()
-  if (/coral/.test(text)) return 'coral'
-  if (/reef/.test(text)) return 'reef'
-  if (/rock(?:y)?(?:\s+(?:reef|bottom|point|shore|ledge|shelf))?|cobble(?:stone)?/.test(text)) return 'rock'
-  if (/sand(?:y|bar|bank)?|beach\s+break/.test(text)) return 'sand'
-  if (/point\s+break/.test(text)) return 'rock'
-  if (/river\s*mouth/.test(text)) return 'sand'
-  if (/beach|break/.test(text)) return 'sand'
-  return 'mixed'
-}
 
 
 export async function GET(req: Request) {
