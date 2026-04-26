@@ -8,6 +8,20 @@ import { InstallPrompt } from '@/components/layout/InstallPrompt'
 export const metadata: Metadata = {
   title: 'WaveFinder – Free Surf Forecast',
   description: 'Real-time surf forecasts powered by NOAA buoys and Open-Meteo. Wave height, swell period, wind, tides, and live conditions for every California surf spot — free forever.',
+  openGraph: {
+    title: 'WaveFinder – Free Surf Forecast',
+    description: 'Real-time surf forecasts for every California surf spot. Wave height, swell, wind, tides — free forever.',
+    url: 'https://wavefinder.app',
+    siteName: 'WaveFinder',
+    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'WaveFinder' }],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'WaveFinder – Free Surf Forecast',
+    description: 'Real-time surf forecasts for every California surf spot.',
+    images: ['/logo.png'],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

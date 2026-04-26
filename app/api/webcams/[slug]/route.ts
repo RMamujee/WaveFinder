@@ -38,10 +38,6 @@ export async function GET(
   const merged = [...windy, ...osm].sort((a, b) => a.distanceKm - b.distanceKm)
   const all = [...merged, ...youtube]
 
-  console.log(
-    `[webcams/${slug}] windy=${windy.length} osm=${osm.length} youtube=${youtube.length} total=${all.length}`
-  )
-
   return NextResponse.json(all, {
     headers: { 'Cache-Control': 's-maxage=3600, stale-while-revalidate=600' },
   })

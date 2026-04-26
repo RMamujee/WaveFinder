@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { SpotForecastView } from './SpotForecastView'
 import { SpotCard } from '@/components/spots/SpotCard'
+import { WaveLoader } from '@/components/layout/WaveLoader'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import type { SurfSpot } from '@/types/spot'
@@ -73,7 +74,7 @@ export default async function SpotPage({ params }: Props) {
 
   return (
     <>
-      <Suspense>
+      <Suspense fallback={<WaveLoader label="Loading forecast…" />}>
         <SpotForecastView spot={toSurfSpot(spot)} />
       </Suspense>
 
