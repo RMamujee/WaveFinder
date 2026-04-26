@@ -610,6 +610,7 @@ function ShareButton({ slug, selectedDay }: { slug: string; selectedDay: string 
   return (
     <button
       onClick={share}
+      aria-label={copied ? 'Link copied' : 'Share this spot'}
       className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition hover:opacity-80"
       style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
     >

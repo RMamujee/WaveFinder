@@ -93,7 +93,7 @@ export function WaveChart({ days, activeDayData }: Props) {
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => fmtHeightDec(v, unit)}
-              width={34}
+              width={unit === 'metric' ? 40 : 34}
             />
             <Tooltip
               contentStyle={{

@@ -226,7 +226,7 @@ export default function SpotsPage() {
   const hasFilter = !!(selectedCountry || selectedState || selectedRegion || search)
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100dvh - 57px)' }}>
+    <div className="flex flex-col" style={{ height: 'calc(100dvh - var(--navbar-height, 57px))' }}>
       {/* Top bar */}
       <div
         className="shrink-0 px-5 py-3"
@@ -234,7 +234,7 @@ export default function SpotsPage() {
       >
         <div className="mx-auto max-w-7xl flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Search */}
-          <div className="relative w-full sm:flex-1 sm:min-w-0 sm:max-w-[180px]">
+          <div className="relative w-full sm:flex-1 sm:min-w-0 sm:max-w-[220px]">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2"
               width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -435,7 +435,7 @@ export default function SpotsPage() {
           {/* Locate me button */}
           <button
             onClick={handleLocate}
-            title={locating === 'located' ? 'Re-center on my location' : 'Show my location'}
+            title={locating === 'error' ? 'Location unavailable — check browser permissions' : locating === 'located' ? 'Re-center on my location' : 'Show my location'}
             className="absolute bottom-5 right-5 z-[1000] w-10 h-10 rounded-xl flex items-center justify-center transition-all"
             style={{
               background:   locating === 'located' ? 'var(--ocean-600)' : locating === 'error' ? '#fef2f2' : 'white',

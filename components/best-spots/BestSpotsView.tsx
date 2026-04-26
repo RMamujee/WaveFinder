@@ -419,6 +419,7 @@ export function BestSpotsView() {
                   <span
                     className="font-semibold text-sm truncate pr-3"
                     style={{ color: '#f3f4f6' }}
+                    title={spot.name}
                   >
                     {spot.name}
                   </span>

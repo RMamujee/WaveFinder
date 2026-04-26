@@ -89,7 +89,7 @@ export function BestTimePanel({ slots, tides }: Props) {
               <div className="flex items-start gap-4">
                 {/* Icon + window label */}
                 <div className="shrink-0 text-center" style={{ minWidth: '56px' }}>
-                  <div className="text-xl">{WINDOW_ICONS[slot.window]}</div>
+                  <div className="text-xl">{WINDOW_ICONS[slot.window] ?? '⏰'}</div>
                   <div className="text-xs font-medium mt-0.5" style={{ color: 'var(--text-2)' }}>
                     {slot.label}
                   </div>
@@ -144,7 +144,7 @@ export function BestTimePanel({ slots, tides }: Props) {
                     <Stat label="Period" value={`${slot.avgPeriod}s`} />
                     <Stat
                       label="Wind"
-                      value={`${WIND_ICONS[slot.windQuality]} ${slot.windQuality}`}
+                      value={`${WIND_ICONS[slot.windQuality] ?? '💨'} ${slot.windQuality}`}
                     />
                   </div>
 

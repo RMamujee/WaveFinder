@@ -26,24 +26,24 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
   const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
   const styles = RATING_STYLES[day.dominantRating]
 
-  const waterTemps = day.hours.filter((h) => h.waterTemp != null).map((h) => h.waterTemp!)
+  const hours = day.hours ?? []
+  const waterTemps = hours.filter((h) => h.waterTemp != null).map((h) => h.waterTemp!)
   const avgWaterTempC = waterTemps.length > 0
     ? waterTemps.reduce((a, b) => a + b, 0) / waterTemps.length
     : null
-  const minWaveHeight = day.hours.length > 0 ? Math.min(...day.hours.map((h) => h.waveHeight)) : 0
+  const minWaveHeight = hours.length > 0 ? Math.min(...hours.map((h) => h.waveHeight)) : 0
   const waveMax = fmtHeight(day.maxWaveHeight, unit)
   const waveMin = fmtHeight(minWaveHeight, unit)
-  // Show range if different, e.g. "2–5ft" or "0.6–1.5m"
   const waveRange = waveMin !== waveMax ? `${waveMin.replace(/ft|m$/, '')}–${waveMax}` : waveMax
 
-  const avgWindKmh = day.hours.length > 0
-    ? day.hours.reduce((s, h) => s + h.wind.speed, 0) / day.hours.length
+  const avgWindKmh = hours.length > 0
+    ? hours.reduce((s, h) => s + h.wind.speed, 0) / hours.length
     : null
 
   return (
     <button
       onClick={onClick}
-      className="w-full h-full rounded-2xl text-left transition-all overflow-hidden flex flex-col"
+      className="w-full h-full rounded-2xl text-left transition-all overflow-hidden flex flex-col hover:scale-[1.02] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ocean-400)]"
       style={{
         background: isSelected ? styles.bg : 'white',
         border: `1.5px solid ${isSelected ? styles.bar : 'var(--border)'}`,
@@ -126,7 +126,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
 
         {/* Swell */}
         <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 3 }}>
-          {Math.round(day.avgPeriod)}s {day.hours[0] ? degreesToCompass(day.hours[0].swellDirection) : ''}
+          {Math.round(day.avgPeriod)}s {hours[0] ? degreesToCompass(hours[0].swellDirection) : ''}
         </p>
 
         {/* Wind */}
@@ -138,7 +138,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
 
         {/* Water temp */}
         {avgWaterTempC !== null && (
-          <p style={{ fontSize: 11, color: '#0e7490', marginBottom: 2 }}>
+          <p style={{ fontSize: 11, color: '#0c5f74', fontWeight: 600, marginBottom: 2 }}>
             🌊 {fmtTemp(avgWaterTempC, unit)}
           </p>
         )}
