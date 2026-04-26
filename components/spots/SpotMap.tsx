@@ -23,6 +23,7 @@ interface Props {
   centerLng?: number
   zoom?: number
   userLocation?: { lat: number; lng: number } | null
+  onLocate?: (lat: number, lng: number) => void
 }
 
 const RATING_COLORS: Record<ConditionRating | 'unknown', { bg: string; border: string; text: string }> = {
@@ -195,13 +196,35 @@ function popupHtml(spot: SpotWithRating): string {
   </div>`
 }
 
-export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7, userLocation }: Props) {
+export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7, userLocation, onLocate }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<import('leaflet').Map | null>(null)
   const clusterRef      = useRef<unknown>(null)
   const parkingLayerRef = useRef<import('leaflet').LayerGroup | null>(null)
   const seamarkLayerRef = useRef<import('leaflet').TileLayer | null>(null)
   const [seamarkOn, setSeamarkOn] = useState(false)
+  const [locating, setLocating] = useState<'idle' | 'loading' | 'located' | 'error'>('idle')
+
+  function handleLocate() {
+    if (locating === 'loading') return
+    if (!navigator.geolocation) {
+      setLocating('error')
+      setTimeout(() => setLocating('idle'), 3000)
+      return
+    }
+    setLocating('loading')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating('located')
+        onLocate?.(pos.coords.latitude, pos.coords.longitude)
+      },
+      () => {
+        setLocating('error')
+        setTimeout(() => setLocating('idle'), 3000)
+      },
+      { timeout: 10000, maximumAge: 60000 }
+    )
+  }
   const userMarkerRef   = useRef<import('leaflet').Marker | null>(null)
   // Always holds the latest spots so async Leaflet init reads enriched data
   // even when conditions arrive between when the effect was scheduled and when
@@ -528,6 +551,36 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
   return (
     <div className="relative h-full w-full" style={{ minHeight: '100%' }}>
       <div ref={mapRef} className="h-full w-full" style={{ minHeight: '100%' }} />
+
+      {/* GPS locate button — always visible when map is rendered */}
+      <button
+        onClick={handleLocate}
+        title={locating === 'located' ? 'Re-center on my location' : 'Show my location'}
+        className="absolute z-[1000] w-10 h-10 rounded-xl flex items-center justify-center transition-all"
+        style={{
+          bottom: '120px',
+          right: '10px',
+          background:   locating === 'located' ? 'var(--ocean-600)' : locating === 'error' ? '#fef2f2' : 'white',
+          border:       `2px solid ${locating === 'located' ? 'var(--ocean-600)' : locating === 'error' ? '#fca5a5' : '#bfdbfe'}`,
+          color:        locating === 'located' ? 'white' : locating === 'error' ? '#ef4444' : '#2563eb',
+          boxShadow:    '0 2px 12px rgba(0,0,0,0.12)',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        {locating === 'loading' ? (
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--sand-200)] border-t-[var(--ocean-600)]" />
+        ) : locating === 'error' ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          </svg>
+        ) : (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill={locating === 'located' ? 'white' : 'none'} stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="8"/>
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+            <circle cx="12" cy="12" r="2" fill="currentColor"/>
+          </svg>
+        )}
+      </button>
 
       {/* OpenSeaMap toggle — bottom-right, above Leaflet zoom controls */}
       <button
