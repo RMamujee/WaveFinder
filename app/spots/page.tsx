@@ -92,36 +92,17 @@ export default function SpotsPage() {
   const [selectedRegion, setSelectedRegion]   = useState('')
   const [view, setView] = useState<ViewMode>('map')
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
-  const [locating, setLocating] = useState<'idle' | 'loading' | 'located' | 'error'>('idle')
   const searchParams = useSearchParams()
 
-  function handleLocate() {
-    if (locating === 'loading') return
-    if (!navigator.geolocation) {
-      setLocating('error')
-      setTimeout(() => setLocating('idle'), 3000)
-      return
+  function handleGpsResult(lat: number, lng: number) {
+    setUserLocation({ lat, lng })
+    const match = geoAutoSelect(lat, lng, baseSpots)
+    if (match) {
+      setSelectedCountry(match.country)
+      setSelectedState(match.state)
+      setSelectedRegion(match.region)
+      setSearch('')
     }
-    setLocating('loading')
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords
-        setUserLocation({ lat: latitude, lng: longitude })
-        setLocating('located')
-        const match = geoAutoSelect(latitude, longitude, baseSpots)
-        if (match) {
-          setSelectedCountry(match.country)
-          setSelectedState(match.state)
-          setSelectedRegion(match.region)
-          setSearch('')
-        }
-      },
-      () => {
-        setLocating('error')
-        setTimeout(() => setLocating('idle'), 3000)
-      },
-      { timeout: 10000, maximumAge: 60000 }
-    )
   }
 
   // Pre-populate from ?region= URL param (from /regions page links)
@@ -373,6 +354,7 @@ export default function SpotsPage() {
             centerLng={mapCenter.lng}
             zoom={mapCenter.zoom}
             userLocation={userLocation}
+            onLocate={handleGpsResult}
           />
 
           {/* Condition summary bar */}
@@ -432,33 +414,6 @@ export default function SpotsPage() {
             </div>
           </div>
 
-          {/* Locate me button */}
-          <button
-            onClick={handleLocate}
-            title={locating === 'error' ? 'Location unavailable — check browser permissions' : locating === 'located' ? 'Re-center on my location' : 'Show my location'}
-            className="absolute bottom-5 right-5 z-[1000] w-10 h-10 rounded-xl flex items-center justify-center transition-all"
-            style={{
-              background:   locating === 'located' ? 'var(--ocean-600)' : locating === 'error' ? '#fef2f2' : 'white',
-              border:       `2px solid ${locating === 'located' ? 'var(--ocean-600)' : locating === 'error' ? '#fca5a5' : 'var(--border)'}`,
-              color:        locating === 'located' ? 'white' : locating === 'error' ? '#ef4444' : 'var(--text-2)',
-              boxShadow:    '0 2px 12px rgba(0,0,0,0.12)',
-              WebkitTapHighlightColor: 'transparent',
-            }}
-          >
-            {locating === 'loading' ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--sand-200)] border-t-[var(--ocean-600)]" />
-            ) : locating === 'error' ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              </svg>
-            ) : (
-              <svg width="17" height="17" viewBox="0 0 24 24" fill={locating === 'located' ? 'white' : 'none'} stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="8"/>
-                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
-                <circle cx="12" cy="12" r="2" fill="currentColor"/>
-              </svg>
-            )}
-          </button>
 
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center z-[999]">
