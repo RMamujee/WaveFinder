@@ -204,36 +204,17 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
   const seamarkLayerRef = useRef<import('leaflet').TileLayer | null>(null)
   const [seamarkOn, setSeamarkOn] = useState(false)
   const [locating, setLocating] = useState<'idle' | 'loading' | 'located' | 'error'>('idle')
-
-  function handleLocate() {
-    if (locating === 'loading') return
-    if (!navigator.geolocation) {
-      setLocating('error')
-      setTimeout(() => setLocating('idle'), 3000)
-      return
-    }
-    setLocating('loading')
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating('located')
-        onLocate?.(pos.coords.latitude, pos.coords.longitude)
-      },
-      () => {
-        setLocating('error')
-        setTimeout(() => setLocating('idle'), 3000)
-      },
-      { timeout: 10000, maximumAge: 60000 }
-    )
-  }
+  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null)
   const userMarkerRef   = useRef<import('leaflet').Marker | null>(null)
   // Always holds the latest spots so async Leaflet init reads enriched data
   // even when conditions arrive between when the effect was scheduled and when
   // the async Leaflet imports finish.
   const spotsRef        = useRef<SpotWithRating[]>(spots)
   spotsRef.current      = spots
-  // Keep latest userLocation available to the async init closure
-  const userLocationRef = useRef(userLocation)
-  userLocationRef.current = userLocation
+  // Keep latest gpsLocation available to the async init closure so the dot
+  // is restored correctly after a map re-init triggered by region auto-select.
+  const userLocationRef = useRef(gpsLocation)
+  userLocationRef.current = gpsLocation
   // Track seamarkOn across async boundaries so the init effect can restore it
   const seamarkOnRef = useRef(seamarkOn)
   seamarkOnRef.current = seamarkOn
@@ -529,24 +510,46 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spots.map(s => `${s.id}:${s.currentRating ?? '?'}:${s.currentWaveHeight ?? 'x'}`).join('|')])
 
-  // Update blue dot and pan map when user location changes
+  function handleLocate() {
+    if (locating === 'loading') return
+    if (!navigator.geolocation) {
+      setLocating('error')
+      setTimeout(() => setLocating('idle'), 3000)
+      return
+    }
+    setLocating('loading')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        setLocating('located')
+        setGpsLocation({ lat, lng })
+        onLocate?.(lat, lng)
+      },
+      () => {
+        setLocating('error')
+        setTimeout(() => setLocating('idle'), 3000)
+      },
+      { timeout: 10000, maximumAge: 60000 }
+    )
+  }
+
+  // Update blue dot and pan map when GPS location changes
   useEffect(() => {
-    if (!mapInstance.current) return
+    if (!mapInstance.current || !gpsLocation) return
     const map = mapInstance.current
     ;(async () => {
       const L = (await import('leaflet')).default
       if (!mapInstance.current) return
-      await applyUserLocation(map, L, userLocation)
-      if (userLocation) {
-        map.setView(
-          [userLocation.lat, userLocation.lng],
-          Math.max(map.getZoom(), 12),
-          { animate: true }
-        )
-      }
+      await applyUserLocation(map, L, gpsLocation)
+      map.setView(
+        [gpsLocation.lat, gpsLocation.lng],
+        Math.max(map.getZoom(), 12),
+        { animate: true }
+      )
     })().catch(console.error)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userLocation])
+  }, [gpsLocation])
 
   return (
     <div className="relative h-full w-full" style={{ minHeight: '100%' }}>
