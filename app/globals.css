@@ -95,20 +95,12 @@ body {
 .spot-marker:hover { transform: scale(1.15); }
 
 /* ── Spot hover tooltip ── */
-.spot-hover-tooltip {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-}
-.spot-hover-tooltip .leaflet-tooltip-top::before,
-.spot-hover-tooltip::before { display: none !important; }
 .leaflet-tooltip.spot-hover-tooltip {
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.13);
-  padding: 0;
+  background: white !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.13) !important;
+  padding: 0 !important;
   max-width: 240px;
 }
 .leaflet-tooltip.spot-hover-tooltip::before { display: none !important; }
