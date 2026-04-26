@@ -5,25 +5,26 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
+import { Icon, type WFIconName } from '@/components/ui/Icon'
 
 // ── Region config ─────────────────────────────────────────────────────────────
 
-const REGIONS = [
-  { name: 'San Diego',             icon: '🌊', short: 'San Diego'   },
-  { name: 'Orange County',         icon: '🌴', short: 'O.C.'        },
-  { name: 'Los Angeles',           icon: '🌆', short: 'L.A.'        },
-  { name: 'Ventura',               icon: '🏄', short: 'Ventura'     },
-  { name: 'Santa Barbara',         icon: '🌸', short: 'S.B.'        },
-  { name: 'Central Coast',         icon: '🌾', short: 'Cen. Coast'  },
-  { name: 'Monterey',              icon: '🦭', short: 'Monterey'    },
-  { name: 'NorCal',                icon: '🌉', short: 'NorCal'      },
-  { name: 'North Shore',           icon: '🌺', short: 'N. Shore'    },
-  { name: 'South Shore',           icon: '🤙', short: 'S. Shore'    },
-  { name: 'Gold Coast',            icon: '🦘', short: 'Gold Coast'  },
-  { name: 'Sydney Northern Beaches', icon: '🏖️', short: 'Sydney'   },
-  { name: 'Uluwatu',               icon: '🌿', short: 'Uluwatu'     },
-  { name: 'Hossegor',              icon: '🥖', short: 'Hossegor'    },
-  { name: "Jeffrey's Bay",         icon: '🦁', short: "J-Bay"       },
+const REGIONS: { name: string; icon: WFIconName; short: string }[] = [
+  { name: 'San Diego',             icon: 'wave',    short: 'San Diego'   },
+  { name: 'Orange County',         icon: 'wave',    short: 'O.C.'        },
+  { name: 'Los Angeles',           icon: 'wave',    short: 'L.A.'        },
+  { name: 'Ventura',               icon: 'wave',    short: 'Ventura'     },
+  { name: 'Santa Barbara',         icon: 'wave',    short: 'S.B.'        },
+  { name: 'Central Coast',         icon: 'wave',    short: 'Cen. Coast'  },
+  { name: 'Monterey',              icon: 'wave',    short: 'Monterey'    },
+  { name: 'NorCal',                icon: 'wave',    short: 'NorCal'      },
+  { name: 'North Shore',           icon: 'wave',    short: 'N. Shore'    },
+  { name: 'South Shore',           icon: 'wave',    short: 'S. Shore'    },
+  { name: 'Gold Coast',            icon: 'wave',    short: 'Gold Coast'  },
+  { name: 'Sydney Northern Beaches', icon: 'wave',  short: 'Sydney'      },
+  { name: 'Uluwatu',               icon: 'wave',    short: 'Uluwatu'     },
+  { name: 'Hossegor',              icon: 'wave',    short: 'Hossegor'    },
+  { name: "Jeffrey's Bay",         icon: 'wave',    short: "J-Bay"       },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -190,7 +191,7 @@ export default function TimelinePage() {
                     transform:   active ? 'translateY(-1px)' : 'none',
                   }}
                 >
-                  <span style={{ fontSize: '22px', lineHeight: 1 }}>{r.icon}</span>
+                  <Icon name={r.icon} size={22} style={{ color: active ? 'white' : 'var(--text-2)' }} />
                   <span
                     className="text-center font-semibold leading-tight"
                     style={{
@@ -247,7 +248,7 @@ export default function TimelinePage() {
               {waterTemp !== null && (
                 <div className="rounded-xl px-3 py-2 text-sm font-semibold"
                   style={{ background: 'var(--ocean-50)', color: 'var(--ocean-700)', border: '1px solid var(--ocean-100)' }}>
-                  💧 {fmtTemp(waterTemp, unit)} water
+                  <Icon name="droplet" size={12} className="inline mr-1" />{fmtTemp(waterTemp, unit)} water
                 </div>
               )}
               {!isLoading && !isError && topScore > 0 && (
@@ -414,7 +415,7 @@ export default function TimelinePage() {
           <Link href="/spots"
             className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
             style={{ background: 'var(--ocean-600)' }}>
-            🗺️ Open live map
+            Open live map
           </Link>
         </div>
       </div>

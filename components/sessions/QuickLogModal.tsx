@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { Icon } from '@/components/ui/Icon'
 
 const SESSIONS_KEY = 'wavefinder_sessions'
 
@@ -129,7 +130,7 @@ export function QuickLogModal({ open, onClose }: Props) {
 
         {saved ? (
           <div className="px-6 py-10 text-center">
-            <div className="text-4xl mb-3">🤙</div>
+            <div className="flex justify-center mb-3"><Icon name="surfer" size={36} style={{ color: 'var(--ocean-600)' }} /></div>
             <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '20px', fontWeight: 700, color: 'var(--text)' }}>
               Session logged!
             </p>

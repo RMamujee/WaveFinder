@@ -1,17 +1,18 @@
-// WMO Weather Interpretation Codes → emoji + label
-export function weatherIcon(code: number | null): string {
-  if (code === null) return ''
-  if (code === 0) return '☀️'
-  if (code <= 2) return '🌤️'
-  if (code === 3) return '☁️'
-  if (code <= 48) return '🌫️'
-  if (code <= 57) return '🌦️'
-  if (code <= 67) return '🌧️'
-  if (code <= 77) return '🌨️'
-  if (code <= 82) return '🌦️'
-  if (code <= 86) return '❄️'
-  if (code <= 99) return '⛈️'
-  return '🌊'
+import type { WFIconName } from '@/components/ui/Icon'
+
+export function weatherIcon(code: number | null): WFIconName {
+  if (code === null) return 'wave'
+  if (code === 0) return 'sun'
+  if (code <= 2) return 'sun'
+  if (code === 3) return 'wind'
+  if (code <= 48) return 'wind'
+  if (code <= 57) return 'droplet'
+  if (code <= 67) return 'droplet'
+  if (code <= 77) return 'temp'
+  if (code <= 82) return 'droplet'
+  if (code <= 86) return 'temp'
+  if (code <= 99) return 'wind'
+  return 'wave'
 }
 
 export function weatherLabel(code: number | null): string {
