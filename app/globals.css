@@ -34,6 +34,15 @@
   --text:      #1a1a2e;
   --text-2:    #4a4a6a;
   --text-3:    #6c6c89;
+
+  /* Z-index scale */
+  --z-base:       0;
+  --z-overlay:    9998;
+  --z-modal:      9999;
+  --z-banner:     10000;
+
+  /* Layout dimensions */
+  --navbar-height: 57px;
 }
 
 * { box-sizing: border-box; }

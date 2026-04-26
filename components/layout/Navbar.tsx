@@ -108,6 +108,10 @@ export function Navbar() {
                 style={{
                   color: isActive(l.href) ? 'var(--ocean-600)' : 'var(--text)',
                   background: isActive(l.href) ? 'var(--ocean-50)' : 'transparent',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {l.label}

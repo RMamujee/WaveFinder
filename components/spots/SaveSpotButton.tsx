@@ -5,8 +5,10 @@ import { useState, useEffect } from 'react'
 const SAVED_KEY = 'wavefinder_saved'
 
 function getSavedIds(): string[] {
-  try { return JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]') }
-  catch { return [] }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch { return [] }
 }
 
 export function SaveSpotButton({ spotId }: { spotId: string }) {

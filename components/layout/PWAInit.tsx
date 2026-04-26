@@ -131,6 +131,8 @@ export function PWAInit() {
         )}
         <button
           onClick={dismiss}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--sand-200)' }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--sand-100)' }}
           style={{
             background: 'var(--sand-100)',
             color: 'var(--text-2)',
@@ -139,6 +141,7 @@ export function PWAInit() {
             padding: '8px 12px',
             fontSize: 13,
             cursor: 'pointer',
+            transition: 'background 0.15s',
           }}
         >
           {isIOS ? 'OK' : 'Not now'}

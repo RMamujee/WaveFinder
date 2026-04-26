@@ -107,8 +107,8 @@ export function QuickLogModal({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+      className="fixed inset-0 flex items-end sm:items-center justify-center p-4"
+      style={{ zIndex: 9999, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="w-full max-w-md rounded-2xl" style={{ background: 'white', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}>
@@ -143,7 +143,7 @@ export function QuickLogModal({ open, onClose }: Props) {
             </div>
           </div>
         ) : (
-          <div className="px-6 py-5 space-y-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+          <div className="px-6 py-5 space-y-4" style={{ maxHeight: 'min(80vh, calc(100dvh - 140px))', overflowY: 'auto' }}>
             {/* Spot */}
             <div style={{ position: 'relative', zIndex: 10 }}>
               <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>

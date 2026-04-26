@@ -49,7 +49,7 @@ export function LiveMapHero({ spotCount }: Props) {
 
   return (
     <section
-      className="flex flex-col lg:flex-row h-[90svh] lg:h-[calc(100svh-57px)] min-h-[500px]"
+      className="flex flex-col lg:flex-row h-[90svh] lg:h-[calc(100svh-var(--navbar-height,57px))] min-h-[500px]"
     >
       {/* ── Left: text panel (desktop only) ──────────────────────────── */}
       <div
@@ -165,7 +165,7 @@ export function LiveMapHero({ spotCount }: Props) {
             Browse Spots
           </Link>
 
-          <div className="flex flex-wrap justify-center gap-x-4 gap-y-0.5">
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-0.5" style={{ maxWidth: 'calc(100vw - 32px)', wordBreak: 'break-word' }}>
             {['📡 NOAA NDBC', '🌊 Open-Meteo', '🌊 NOAA Tides', '🗺️ OpenStreetMap'].map((s) => (
               <span key={s} className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>{s}</span>
             ))}
