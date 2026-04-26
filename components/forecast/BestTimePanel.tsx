@@ -2,25 +2,18 @@
 
 import type { BestTimeSlot } from '@/lib/forecast/best-time'
 import type { ConditionRating, TidePoint } from '@/types/forecast'
+import { Icon, type WFIconName } from '@/components/ui/Icon'
 
 interface Props {
   slots: BestTimeSlot[]
   tides?: TidePoint[]
 }
 
-const WINDOW_ICONS: Record<string, string> = {
-  dawn: '🌅',
-  morning: '☀️',
-  midday: '🌤️',
-  afternoon: '🌊',
-  evening: '🌇',
+const WINDOW_ICONS: Record<string, WFIconName> = {
+  dawn: 'moon', morning: 'sun', midday: 'sun', afternoon: 'wave', evening: 'moon',
 }
-
-const WIND_ICONS: Record<string, string> = {
-  glassy: '🪞',
-  'light offshore': '💨',
-  'light onshore': '〰️',
-  choppy: '🌬️',
+const WIND_ICONS: Record<string, WFIconName> = {
+  glassy: 'wave', 'light offshore': 'wind', 'light onshore': 'wave', choppy: 'wind',
 }
 
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; bar: string }> = {
@@ -66,7 +59,7 @@ export function BestTimePanel({ slots, tides }: Props) {
                 color: RATING_STYLES[best.rating].text,
               }}
             >
-              ✦ Best: {best.label}
+              Best: {best.label}
             </div>
           )}
         </div>
@@ -89,7 +82,7 @@ export function BestTimePanel({ slots, tides }: Props) {
               <div className="flex items-start gap-4">
                 {/* Icon + window label */}
                 <div className="shrink-0 text-center" style={{ minWidth: '56px' }}>
-                  <div className="text-xl">{WINDOW_ICONS[slot.window] ?? '⏰'}</div>
+                  <div className="flex justify-center"><Icon name={WINDOW_ICONS[slot.window] ?? 'clock'} size={20} style={{ color: 'var(--text-3)' }} /></div>
                   <div className="text-xs font-medium mt-0.5" style={{ color: 'var(--text-2)' }}>
                     {slot.label}
                   </div>
@@ -144,7 +137,7 @@ export function BestTimePanel({ slots, tides }: Props) {
                     <Stat label="Period" value={`${slot.avgPeriod}s`} />
                     <Stat
                       label="Wind"
-                      value={`${WIND_ICONS[slot.windQuality] ?? '💨'} ${slot.windQuality}`}
+                      value={slot.windQuality}
                     />
                   </div>
 

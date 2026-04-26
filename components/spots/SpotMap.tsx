@@ -123,7 +123,7 @@ function tooltipHtml(spot: SpotWithRating): string {
         <div style="font-size:10px;color:#8888aa;">kW/m</div></div>` : ''}
     </div>
     ${spot.currentWindSpeed != null ? `<div style="font-size:11px;color:#6b7280;margin-bottom:6px;">
-      💨 ${Math.round(spot.currentWindSpeed! * 0.621371)} mph ${spot.currentWindDir ?? ''}</div>` : ''}
+      Wind: ${Math.round(spot.currentWindSpeed! * 0.621371)} mph ${spot.currentWindDir ?? ''}</div>` : ''}
   ` : h === 0 ? `<div style="font-size:11px;color:#8888aa;margin:6px 0;font-style:italic;">Flat — no rideable waves today</div>`
     : `<div style="font-size:11px;color:#8888aa;margin:6px 0;font-style:italic;">No live data — click for forecast</div>`
 
@@ -165,7 +165,7 @@ function popupHtml(spot: SpotWithRating): string {
         <div style="font-size:9px;font-weight:600;color:#8888aa;text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;">kW/m</div>
       </div>` : ''}
     </div>
-    ${spot.currentWindSpeed != null ? `<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">💨 ${Math.round(spot.currentWindSpeed! * 0.621371)} mph ${spot.currentWindDir ?? ''}</div>` : ''}
+    ${spot.currentWindSpeed != null ? `<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">Wind: ${Math.round(spot.currentWindSpeed! * 0.621371)} mph ${spot.currentWindDir ?? ''}</div>` : ''}
   ` : h === 0
     ? `<div style="font-size:13px;color:#8888aa;font-style:italic;margin-bottom:10px;text-align:center;padding:10px;background:#f8fafc;border-radius:10px;">Flat — no rideable waves today</div>`
     : `<div style="font-size:13px;color:#8888aa;font-style:italic;margin-bottom:10px;text-align:center;padding:10px;background:#f8fafc;border-radius:10px;">No live data available</div>`

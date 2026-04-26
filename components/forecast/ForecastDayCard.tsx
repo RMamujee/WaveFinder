@@ -4,6 +4,7 @@ import type { ForecastDay, ConditionRating } from '@/types/forecast'
 import { format, parseISO } from 'date-fns'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
+import { Icon } from '@/components/ui/Icon'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 
@@ -68,9 +69,9 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
       >
         <span
           title={day.weatherCode != null ? weatherLabel(day.weatherCode) : undefined}
-          style={{ fontSize: 20, lineHeight: 1 }}
+          style={{ lineHeight: 1 }}
         >
-          {day.weatherCode != null ? weatherIcon(day.weatherCode) : '🌊'}
+          <Icon name={day.weatherCode != null ? weatherIcon(day.weatherCode) : 'wave'} size={20} />
         </span>
         <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
           {day.maxTempC !== null && (
@@ -132,21 +133,21 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         {/* Wind */}
         {avgWindKmh !== null && (
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>
-            💨 {fmtWind(avgWindKmh, unit)}
+            <Icon name="wind" size={12} className="inline mr-1" style={{ color: 'var(--text-3)' }} />{fmtWind(avgWindKmh, unit)}
           </p>
         )}
 
         {/* Water temp */}
         {avgWaterTempC !== null && (
           <p style={{ fontSize: 11, color: '#0c5f74', fontWeight: 600, marginBottom: 2 }}>
-            🌊 {fmtTemp(avgWaterTempC, unit)}
+            <Icon name="wave" size={12} className="inline mr-1" style={{ color: '#0c5f74' }} />{fmtTemp(avgWaterTempC, unit)}
           </p>
         )}
 
         {/* Rain chance */}
         {day.maxPrecipProb !== null && day.maxPrecipProb >= 20 && (
           <p style={{ fontSize: 11, color: '#1b7fcb', fontWeight: 600 }}>
-            💧 {day.maxPrecipProb}%
+            <Icon name="droplet" size={12} className="inline mr-1" style={{ color: '#1b7fcb' }} />{day.maxPrecipProb}%
           </p>
         )}
       </div>

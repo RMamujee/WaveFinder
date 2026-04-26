@@ -30,6 +30,7 @@ import { BOTTOM_TYPE_STYLE } from '@/lib/bottom-type'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
+import { Icon } from '@/components/ui/Icon'
 import { format, parseISO } from 'date-fns'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp, fmtTide } from '@/lib/units'
@@ -266,7 +267,7 @@ export function SpotForecastView({ spot }: Props) {
                         fontFamily: 'Playfair Display, serif',
                       }}
                     >
-                      {current.rating === 'epic' ? '🏆 EPIC' : current.rating.charAt(0).toUpperCase() + current.rating.slice(1)}
+                      {current.rating === 'epic' ? 'EPIC' : current.rating.charAt(0).toUpperCase() + current.rating.slice(1)}
                     </span>
                     <div
                       className="mt-1.5 h-1.5 w-full rounded-full"
@@ -482,8 +483,8 @@ export function SpotForecastView({ spot }: Props) {
                             {fmtWind(h.wind.speed, unit)} {h.wind.directionLabel}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <span title={weatherLabel(h.weatherCode)} style={{ fontSize: 16, lineHeight: 1 }}>
-                              {h.weatherCode !== null ? weatherIcon(h.weatherCode) : '—'}
+                            <span title={weatherLabel(h.weatherCode)} style={{ lineHeight: 1 }}>
+                              {h.weatherCode !== null ? <Icon name={weatherIcon(h.weatherCode)} size={16} /> : '—'}
                             </span>
                             {h.precipProb !== null && h.precipProb >= 20 && (
                               <span className="ml-1 text-xs" style={{ color: '#1b7fcb' }}>

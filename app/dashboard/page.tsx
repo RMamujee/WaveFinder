@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { SpotCard } from '@/components/spots/SpotCard'
+import { Icon } from '@/components/ui/Icon'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import type { SurfSpot } from '@/types/spot'
 
@@ -75,7 +76,7 @@ export default function DashboardPage() {
           <WaveLoader compact label="Loading your spots…" />
         ) : savedSpots.length === 0 ? (
           <div className="rounded-2xl py-20 text-center" style={{ border: '2px dashed var(--border)', background: 'white' }}>
-            <div className="text-4xl mb-4">🏄</div>
+            <div className="flex justify-center mb-4"><Icon name="surfer" size={40} style={{ color: 'var(--text-3)' }} /></div>
             <p className="font-medium mb-1" style={{ color: 'var(--text)' }}>No saved spots yet</p>
             <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>
               Browse spots and click &quot;Save spot&quot; to track your home breaks

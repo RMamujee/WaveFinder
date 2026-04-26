@@ -352,7 +352,7 @@ export default function SpotsPage() {
                   color: view === v ? 'white' : 'var(--text-2)',
                 }}
               >
-                {v === 'map' ? '🗺️ Map' : '☰ List'}
+                {v === 'map' ? 'Map' : 'List'}
               </button>
             ))}
           </div>
@@ -383,10 +383,10 @@ export default function SpotsPage() {
             >
               <span className="text-xs font-semibold" style={{ color: 'var(--text-3)' }}>Live:</span>
               {conditionsSummary.epic > 0 && (
-                <span className="text-xs font-bold" style={{ color: '#7c3aed' }}>⚡ {conditionsSummary.epic} Epic</span>
+                <span className="text-xs font-bold" style={{ color: '#7c3aed' }}>{conditionsSummary.epic} Epic</span>
               )}
               {conditionsSummary.good > 0 && (
-                <span className="text-xs font-bold" style={{ color: '#16a34a' }}>✓ {conditionsSummary.good} Good</span>
+                <span className="text-xs font-bold" style={{ color: '#16a34a' }}>{conditionsSummary.good} Good</span>
               )}
               {conditionsSummary.fair > 0 && (
                 <span className="text-xs font-semibold" style={{ color: '#b45309' }}>{conditionsSummary.fair} Fair</span>
