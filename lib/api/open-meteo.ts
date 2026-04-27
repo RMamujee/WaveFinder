@@ -167,7 +167,7 @@ export async function fetchMarineForecast(
       'wind_wave_period',
       'sea_surface_temperature',
     ].join(','),
-    forecast_days: '7',
+    forecast_days: '16',
     timezone: 'auto',
   })
 
@@ -205,7 +205,7 @@ export async function fetchWindForecast(
     longitude: lng.toString(),
     hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code,precipitation_probability',
     wind_speed_unit: 'kmh',
-    forecast_days: '7',
+    forecast_days: '16',
     timezone: 'auto',
   })
 

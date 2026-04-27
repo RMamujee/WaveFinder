@@ -18,6 +18,7 @@ import { WebcamPanel } from '@/components/webcam/WebcamPanel'
 import { WindyWebcamsPanel } from '@/components/webcam/WindyWebcamsPanel'
 import { StormAlerts } from '@/components/forecast/StormAlerts'
 import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
+import { SwellAlertButton } from '@/components/forecast/SwellAlertButton'
 import type { NWSAlert } from '@/lib/api/noaa-alerts'
 import { SurfReports } from '@/components/forecast/SurfReports'
 import { BestTimePanel } from '@/components/forecast/BestTimePanel'
@@ -231,7 +232,7 @@ export function SpotForecastView({ spot }: Props) {
               {forecast && (
                 <div className="hidden sm:flex flex-col items-center">
                   <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>
-                    Wind — {activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : '7 day'}
+                    Wind — {activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : '16 day'}
                   </p>
                   <WindRoseChart days={activeDayData ? [activeDayData] : forecast.forecast} size={175} showLegend={false} />
                   <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 mt-1.5" style={{ maxWidth: 150 }}>
@@ -284,7 +285,8 @@ export function SpotForecastView({ spot }: Props) {
                   </div>
                 )}
                 <SaveSpotButton spotId={spot.id} />
-                <a
+                <SwellAlertButton spotSlug={spot.slug} spotName={spot.name} forecastDays={forecast?.forecast} />
+                <
                   href={`/sessions?spot=${encodeURIComponent(spot.name)}&region=${encodeURIComponent(spot.region)}&slug=${spot.slug}`}
                   className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
                   style={{ background: 'var(--ocean-600)' }}
@@ -322,22 +324,25 @@ export function SpotForecastView({ spot }: Props) {
       )}
       <div className="mx-auto max-w-7xl px-5 py-4 space-y-4" style={{ display: isPending ? 'none' : undefined }}>
 
-        {/* 7-day strip — full width */}
+        {/* 16-day strip — horizontally scrollable */}
         <div>
-          <SectionTitle>7-Day Forecast</SectionTitle>
+          <SectionTitle>16-Day Forecast</SectionTitle>
           {forecast?.forecast ? (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
-              {forecast.forecast.map((day) => (
-                <ForecastDayCard
-                  key={day.date}
-                  day={day}
-                  isSelected={
-                    selectedDay === day.date ||
-                    (!selectedDay && day === forecast.forecast[0])
-                  }
-                  onClick={() => selectDay(day.date)}
-                />
-              ))}
+            <div className="overflow-x-auto -mx-5 px-5" style={{ scrollbarWidth: 'none' }}>
+              <div className="flex gap-2 pb-1" style={{ width: 'max-content' }}>
+                {forecast.forecast.map((day) => (
+                  <div key={day.date} style={{ width: 108, flexShrink: 0 }}>
+                    <ForecastDayCard
+                      day={day}
+                      isSelected={
+                        selectedDay === day.date ||
+                        (!selectedDay && day === forecast.forecast[0])
+                      }
+                      onClick={() => selectDay(day.date)}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
         </div>
