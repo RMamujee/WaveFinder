@@ -4,6 +4,7 @@ import { Providers } from '@/components/layout/Providers'
 import { Navbar } from '@/components/layout/Navbar'
 import { PWAInit } from '@/components/layout/PWAInit'
 import { InstallPrompt } from '@/components/layout/InstallPrompt'
+import { Analytics } from '@vercel/analytics/next'
 
 export const metadata: Metadata = {
   title: 'WaveFinder – Free Surf Forecast',
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <PWAInit />
           <InstallPrompt />
         </Providers>
+        <Analytics />
       </body>
     </html>
   )

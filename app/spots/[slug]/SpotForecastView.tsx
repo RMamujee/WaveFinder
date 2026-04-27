@@ -286,7 +286,7 @@ export function SpotForecastView({ spot }: Props) {
                 )}
                 <SaveSpotButton spotId={spot.id} />
                 <SwellAlertButton spotSlug={spot.slug} spotName={spot.name} forecastDays={forecast?.forecast} />
-                <
+                <a
                   href={`/sessions?spot=${encodeURIComponent(spot.name)}&region=${encodeURIComponent(spot.region)}&slug=${spot.slug}`}
                   className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
                   style={{ background: 'var(--ocean-600)' }}
