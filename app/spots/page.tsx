@@ -109,7 +109,7 @@ export default function SpotsPage() {
     }
   }
 
-  // Pre-populate from ?region= URL param (from /regions page links)
+  // Pre-populate from URL params (?region=, ?country=, ?activity=)
   useEffect(() => {
     const region = searchParams.get('region')
     if (region) {
@@ -118,6 +118,8 @@ export default function SpotsPage() {
     }
     const country = searchParams.get('country')
     if (country) setSelectedCountry(country)
+    const activity = searchParams.get('activity')
+    if (activity) setActivityFilter(activity)
   }, [searchParams])
 
   // Fetch distinct countries from DB
