@@ -15,6 +15,7 @@ export function Navbar() {
 
   const navLinks = [
     { href: '/spots',      label: 'Browse Spots' },
+    { href: '/activities', label: 'Activities' },
     { href: '/timeline',   label: 'Timeline' },
     { href: '/regions',    label: 'Regions' },
     { href: '/compare',    label: 'Compare' },

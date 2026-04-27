@@ -7,6 +7,7 @@ export type WFIconName =
   | 'arrowRight' | 'filter' | 'bell' | 'user' | 'settings' | 'layers'
   | 'list' | 'grid' | 'clock' | 'calendar' | 'bookmark' | 'share'
   | 'log' | 'board' | 'trend' | 'droplet'
+  | 'fish' | 'anchor' | 'boat' | 'jetski' | 'snorkel' | 'paddle' | 'parasail' | 'swimmer'
 
 const PATHS: Record<WFIconName, React.ReactNode> = {
   buoy: <><path d="M12 3v3"/><circle cx="12" cy="3" r=".7" fill="currentColor" stroke="none"/><path d="M9 6h6l1.5 4h-9z"/><path d="M10.5 10c-1 2-1.2 4-.5 6h4c.7-2 .5-4-.5-6"/><path d="M3 19c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0"/></>,
@@ -44,6 +45,14 @@ const PATHS: Record<WFIconName, React.ReactNode> = {
   board: <><path d="M12 3c-3.5 0-5 4-5 9s1.5 9 5 9 5-2 5-9-1.5-9-5-9z"/><path d="M10 18h4"/></>,
   trend: <><path d="M3 17l5-5 4 4 8-8"/><path d="M14 8h6v6"/></>,
   droplet: <><path d="M12 3s7 7 7 12a7 7 0 1 1-14 0c0-5 7-12 7-12z"/></>,
+  fish: <><path d="M6.5 12C6.5 12 2 10 2 7c0-1.5 1-2.5 2.5-2.5S7.5 5.5 8 7c.5-1.5 2-2.5 3.5-2.5S14 5.5 14 7c0 3-4.5 5-4.5 5"/><path d="M14 12c2 1.5 5 1.5 6 0-1-2.5-3-4-6-4"/><circle cx="19" cy="9" r="1"/></>,
+  anchor: <><circle cx="12" cy="5" r="3"/><line x1="12" y1="8" x2="12" y2="22"/><path d="M5 15H2a10 10 0 0 0 20 0h-3"/></>,
+  boat: <><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2c1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.6.79 5 2.62 6"/><path d="M19 13V7H5v6"/><path d="M12 7V3"/><path d="M10 3h4"/></>,
+  jetski: <><path d="M3 12h4l2-6h6l2 6h4"/><path d="M5 12c0 3 2 5 7 5s7-2 7-5"/><path d="M12 6V3"/></>,
+  snorkel: <><path d="M12 22V12"/><path d="M12 12C12 8 8 6 6 6c0 3 2 5 6 6z"/><path d="M12 12C12 8 16 6 18 6c0 3-2 5-6 6z"/><circle cx="12" cy="4" r="2"/></>,
+  paddle: <><path d="M12 22V8"/><ellipse cx="12" cy="5" rx="4" ry="3"/><path d="M8 14l-5 5"/><path d="M16 14l5 5"/></>,
+  parasail: <><path d="M12 3C7 3 3 8 3 12l9 9 9-9c0-4-4-9-9-9z"/><line x1="12" y1="21" x2="12" y2="12"/><path d="M8 16l4-4 4 4"/></>,
+  swimmer: <><circle cx="12" cy="5" r="2"/><path d="M6 22v-5l6-5 6 5v5"/><path d="M6 12l-4 2"/><path d="M18 12l4 2"/></>,
 }
 
 interface IconProps extends SVGProps<SVGSVGElement> {

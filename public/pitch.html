@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>WaveFind — Investor Deck 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ocean-900:#061e3a;--ocean-800:#0e3461;--ocean-700:#0e4d88;
+  --ocean-600:#1b7fcb;--ocean-400:#4dbfca;--ocean-200:#bfdbfe;
+  --sand:#fdfaf5;--sand-100:#f5f0e8;
+  --text:#1a1a2e;--text-2:#4a5568;--text-3:#8888aa;
+}
+html,body{height:100%;font-family:'DM Sans',sans-serif;background:#000;overflow:hidden}
+
+/* ── Deck shell ── */
+.deck{position:relative;width:100vw;height:100vh;overflow:hidden}
+.slide{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .45s cubic-bezier(.4,0,.2,1);
+}
+.slide.active{opacity:1;pointer-events:auto}
+
+/* ── Nav ── */
+.nav{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:16px;z-index:100;
+  background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.2);border-radius:40px;padding:10px 20px;
+}
+.nav-dots{display:flex;gap:7px}
+.dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.3);cursor:pointer;transition:all .2s}
+.dot.active{background:white;transform:scale(1.3)}
+.nav-btn{
+  background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;
+  font-size:18px;line-height:1;padding:0 4px;transition:color .2s
+}
+.nav-btn:hover{color:white}
+.slide-num{font-size:11px;color:rgba(255,255,255,0.5);font-weight:600;letter-spacing:.08em;min-width:36px;text-align:center}
+
+/* ── Shared layout helpers ── */
+.inner{width:100%;max-width:1100px;padding:0 60px}
+.tag{display:inline-flex;align-items:center;gap:8px;border-radius:30px;padding:6px 16px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px}
+.h1{font-family:'Playfair Display',serif;font-weight:800;line-height:1.06;letter-spacing:-.02em}
+.h2{font-family:'Playfair Display',serif;font-weight:700;line-height:1.1}
+.body{font-size:16px;line-height:1.65;color:var(--text-2)}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700}
+
+/* ── S1: Cover ── */
+#s1{background:linear-gradient(135deg,var(--ocean-900) 0%,var(--ocean-800) 45%,#0a3355 100%)}
+#s1 .wave-bg{position:absolute;bottom:0;left:0;right:0;height:45%;opacity:.18}
+#s1 .inner{position:relative;z-index:2;text-align:center;display:flex;flex-direction:column;align-items:center}
+#s1 .logo{font-family:'Playfair Display',serif;font-size:clamp(18px,3vw,26px);font-weight:700;color:white;letter-spacing:-.5px;margin-bottom:48px}
+#s1 .logo span{color:var(--ocean-400);font-style:italic}
+#s1 .h1{font-size:clamp(48px,7vw,88px);color:white;margin-bottom:24px}
+#s1 .h1 em{color:var(--ocean-400);font-style:italic}
+#s1 .sub{font-size:clamp(16px,2vw,20px);color:rgba(255,255,255,.65);max-width:560px;line-height:1.6;margin-bottom:48px}
+#s1 .chips{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+#s1 .chip{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.8);border-radius:30px;padding:7px 18px;font-size:13px;font-weight:600}
+#s1 .live{display:flex;align-items:center;gap:8px;margin-bottom:56px;color:rgba(255,255,255,.55);font-size:13px;font-weight:600}
+#s1 .live span.dot2{width:8px;height:8px;border-radius:50%;background:#4ade80;animation:pulse 2s infinite}
+
+/* ── S2: Problem ── */
+#s2{background:var(--sand)}
+#s2 .inner{display:flex;flex-direction:column}
+#s2 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:36px}
+#s2 .pcard{background:white;border:1.5px solid #e5e7eb;border-radius:16px;padding:22px;position:relative}
+#s2 .pcard .app-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+#s2 .pcard .app-use{font-size:11px;color:var(--text-3);margin-bottom:12px}
+#s2 .pcard .price{display:inline-block;background:#fef3c7;color:#92400e;border-radius:8px;padding:3px 10px;font-size:12px;font-weight:700}
+#s2 .pcard.x{border-color:#fca5a5;background:#fff5f5}
+#s2 .slash{position:absolute;top:-8px;right:-8px;background:#ef4444;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
+#s2 .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:32px}
+#s2 .stat-box{background:white;border:1.5px solid #e5e7eb;border-radius:16px;padding:20px;text-align:center}
+#s2 .stat-num{font-family:'Playfair Display',serif;font-size:40px;font-weight:800;color:var(--ocean-700);line-height:1}
+#s2 .stat-label{font-size:12px;color:var(--text-3);margin-top:4px;font-weight:500}
+
+/* ── S3: Solution ── */
+#s3{background:linear-gradient(150deg,var(--ocean-900) 0%,var(--ocean-800) 100%)}
+#s3 .inner{display:flex;align-items:center;gap:72px}
+#s3 .left{flex:1.1}
+#s3 .right{flex:1}
+#s3 .h1{font-size:clamp(36px,5vw,62px);color:white}
+#s3 .h1 em{color:var(--ocean-400);font-style:italic}
+#s3 .body{color:rgba(255,255,255,.65);margin-top:20px;font-size:16px;max-width:420px}
+#s3 .act-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:28px}
+#s3 .act-pill{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:14px 10px;text-align:center}
+#s3 .act-icon{font-size:22px;margin-bottom:6px}
+#s3 .act-label{font-size:11px;color:rgba(255,255,255,.75);font-weight:600}
+#s3 .feature-list{display:flex;flex-direction:column;gap:14px}
+#s3 .feat{display:flex;align-items:flex-start;gap:12px}
+#s3 .feat-dot{width:8px;height:8px;border-radius:50%;background:var(--ocean-400);flex-shrink:0;margin-top:6px}
+#s3 .feat-text{font-size:15px;color:rgba(255,255,255,.8);line-height:1.5}
+#s3 .feat-text strong{color:white}
+
+/* ── S4: Product ── */
+#s4{background:var(--sand)}
+#s4 .inner{display:flex;align-items:center;gap:60px}
+#s4 .left{flex:1.2}
+#s4 .right{flex:1;display:flex;flex-direction:column;gap:16px}
+#s4 .h2{font-size:clamp(28px,4vw,46px);color:var(--text)}
+#s4 .h2 em{color:var(--ocean-600);font-style:italic}
+#s4 .map-mock{background:linear-gradient(135deg,#c8e4f0 0%,#a8d8e8 100%);border-radius:20px;height:320px;position:relative;overflow:hidden;border:2px solid rgba(255,255,255,.8);box-shadow:0 20px 60px rgba(0,0,0,.12)}
+#s4 .pin{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+#s4 .pin.epic{background:#ede9fe;border:2.5px solid #7c3aed;color:#6d28d9;width:40px;height:40px}
+#s4 .pin.good{background:#d1fae5;border:2.5px solid #16a34a;color:#15803d;width:36px;height:36px}
+#s4 .pin.fair{background:#fef3c7;border:2.5px solid #f59e0b;color:#92400e;width:34px;height:34px}
+#s4 .map-chip{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border:1px solid rgba(0,0,0,.08);border-radius:30px;padding:6px 14px;font-size:11px;font-weight:600;color:var(--text-2);display:flex;align-items:center;gap:6px;white-space:nowrap}
+#s4 .map-chip .blink{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:pulse 2s infinite;flex-shrink:0}
+#s4 .feat-row{display:flex;align-items:center;gap:14px;background:white;border:1.5px solid #e5e7eb;border-radius:14px;padding:14px 18px}
+#s4 .feat-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+#s4 .feat-title{font-size:14px;font-weight:700;color:var(--text)}
+#s4 .feat-desc{font-size:12px;color:var(--text-3);margin-top:1px}
+
+/* ── S5: Activities ── */
+#s5{background:white}
+#s5 .inner{display:flex;flex-direction:column;align-items:center;width:100%}
+#s5 .h2{font-size:clamp(28px,4vw,48px);color:var(--text);text-align:center;margin-bottom:8px}
+#s5 .h2 em{color:var(--ocean-600);font-style:italic}
+#s5 .sub{font-size:15px;color:var(--text-3);margin-bottom:40px;text-align:center}
+#s5 .act-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;width:100%}
+#s5 .acard{border-radius:18px;padding:22px;border:1.5px solid #f0f0f0;transition:transform .2s,box-shadow .2s}
+#s5 .acard:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(0,0,0,.08)}
+#s5 .a-icon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:12px}
+#s5 .a-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px}
+#s5 .a-desc{font-size:11px;color:var(--text-3);line-height:1.5}
+
+/* ── S6: How it works ── */
+#s6{background:linear-gradient(135deg,var(--ocean-900) 0%,#0a2a4a 100%)}
+#s6 .inner{display:flex;flex-direction:column;align-items:center;text-align:center}
+#s6 .h2{font-size:clamp(28px,4vw,50px);color:white;margin-bottom:10px}
+#s6 .h2 em{color:var(--ocean-400);font-style:italic}
+#s6 .sub{font-size:15px;color:rgba(255,255,255,.55);margin-bottom:50px}
+#s6 .steps{display:flex;align-items:flex-start;gap:0;width:100%}
+#s6 .step{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}
+#s6 .step:not(:last-child)::after{content:'→';position:absolute;right:-14px;top:28px;color:rgba(255,255,255,.25);font-size:22px}
+#s6 .step-ico{width:64px;height:64px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:16px;border:1.5px solid rgba(255,255,255,.1)}
+#s6 .step-title{font-size:14px;font-weight:700;color:white;margin-bottom:6px}
+#s6 .step-body{font-size:12px;color:rgba(255,255,255,.5);line-height:1.6;max-width:140px}
+#s6 .sources{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:44px}
+#s6 .src{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:30px;padding:6px 16px;font-size:11px;font-weight:600;color:rgba(255,255,255,.6)}
+
+/* ── S7: Market ── */
+#s7{background:var(--sand)}
+#s7 .inner{display:flex;flex-direction:column}
+#s7 .h2{font-size:clamp(28px,4vw,48px);color:var(--text);margin-bottom:8px}
+#s7 .h2 em{color:var(--ocean-600);font-style:italic}
+#s7 .sub{font-size:15px;color:var(--text-3);margin-bottom:40px}
+#s7 .market-row{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+#s7 .mbox{border-radius:20px;padding:30px;position:relative;overflow:hidden}
+#s7 .mbox.tam{background:var(--ocean-900);color:white}
+#s7 .mbox.sam{background:var(--ocean-700);color:white}
+#s7 .mbox.som{background:var(--ocean-600);color:white}
+#s7 .mbox .badge{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.65;margin-bottom:14px}
+#s7 .mbox .num{font-family:'Playfair Display',serif;font-size:clamp(36px,4vw,56px);font-weight:800;line-height:1;margin-bottom:6px}
+#s7 .mbox .label{font-size:13px;opacity:.8;margin-bottom:18px;line-height:1.4}
+#s7 .mbox .bullets{list-style:none;display:flex;flex-direction:column;gap:5px}
+#s7 .mbox .bullets li{font-size:12px;opacity:.7;display:flex;align-items:flex-start;gap:7px}
+#s7 .mbox .bullets li::before{content:'·';font-size:18px;line-height:1;flex-shrink:0;opacity:.5}
+#s7 .mbox .gfx{position:absolute;bottom:-16px;right:-16px;opacity:.06;font-size:120px;line-height:1}
+#s7 .footnote{font-size:11px;color:var(--text-3);margin-top:20px}
+
+/* ── S8: Competition ── */
+#s8{background:white}
+#s8 .inner{display:flex;flex-direction:column}
+#s8 .h2{font-size:clamp(26px,3.5vw,44px);color:var(--text);margin-bottom:36px}
+#s8 .h2 em{color:var(--ocean-600);font-style:italic}
+#s8 table{width:100%;border-collapse:separate;border-spacing:0}
+#s8 th,#s8 td{padding:13px 16px;text-align:center;font-size:13px}
+#s8 th{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);padding-bottom:8px}
+#s8 td:first-child,#s8 th:first-child{text-align:left;font-weight:600;color:var(--text);font-size:13px}
+#s8 tr:not(:last-child) td{border-bottom:1px solid #f3f4f6}
+#s8 .ours{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:12px}
+#s8 .ours td:first-child{font-weight:800;color:var(--ocean-700)}
+#s8 .yes{color:#16a34a;font-weight:700;font-size:16px}
+#s8 .no{color:#d1d5db;font-weight:700;font-size:16px}
+#s8 .part{color:#f59e0b;font-weight:700;font-size:14px}
+#s8 .win-badge{display:inline-block;background:#dcfce7;color:#15803d;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px}
+
+/* ── S9: Business Model ── */
+#s9{background:linear-gradient(150deg,var(--ocean-900) 0%,#0a2a4a 100%)}
+#s9 .inner{display:flex;flex-direction:column}
+#s9 .h2{font-size:clamp(28px,4vw,50px);color:white;margin-bottom:8px}
+#s9 .h2 em{color:var(--ocean-400);font-style:italic}
+#s9 .sub{font-size:15px;color:rgba(255,255,255,.5);margin-bottom:40px}
+#s9 .rev-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+#s9 .rbox{background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.1);border-radius:18px;padding:24px}
+#s9 .rbox .pct{font-family:'Playfair Display',serif;font-size:40px;font-weight:800;color:var(--ocean-400);line-height:1;margin-bottom:8px}
+#s9 .rbox .rtitle{font-size:15px;font-weight:700;color:white;margin-bottom:6px}
+#s9 .rbox .rbody{font-size:12px;color:rgba(255,255,255,.5);line-height:1.6}
+#s9 .proj-bar{margin-top:36px;background:rgba(255,255,255,.05);border-radius:12px;padding:20px 24px}
+#s9 .proj-row{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+#s9 .proj-row:last-child{margin-bottom:0}
+#s9 .proj-year{font-size:12px;font-weight:700;color:rgba(255,255,255,.5);width:48px;flex-shrink:0}
+#s9 .proj-track{flex:1;background:rgba(255,255,255,.08);border-radius:30px;height:10px;overflow:hidden}
+#s9 .proj-fill{height:100%;border-radius:30px;background:linear-gradient(90deg,var(--ocean-400),var(--ocean-600))}
+#s9 .proj-val{font-size:12px;font-weight:700;color:white;width:56px;text-align:right;flex-shrink:0}
+
+/* ── S10: Traction ── */
+#s10{background:var(--sand)}
+#s10 .inner{display:flex;gap:60px;align-items:center}
+#s10 .left{flex:1}
+#s10 .right{flex:1.2;display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+#s10 .h2{font-size:clamp(28px,4vw,46px);color:var(--text);margin-bottom:16px}
+#s10 .h2 em{color:var(--ocean-600);font-style:italic}
+#s10 .body{color:var(--text-2);font-size:15px;line-height:1.65;margin-bottom:28px}
+#s10 .tbox{background:white;border:1.5px solid #e5e7eb;border-radius:16px;padding:22px}
+#s10 .tnum{font-family:'Playfair Display',serif;font-size:38px;font-weight:800;color:var(--ocean-700);line-height:1}
+#s10 .tlabel{font-size:12px;color:var(--text-3);margin-top:4px;font-weight:500}
+#s10 .tgrowth{font-size:12px;font-weight:700;color:#16a34a;margin-top:4px}
+#s10 .milestone-list{display:flex;flex-direction:column;gap:10px}
+#s10 .ms{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-2)}
+#s10 .ms-dot{width:10px;height:10px;border-radius:50%;background:var(--ocean-600);flex-shrink:0}
+
+/* ── S11: Roadmap ── */
+#s11{background:white}
+#s11 .inner{display:flex;flex-direction:column}
+#s11 .h2{font-size:clamp(28px,4vw,46px);color:var(--text);margin-bottom:8px}
+#s11 .h2 em{color:var(--ocean-600);font-style:italic}
+#s11 .sub{font-size:15px;color:var(--text-3);margin-bottom:42px}
+#s11 .timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;position:relative}
+#s11 .timeline::before{content:'';position:absolute;top:32px;left:5%;right:5%;height:2px;background:linear-gradient(90deg,var(--ocean-200),var(--ocean-600),var(--ocean-200));z-index:0}
+#s11 .phase{background:var(--sand);border:1.5px solid #e5e7eb;border-radius:18px;padding:22px;position:relative;z-index:1}
+#s11 .phase.now{background:var(--ocean-900);border-color:var(--ocean-700)}
+#s11 .phase-dot{width:20px;height:20px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;border:2.5px solid}
+#s11 .phase.now .phase-dot{background:var(--ocean-400);border-color:var(--ocean-400);color:var(--ocean-900)}
+#s11 .phase:not(.now) .phase-dot{background:white;border-color:var(--ocean-600);color:var(--ocean-600)}
+#s11 .phase-q{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;text-align:center}
+#s11 .phase.now .phase-q{color:var(--ocean-400)}
+#s11 .phase:not(.now) .phase-q{color:var(--text-3)}
+#s11 .phase-title{font-size:15px;font-weight:700;margin-bottom:10px;text-align:center}
+#s11 .phase.now .phase-title{color:white}
+#s11 .phase:not(.now) .phase-title{color:var(--text)}
+#s11 .phase-items{list-style:none;display:flex;flex-direction:column;gap:5px}
+#s11 .phase-items li{font-size:11px;display:flex;align-items:flex-start;gap:7px}
+#s11 .phase.now .phase-items li{color:rgba(255,255,255,.65)}
+#s11 .phase:not(.now) .phase-items li{color:var(--text-3)}
+#s11 .phase-items li::before{content:'→';flex-shrink:0;opacity:.5}
+
+/* ── S12: Ask ── */
+#s12{background:linear-gradient(135deg,var(--ocean-900) 0%,#061828 100%)}
+#s12 .inner{display:flex;flex-direction:column;align-items:center;text-align:center}
+#s12 .h1{font-size:clamp(36px,5.5vw,80px);color:white;margin-bottom:16px}
+#s12 .h1 em{color:var(--ocean-400);font-style:italic}
+#s12 .sub{font-size:18px;color:rgba(255,255,255,.6);margin-bottom:52px;max-width:500px;line-height:1.6}
+#s12 .use-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:48px;width:100%}
+#s12 .ubox{background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.1);border-radius:16px;padding:20px}
+#s12 .upct{font-family:'Playfair Display',serif;font-size:32px;font-weight:800;color:var(--ocean-400);line-height:1;margin-bottom:6px}
+#s12 .utitle{font-size:13px;font-weight:700;color:white;margin-bottom:4px}
+#s12 .ubody{font-size:11px;color:rgba(255,255,255,.45);line-height:1.5}
+#s12 .cta-row{display:flex;align-items:center;gap:16px}
+#s12 .cta-main{background:var(--ocean-600);color:white;border:none;border-radius:14px;padding:16px 40px;font-size:16px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .2s}
+#s12 .cta-main:hover{opacity:.88}
+#s12 .cta-sec{background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:16px 32px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+#s12 .founder{margin-top:40px;font-size:13px;color:rgba(255,255,255,.35)}
+#s12 .founder a{color:rgba(255,255,255,.6);text-decoration:none;font-weight:600}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── utility ── */
+.sep{width:48px;height:3px;border-radius:2px;background:var(--ocean-600);margin:16px 0 24px}
+.sep.w{background:rgba(255,255,255,.25)}
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- ── SLIDE 1: COVER ── -->
+<div class="slide active" id="s1">
+  <svg class="wave-bg" viewBox="0 0 1440 320" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <path fill="white" d="M0,160L40,154.7C80,149,160,139,240,160C320,181,400,235,480,218.7C560,203,640,117,720,101.3C800,85,880,139,960,160C1040,181,1120,171,1200,154.7C1280,139,1360,117,1400,106.7L1440,96L1440,320L1400,320C1360,320,1280,320,1200,320C1120,320,1040,320,960,320C880,320,800,320,720,320C640,320,560,320,480,320C400,320,320,320,240,320C160,320,80,320,40,320L0,320Z"/>
+    <path fill="white" opacity="0.5" d="M0,224L48,213.3C96,203,192,181,288,192C384,203,480,245,576,250.7C672,256,768,224,864,208C960,192,1056,192,1152,208C1248,224,1344,256,1392,272L1440,288L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"/>
+  </svg>
+  <div class="inner">
+    <div class="logo">Wave<span>Find</span></div>
+    <div class="live"><span class="dot2"></span> Live on wavefinder.app · California · 200+ spots</div>
+    <div class="h1">One app.<br><em>Every water activity.</em></div>
+    <div class="sub">The unified intelligence platform for water sports — real-time conditions, spot discovery, and forecasts for everything you do on the water.</div>
+    <div class="chips">
+      <div class="chip">🏄 Surfing</div>
+      <div class="chip">🎣 Fishing</div>
+      <div class="chip">⛵ Boating</div>
+      <div class="chip">🤿 Spearfishing</div>
+      <div class="chip">🛥 Jet Skiing</div>
+      <div class="chip">🪂 Parasailing</div>
+      <div class="chip">🏊 Bodysurfing</div>
+      <div class="chip">🏄 Paddleboarding</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 2: PROBLEM ── -->
+<div class="slide" id="s2">
+  <div class="inner" style="padding-top:20px">
+    <div class="tag" style="background:#fee2e2;color:#b91c1c">The Problem</div>
+    <div class="h2" style="font-size:clamp(26px,4vw,46px);color:var(--text);max-width:640px">Water lovers are juggling <em style="color:var(--ocean-700);font-style:italic">4 apps</em> for a single beach day</div>
+    <div class="sep"></div>
+    <div class="cards">
+      <div class="pcard x">
+        <div class="slash">✕</div>
+        <div class="app-name">Surfline</div>
+        <div class="app-use">Surf forecasts only</div>
+        <div class="price">$107/year</div>
+      </div>
+      <div class="pcard x">
+        <div class="slash">✕</div>
+        <div class="app-name">Fishbrain</div>
+        <div class="app-use">Fishing logs only</div>
+        <div class="price">$70/year</div>
+      </div>
+      <div class="pcard x">
+        <div class="slash">✕</div>
+        <div class="app-name">Navionics</div>
+        <div class="app-use">Boating charts only</div>
+        <div class="price">$35/year</div>
+      </div>
+      <div class="pcard x">
+        <div class="slash">✕</div>
+        <div class="app-name">Weather App</div>
+        <div class="app-use">Generic — not water-aware</div>
+        <div class="price">Free but useless</div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-num">$212</div>
+        <div class="stat-label">avg annual spend on<br>fragmented water apps</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">4+</div>
+        <div class="stat-label">apps the avg water sports<br>enthusiast installs</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">0</div>
+        <div class="stat-label">platforms that unify all<br>water activities today</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 3: SOLUTION ── -->
+<div class="slide" id="s3">
+  <div class="inner">
+    <div class="left">
+      <div class="tag" style="background:rgba(77,191,202,.15);color:var(--ocean-400)">The Solution</div>
+      <div class="h1">One app for<br><em>every water</em><br>activity.</div>
+      <div class="body">WaveFind unifies real-time ocean conditions, spot intelligence, and activity-specific forecasts into one free platform.</div>
+      <div class="act-grid" style="margin-top:28px">
+        <div class="act-pill"><div class="act-icon">🏄</div><div class="act-label">Surfing</div></div>
+        <div class="act-pill"><div class="act-icon">🎣</div><div class="act-label">Fishing</div></div>
+        <div class="act-pill"><div class="act-icon">⛵</div><div class="act-label">Boating</div></div>
+        <div class="act-pill"><div class="act-icon">🛥</div><div class="act-label">Jet Ski</div></div>
+        <div class="act-pill"><div class="act-icon">🤿</div><div class="act-label">Spearfishing</div></div>
+        <div class="act-pill"><div class="act-icon">🏊</div><div class="act-label">Bodysurf</div></div>
+        <div class="act-pill"><div class="act-icon">🪂</div><div class="act-label">Parasailing</div></div>
+        <div class="act-pill"><div class="act-icon">🏄</div><div class="act-label">Paddleboard</div></div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="feature-list">
+        <div class="feat"><div class="feat-dot"></div><div class="feat-text"><strong>Live conditions map</strong> — colored pins show exactly what's firing right now at every spot</div></div>
+        <div class="feat"><div class="feat-dot"></div><div class="feat-text"><strong>Activity-specific forecasts</strong> — wave height for surfers, wind windows for parasailers, tides for anglers</div></div>
+        <div class="feat"><div class="feat-dot"></div><div class="feat-text"><strong>7-day outlook</strong> — best time windows, gear recommendations, tidal charts</div></div>
+        <div class="feat"><div class="feat-dot"></div><div class="feat-text"><strong>Session logging</strong> — track every trip, conditions, gear, and catches</div></div>
+        <div class="feat"><div class="feat-dot"></div><div class="feat-text"><strong>Offline PWA</strong> — works with no signal, right from the parking lot</div></div>
+        <div class="feat"><div class="feat-dot"></div><div class="feat-text"><strong>Free forever</strong> — same NOAA data the paid apps use, at zero cost</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 4: PRODUCT ── -->
+<div class="slide" id="s4">
+  <div class="inner">
+    <div class="left">
+      <div class="tag" style="background:#dbeafe;color:#1b7fcb">Product</div>
+      <div class="h2">A live map for every<br><em>water activity</em></div>
+      <div class="sep"></div>
+      <div class="map-mock">
+        <div class="map-chip"><span class="blink"></span> Live conditions</div>
+        <!-- Fake pins -->
+        <div class="pin epic" style="top:28%;left:22%">EPIC</div>
+        <div class="pin good" style="top:45%;left:50%">4ft</div>
+        <div class="pin good" style="top:62%;left:32%">Good</div>
+        <div class="pin fair" style="top:38%;left:68%">3ft</div>
+        <div class="pin fair" style="top:70%;left:72%">Fair</div>
+        <div class="pin" style="background:#fee2e2;border:2.5px solid #ef4444;color:#b91c1c;width:34px;height:34px;top:55%;left:14%">Poor</div>
+        <!-- fake water lines -->
+        <svg style="position:absolute;inset:0;width:100%;height:100%;opacity:.18" viewBox="0 0 400 320" preserveAspectRatio="none">
+          <path d="M0,180 C80,160 160,200 240,175 C320,150 360,185 400,170" stroke="#1b7fcb" stroke-width="2" fill="none"/>
+          <path d="M0,220 C60,200 140,240 200,220 C270,198 340,230 400,215" stroke="#1b7fcb" stroke-width="1.5" fill="none"/>
+        </svg>
+      </div>
+    </div>
+    <div class="right">
+      <div class="feat-row">
+        <div class="feat-icon" style="background:#dbeafe">🌊</div>
+        <div><div class="feat-title">Real-time conditions</div><div class="feat-desc">NOAA buoy data updated every 30 min</div></div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-icon" style="background:#dcfce7">📅</div>
+        <div><div class="feat-title">7-day forecast</div><div class="feat-desc">Wave height, wind, swell, tide charts</div></div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-icon" style="background:#fef3c7">🎯</div>
+        <div><div class="feat-title">Best time windows</div><div class="feat-desc">AI-scored optimal sessions per day</div></div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-icon" style="background:#ede9fe">📍</div>
+        <div><div class="feat-title">200+ spots</div><div class="feat-desc">Parking, access, webcams, difficulty</div></div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-icon" style="background:#fce7f3">📱</div>
+        <div><div class="feat-title">PWA — works offline</div><div class="feat-desc">Install like an app, zero data needed</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 5: ACTIVITIES ── -->
+<div class="slide" id="s5">
+  <div class="inner">
+    <div class="h2">Built for every activity <em>on the water</em></div>
+    <div class="sub">One data layer powers activity-specific conditions, spot filters, and forecasts</div>
+    <div class="act-grid">
+      <div class="acard" style="background:#eff6ff;border-color:#bfdbfe"><div class="a-icon" style="background:#dbeafe">🏄</div><div class="a-name">Surfing</div><div class="a-desc">Wave height, swell period, wind & tide forecasts with best time windows</div></div>
+      <div class="acard" style="background:#f0fdf4;border-color:#bbf7d0"><div class="a-icon" style="background:#dcfce7">🎣</div><div class="a-name">Fishing</div><div class="a-desc">Tidal charts, water temp, bait fish windows and current forecasts</div></div>
+      <div class="acard" style="background:#eff6ff;border-color:#bfdbfe"><div class="a-icon" style="background:#bfdbfe">⛵</div><div class="a-name">Boating</div><div class="a-desc">Wind speed windows, marina access, depth charts and safe weather days</div></div>
+      <div class="acard" style="background:#faf5ff;border-color:#ddd6fe"><div class="a-icon" style="background:#ede9fe">🛥</div><div class="a-name">Jet Skiing</div><div class="a-desc">Calm water zones, chop forecasts, launch ramps and wind conditions</div></div>
+      <div class="acard" style="background:#ecfeff;border-color:#a5f3fc"><div class="a-icon" style="background:#cffafe">🤿</div><div class="a-name">Spearfishing</div><div class="a-desc">Underwater visibility, current speed, water clarity and depth data</div></div>
+      <div class="acard" style="background:#f0fdfa;border-color:#99f6e4"><div class="a-icon" style="background:#ccfbf1">🏊</div><div class="a-name">Bodysurfing</div><div class="a-desc">Shore break forecasts, wave steepness, sand bottom and shore angle</div></div>
+      <div class="acard" style="background:#fffbeb;border-color:#fde68a"><div class="a-icon" style="background:#fef3c7">🪂</div><div class="a-name">Parasailing</div><div class="a-desc">Wind speed windows, gust alerts and optimal launch beach conditions</div></div>
+      <div class="acard" style="background:#fdf4ff;border-color:#f5d0fe"><div class="a-icon" style="background:#fce7f3">🏄</div><div class="a-name">Paddleboarding</div><div class="a-desc">Flat water conditions, tidal currents and scenic coastal routes</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 6: HOW IT WORKS ── -->
+<div class="slide" id="s6">
+  <div class="inner">
+    <div class="tag" style="background:rgba(77,191,202,.15);color:var(--ocean-400)">Technology</div>
+    <div class="h2">How it works</div>
+    <div class="sub">Enterprise-grade ocean data, delivered to a free mobile web app</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-ico" style="background:rgba(27,127,203,.15)">📡</div>
+        <div class="step-title">Data Ingestion</div>
+        <div class="step-body">NOAA buoys, Open-Meteo Marine API, NOAA tidal stations — updated every 30 min</div>
+      </div>
+      <div class="step">
+        <div class="step-ico" style="background:rgba(77,191,202,.15)">⚙️</div>
+        <div class="step-title">Processing</div>
+        <div class="step-body">Wave power scoring, wind quality analysis, tide window computation, activity-specific ratings</div>
+      </div>
+      <div class="step">
+        <div class="step-ico" style="background:rgba(27,127,203,.15)">🗺</div>
+        <div class="step-title">Spot Intelligence</div>
+        <div class="step-body">200+ spots with facingDirection, bottomType, parking, webcams, nearby breaks</div>
+      </div>
+      <div class="step">
+        <div class="step-ico" style="background:rgba(77,191,202,.15)">📱</div>
+        <div class="step-title">Delivered to You</div>
+        <div class="step-body">PWA — instant load, offline cache, no app store, works on any device</div>
+      </div>
+    </div>
+    <div class="sources">
+      <div class="src">NOAA NDBC Buoys</div>
+      <div class="src">Open-Meteo Marine API</div>
+      <div class="src">NOAA CO-OPS Tides</div>
+      <div class="src">OpenStreetMap</div>
+      <div class="src">AIS Vessel Data</div>
+      <div class="src">ESRI Ocean Charts</div>
+      <div class="src">Prisma + Vercel Edge</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 7: MARKET ── -->
+<div class="slide" id="s7">
+  <div class="inner">
+    <div class="tag" style="background:#dbeafe;color:#1b7fcb">Market Opportunity</div>
+    <div class="h2">A <em>$310B global market</em><br>with no dominant platform</div>
+    <div class="sep"></div>
+    <div class="market-row">
+      <div class="mbox tam">
+        <div class="badge">TAM — Total Addressable Market</div>
+        <div class="num">$310B</div>
+        <div class="label">Global water recreation<br>industry (US: $107B)</div>
+        <ul class="bullets">
+          <li>Recreational fishing: $46B (US)</li>
+          <li>Recreational boating: $52B (US)</li>
+          <li>Water sports: $8B+ (US)</li>
+          <li>150M+ active participants in US</li>
+        </ul>
+        <div class="gfx">🌊</div>
+      </div>
+      <div class="mbox sam">
+        <div class="badge">SAM — Serviceable Market</div>
+        <div class="num">$4.2B</div>
+        <div class="label">Digital planning tools for<br>water activity participants</div>
+        <ul class="bullets">
+          <li>42M app users in English-speaking coastal markets</li>
+          <li>$38 avg annual app spend per user</li>
+          <li>+ $2.6B B2B charter/guide/marina layer</li>
+        </ul>
+        <div class="gfx">📱</div>
+      </div>
+      <div class="mbox som">
+        <div class="badge">SOM — 3-Year Target</div>
+        <div class="num">$85M</div>
+        <div class="label">Realistic capture by<br>end of Year 3</div>
+        <ul class="bullets">
+          <li>Year 1: 120K users → $1.4M</li>
+          <li>Year 2: 600K users → $10.8M</li>
+          <li>Year 3: 2.5M users → $85M</li>
+        </ul>
+        <div class="gfx">🎯</div>
+      </div>
+    </div>
+    <div class="footnote">Sources: ASA (American Sportfishing Association), NMMA (National Marine Manufacturers Association), Outdoor Foundation 2023</div>
+  </div>
+</div>
+
+<!-- ── SLIDE 8: COMPETITION ── -->
+<div class="slide" id="s8">
+  <div class="inner">
+    <div class="tag" style="background:#dbeafe;color:#1b7fcb">Competitive Landscape</div>
+    <div class="h2">No one owns <em>the all-water platform</em></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Platform</th>
+          <th>Multi-Activity</th>
+          <th>Free Tier</th>
+          <th>Live Conditions</th>
+          <th>Offline PWA</th>
+          <th>Session Log</th>
+          <th>B2B Listings</th>
+          <th>Raised</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="ours">
+          <td>WaveFind <span class="win-badge">Us</span></td>
+          <td class="yes">✓</td>
+          <td class="yes">✓</td>
+          <td class="yes">✓</td>
+          <td class="yes">✓</td>
+          <td class="yes">✓</td>
+          <td class="yes">Roadmap</td>
+          <td style="font-weight:700;color:var(--ocean-700)">Seed</td>
+        </tr>
+        <tr>
+          <td>Surfline</td>
+          <td class="no">✕</td>
+          <td class="no">✕</td>
+          <td class="yes">✓</td>
+          <td class="no">✕</td>
+          <td class="no">✕</td>
+          <td class="no">✕</td>
+          <td>$20M+</td>
+        </tr>
+        <tr>
+          <td>Fishbrain</td>
+          <td class="no">✕</td>
+          <td class="part">Partial</td>
+          <td class="no">✕</td>
+          <td class="no">✕</td>
+          <td class="yes">✓</td>
+          <td class="no">✕</td>
+          <td>$82M</td>
+        </tr>
+        <tr>
+          <td>Navionics</td>
+          <td class="no">✕</td>
+          <td class="no">✕</td>
+          <td class="part">Partial</td>
+          <td class="part">Partial</td>
+          <td class="no">✕</td>
+          <td class="no">✕</td>
+          <td>Acq. Garmin</td>
+        </tr>
+        <tr>
+          <td>Windy</td>
+          <td class="part">Weather only</td>
+          <td class="yes">✓</td>
+          <td class="part">Partial</td>
+          <td class="no">✕</td>
+          <td class="no">✕</td>
+          <td class="no">✕</td>
+          <td>$—</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:24px;font-size:13px;color:var(--text-3)">
+      Fishbrain raised <strong style="color:var(--text)">$82M</strong> for fishing only. Navionics acquired by Garmin for <strong style="color:var(--text)">$42M</strong> for boating only. <strong style="color:var(--ocean-700)">The all-water platform hasn't been built yet.</strong>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 9: BUSINESS MODEL ── -->
+<div class="slide" id="s9">
+  <div class="inner">
+    <div class="tag" style="background:rgba(77,191,202,.15);color:var(--ocean-400)">Business Model</div>
+    <div class="h2">Multiple revenue streams,<br><em>starting free</em></div>
+    <div class="sub">Freemium drives scale — monetization layers on top</div>
+    <div class="rev-grid">
+      <div class="rbox">
+        <div class="pct">45%</div>
+        <div class="rtitle">Freemium Subscriptions</div>
+        <div class="rbody">Free tier with live map. Pro at $5.99–9.99/mo unlocks extended forecasts, multiple spots, advanced analytics, and catch/session history.</div>
+      </div>
+      <div class="rbox">
+        <div class="pct">30%</div>
+        <div class="rtitle">B2B Guide & Marina Listings</div>
+        <div class="rbody">Charter boats, surf schools, fishing guides, and marinas pay $99–299/mo for verified listings, booking links, and featured placement on the map.</div>
+      </div>
+      <div class="rbox">
+        <div class="pct">15%</div>
+        <div class="rtitle">Gear Affiliate & Brands</div>
+        <div class="rbody">Gear recommendations tied to conditions. Wetsuit for cold water, rod for the season. Commission on purchases via brand partnerships.</div>
+      </div>
+      <div class="rbox">
+        <div class="pct">10%</div>
+        <div class="rtitle">Data Licensing</div>
+        <div class="rbody">Anonymized activity heatmaps, spot popularity trends, and seasonal condition data licensed to insurance companies, marine tourism boards, and researchers.</div>
+      </div>
+    </div>
+    <div class="proj-bar">
+      <div class="proj-row">
+        <div class="proj-year">Yr 1</div>
+        <div class="proj-track"><div class="proj-fill" style="width:1.6%"></div></div>
+        <div class="proj-val">$1.4M</div>
+      </div>
+      <div class="proj-row">
+        <div class="proj-year">Yr 2</div>
+        <div class="proj-track"><div class="proj-fill" style="width:12.7%"></div></div>
+        <div class="proj-val">$10.8M</div>
+      </div>
+      <div class="proj-row">
+        <div class="proj-year">Yr 3</div>
+        <div class="proj-track"><div class="proj-fill" style="width:100%"></div></div>
+        <div class="proj-val">$85M</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 10: TRACTION ── -->
+<div class="slide" id="s10">
+  <div class="inner">
+    <div class="left">
+      <div class="tag" style="background:#dcfce7;color:#15803d">Traction</div>
+      <div class="h2">Built, live, and<br><em>already growing</em></div>
+      <div class="sep"></div>
+      <div class="body">WaveFind is live at wavefinder.app right now — not a prototype. Real data, real spots, real users. We built the entire data pipeline, PWA, and forecast engine from scratch.</div>
+      <div class="milestone-list">
+        <div class="ms"><div class="ms-dot"></div>200+ California surf spots seeded with parking, webcams & buoy links</div>
+        <div class="ms"><div class="ms-dot"></div>Live NOAA + Open-Meteo data pipeline, 30-min refresh cycle</div>
+        <div class="ms"><div class="ms-dot"></div>PWA installed, session logging, gear tracker — all working</div>
+        <div class="ms"><div class="ms-dot"></div>Multi-activity pivot code shipped this week</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="tbox">
+        <div class="tnum">200+</div>
+        <div class="tlabel">Surf spots live</div>
+        <div class="tgrowth">↑ Expanding to all water spots</div>
+      </div>
+      <div class="tbox">
+        <div class="tnum">8</div>
+        <div class="tlabel">Water activities supported</div>
+        <div class="tgrowth">↑ Launched this week</div>
+      </div>
+      <div class="tbox">
+        <div class="tnum">7</div>
+        <div class="tlabel">Live data sources integrated</div>
+        <div class="tgrowth">↑ NOAA, Open-Meteo, ESRI</div>
+      </div>
+      <div class="tbox">
+        <div class="tnum">$0</div>
+        <div class="tlabel">Data cost (all public APIs)</div>
+        <div class="tgrowth">↑ 90% gross margin potential</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 11: ROADMAP ── -->
+<div class="slide" id="s11">
+  <div class="inner">
+    <div class="tag" style="background:#dbeafe;color:#1b7fcb">Roadmap</div>
+    <div class="h2">From California coast<br>to <em>global water platform</em></div>
+    <div class="sub">Phased expansion across activities, geographies, and monetization layers</div>
+    <div class="timeline">
+      <div class="phase now">
+        <div class="phase-dot">✓</div>
+        <div class="phase-q">Now · Q2 2026</div>
+        <div class="phase-title">Multi-Activity Launch</div>
+        <ul class="phase-items">
+          <li>8 activity types live</li>
+          <li>Activity filter & spot tags</li>
+          <li>Activity hub page</li>
+          <li>200+ spots seeded</li>
+          <li>Error pages + PWA icons</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-dot">2</div>
+        <div class="phase-q">Q3 2026</div>
+        <div class="phase-title">US Coastal Expansion</div>
+        <ul class="phase-items">
+          <li>East Coast + Gulf spots</li>
+          <li>Fishing-specific data layer</li>
+          <li>AIS vessel integration</li>
+          <li>Pro subscription launch</li>
+          <li>iOS / Android app wrappers</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-dot">3</div>
+        <div class="phase-q">Q4 2026</div>
+        <div class="phase-title">B2B Marketplace</div>
+        <ul class="phase-items">
+          <li>Charter boat listings</li>
+          <li>Surf/fishing guide bookings</li>
+          <li>Marina finder + fuel</li>
+          <li>Gear affiliate launch</li>
+          <li>Community catch/session feed</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-dot">4</div>
+        <div class="phase-q">2027</div>
+        <div class="phase-title">Global Scale</div>
+        <ul class="phase-items">
+          <li>Australia, Europe, Hawaii</li>
+          <li>Data licensing program</li>
+          <li>AI trip planner</li>
+          <li>Brand partnership platform</li>
+          <li>Series A raise</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SLIDE 12: ASK ── -->
+<div class="slide" id="s12">
+  <div class="inner">
+    <div class="tag" style="background:rgba(77,191,202,.15);color:var(--ocean-400);margin-bottom:24px">The Ask</div>
+    <div class="h1">Raising <em>$1.2M</em><br>seed round</div>
+    <div class="sub">To expand to all US coastlines, launch Pro subscriptions, and ship the B2B marketplace</div>
+    <div class="use-grid">
+      <div class="ubox">
+        <div class="upct">40%</div>
+        <div class="utitle">Product & Engineering</div>
+        <div class="ubody">Fishing data layer, AIS integration, iOS/Android wrappers, activity-specific features</div>
+      </div>
+      <div class="ubox">
+        <div class="upct">25%</div>
+        <div class="utitle">Spot Data Expansion</div>
+        <div class="ubody">East Coast, Gulf, Hawaii — 1,000+ total spots with full activity tagging</div>
+      </div>
+      <div class="ubox">
+        <div class="upct">20%</div>
+        <div class="utitle">Growth & Acquisition</div>
+        <div class="ubody">Creator partnerships, fishing forums, boating communities, targeted coastal ads</div>
+      </div>
+      <div class="ubox">
+        <div class="upct">15%</div>
+        <div class="utitle">Operations & Legal</div>
+        <div class="ubody">Team hire, infrastructure scaling, IP protection, compliance</div>
+      </div>
+    </div>
+    <div class="cta-row">
+      <button class="cta-main" onclick="window.open('https://wavefinder.app','_blank')">See the live product →</button>
+      <button class="cta-sec">rahil@wavefinder.app</button>
+    </div>
+    <div class="founder">Built by <a href="https://www.linkedin.com/in/rmamujee" target="_blank">Rahil Mamujee</a> · linkedin.com/in/rmamujee</div>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<!-- ── Nav controls ── -->
+<div class="nav" id="nav">
+  <button class="nav-btn" id="prevBtn" onclick="goTo(current-1)">‹</button>
+  <div class="nav-dots" id="dots"></div>
+  <button class="nav-btn" id="nextBtn" onclick="goTo(current+1)">›</button>
+  <div class="slide-num" id="slideNum">1 / 12</div>
+</div>
+
+<script>
+const TOTAL = 12
+let current = 0
+
+const slides = document.querySelectorAll('.slide')
+const dotsContainer = document.getElementById('dots')
+const slideNum = document.getElementById('slideNum')
+
+// Build dots
+for (let i = 0; i < TOTAL; i++) {
+  const d = document.createElement('button')
+  d.className = 'dot' + (i === 0 ? ' active' : '')
+  d.onclick = () => goTo(i)
+  dotsContainer.appendChild(d)
+}
+
+function goTo(n) {
+  n = Math.max(0, Math.min(TOTAL - 1, n))
+  slides[current].classList.remove('active')
+  dotsContainer.children[current].classList.remove('active')
+  current = n
+  slides[current].classList.add('active')
+  dotsContainer.children[current].classList.add('active')
+  slideNum.textContent = (current + 1) + ' / ' + TOTAL
+}
+
+// Keyboard nav
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); goTo(current + 1) }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); goTo(current - 1) }
+})
+
+// Click anywhere on slide (not on nav) to advance
+document.getElementById('deck').addEventListener('click', e => {
+  if (!e.target.closest('.nav')) goTo(current + 1)
+})
+</script>
+</body>
+</html>
