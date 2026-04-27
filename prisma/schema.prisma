@@ -23,6 +23,7 @@ model SurfSpot {
   webcamUrl         String?
   webcamType        String?
   parkingOptions    Json?
+  activities        String[] @default([])
   createdAt         DateTime @default(now())
 
   @@index([region])

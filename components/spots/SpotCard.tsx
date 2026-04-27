@@ -5,6 +5,9 @@ import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight } from '@/lib/units'
+import { Icon } from '@/components/ui/Icon'
+import type { WFIconName } from '@/components/ui/Icon'
+import { ACTIVITY_META, type WaterActivity } from '@/types/spot'
 
 interface Props {
   spot: SurfSpot
@@ -68,6 +71,21 @@ export function SpotCard({ spot, rating, waveHeight }: Props) {
           </span>
         )}
       </div>
+      {spot.activities && spot.activities.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {spot.activities.slice(0, 3).map((act) => {
+            const meta = ACTIVITY_META[act as WaterActivity]
+            if (!meta) return null
+            return (
+              <span key={act} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+                style={{ background: meta.bg, color: meta.color }}>
+                <Icon name={meta.icon as WFIconName} size={10} />
+                {meta.label}
+              </span>
+            )
+          })}
+        </div>
+      )}
     </Link>
   )
 }
