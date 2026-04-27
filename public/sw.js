@@ -56,3 +56,18 @@ self.addEventListener('fetch', (e) => {
       .catch(() => caches.match(e.request))
   )
 })
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close()
+  const tag = e.notification.tag ?? ''
+  const slug = tag.startsWith('swell-') ? tag.slice(6) : null
+  if (!slug) return
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const target = `/spots/${slug}`
+      const existing = clients.find((c) => c.url.includes(target))
+      if (existing) return existing.focus()
+      return self.clients.openWindow(target)
+    })
+  )
+})
