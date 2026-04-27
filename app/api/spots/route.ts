@@ -22,7 +22,6 @@ export async function GET(req: Request) {
     .filter((s) => /^[a-z0-9]{20,36}$/i.test(s))
     .slice(0, 50)
   const withConditions = searchParams.get('withConditions') === 'true'
-  const activity = searchParams.get('activity')
 
   const spots = await prisma.surfSpot.findMany({
     where: {
@@ -35,7 +34,6 @@ export async function GET(req: Request) {
         ]} : {},
         difficulty ? { difficulty } : {},
         country ? { country } : {},
-        ...(activity ? [{ OR: [{ activities: { has: activity } }, { activities: { isEmpty: true } }] }] : []),
       ],
     },
     orderBy: { name: 'asc' },

@@ -8,9 +8,6 @@ import { SpotCard } from '@/components/spots/SpotCard'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
-import { Icon } from '@/components/ui/Icon'
-import type { WFIconName } from '@/components/ui/Icon'
-import { ACTIVITY_META, type WaterActivity } from '@/types/spot'
 import {
   REGION_HIERARCHY,
   getStatesForCountry,
@@ -90,7 +87,6 @@ function geoAutoSelect(
 export default function SpotsPage() {
   const [search, setSearch]           = useState('')
   const [difficulty, setDifficulty]   = useState('')
-  const [activityFilter, setActivityFilter] = useState<string>('')
   const [selectedCountry, setSelectedCountry] = useState('')
   const [selectedState, setSelectedState]     = useState('')
   const [selectedRegion, setSelectedRegion]   = useState('')
@@ -118,8 +114,6 @@ export default function SpotsPage() {
     }
     const country = searchParams.get('country')
     if (country) setSelectedCountry(country)
-    const activity = searchParams.get('activity')
-    if (activity) setActivityFilter(activity)
   }, [searchParams])
 
   // Fetch distinct countries from DB
@@ -161,11 +155,10 @@ export default function SpotsPage() {
   if (effectiveSearch)    apiParams.set('q', effectiveSearch)
   if (difficulty)         apiParams.set('difficulty', difficulty)
   if (selectedCountry)    apiParams.set('country', selectedCountry)
-  if (activityFilter)     apiParams.set('activity', activityFilter)
 
   // Stage 1: base spots
   const { data: baseSpots = [], isLoading } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots', effectiveSearch, difficulty, selectedCountry, activityFilter],
+    queryKey: ['spots', effectiveSearch, difficulty, selectedCountry],
     queryFn: () => fetch(`/api/spots?${apiParams}`).then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
@@ -177,7 +170,7 @@ export default function SpotsPage() {
   const condParams = new URLSearchParams(apiParams)
   condParams.set('withConditions', 'true')
   const { data: conditionData } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry, activityFilter],
+    queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry],
     queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
@@ -220,30 +213,6 @@ export default function SpotsPage() {
         className="shrink-0 px-5 py-3"
         style={{ borderBottom: '1px solid var(--border)', background: 'white' }}
       >
-        {/* Activity filter */}
-        <div className="mx-auto max-w-7xl mb-3">
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
-            {(['', 'surfing', 'fishing', 'boating', 'jetski', 'spearfishing', 'bodysurfing', 'parasailing', 'paddleboarding'] as const).map((act) => {
-              const meta = act ? ACTIVITY_META[act as WaterActivity] : null
-              const isActive = activityFilter === act
-              return (
-                <button
-                  key={act || 'all'}
-                  onClick={() => setActivityFilter(act)}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0"
-                  style={{
-                    background: isActive ? (meta?.color ?? 'var(--ocean-600)') : 'white',
-                    color: isActive ? 'white' : 'var(--text-2)',
-                    border: `1.5px solid ${isActive ? (meta?.color ?? 'var(--ocean-600)') : 'var(--border)'}`,
-                  }}
-                >
-                  {meta && <Icon name={meta.icon as WFIconName} size={12} />}
-                  {act ? meta!.label : 'All activities'}
-                </button>
-              )
-            })}
-          </div>
-        </div>
         <div className="mx-auto max-w-7xl flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Search */}
           <div className="relative w-full sm:flex-1 sm:min-w-0 sm:max-w-[220px]">
