@@ -35,7 +35,7 @@ export async function GET(req: Request) {
         ]} : {},
         difficulty ? { difficulty } : {},
         country ? { country } : {},
-        ...(activity ? [{ activities: { has: activity } }] : []),
+        ...(activity ? [{ OR: [{ activities: { has: activity } }, { activities: { isEmpty: true } }] }] : []),
       ],
     },
     orderBy: { name: 'asc' },
