@@ -60,7 +60,7 @@ export async function GET(
   const tides = tidesResult.status === 'fulfilled' ? tidesResult.value : []
   const buoy = buoyResult.status === 'fulfilled' ? buoyResult.value : null
   const coastalWind = coastalWindResult.status === 'fulfilled' ? coastalWindResult.value : null
-  const currentCondition = findNearestFutureHour(hours)
+  const currentCondition = findNearestFutureHour(hours, marineResult.value.utc_offset_seconds)
 
   return NextResponse.json(
     {

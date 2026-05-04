@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
@@ -346,16 +346,15 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
         popupAnchor: [0, -50],
       })
 
-      // Place markers at shore-nudged position + ±360° world copies
-      for (const lngOffset of [0, 360, -360]) {
-        const marker = L.marker([pinLat, pinLng + lngOffset], { icon })
-        marker.bindTooltip(tooltipHtml(spot), {
-          permanent: false, sticky: false, direction: 'top',
-          offset: [0, -48], opacity: 1, className: 'spot-hover-tooltip',
-        })
-        marker.bindPopup(popupHtml(spot), { maxWidth: 268, minWidth: 250 })
-        group.addLayer(marker)
-      }
+      // Single marker per spot — Leaflet's worldCopyJump handles wrap-around
+      // visually, so the previous ±360° duplicates were 3× DOM cost for nothing.
+      const marker = L.marker([pinLat, pinLng], { icon })
+      marker.bindTooltip(tooltipHtml(spot), {
+        permanent: false, sticky: false, direction: 'top',
+        offset: [0, -48], opacity: 1, className: 'spot-hover-tooltip',
+      })
+      marker.bindPopup(popupHtml(spot), { maxWidth: 268, minWidth: 250 })
+      group.addLayer(marker)
     }
 
     group.addTo(map)
@@ -496,7 +495,22 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
     })().catch(console.error)
   }, [seamarkOn])
 
-  // Update cluster when condition data arrives
+  // Update cluster when condition data arrives. The dep is a coarse signature
+  // — we only rebuild when the spot ID set changes or any rating flips. Wave
+  // heights drift continuously across refetches; rebuilding 1490 markers every
+  // time would freeze the main thread on mobile. The version is computed in a
+  // useMemo so React doesn't recreate the dep value on unrelated re-renders.
+  const clusterVersion = useMemo(() => {
+    let h = 0
+    for (const s of spots) {
+      // FNV-1a-ish over id + rating bucket — cheap, stable, non-cryptographic.
+      const r = s.currentRating ?? 'u'
+      const k = s.id + r
+      for (let i = 0; i < k.length; i++) h = ((h ^ k.charCodeAt(i)) * 0x01000193) >>> 0
+    }
+    return `${spots.length}:${h.toString(36)}`
+  }, [spots])
+
   useEffect(() => {
     if (!mapInstance.current) return
     ;(async () => {
@@ -507,8 +521,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       if (!mapInstance.current) return
       await rebuildCluster(mapInstance.current, L, MCG2, spotsRef.current)
     })().catch(console.error)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spots.map(s => `${s.id}:${s.currentRating ?? '?'}:${s.currentWaveHeight ?? 'x'}`).join('|')])
+  }, [clusterVersion])
 
   function handleLocate() {
     if (locating === 'loading') return

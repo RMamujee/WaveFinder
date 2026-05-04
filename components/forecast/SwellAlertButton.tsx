@@ -47,12 +47,18 @@ export function SwellAlertButton({ spotSlug, spotName, forecastDays }: Props) {
   // Check 48-hour forecast against threshold and fire notification once per day
   useEffect(() => {
     if (!config || !forecastDays?.length) return
-    const todayStr = new Date().toISOString().slice(0, 10)
+    // Local date in the user's timezone — toISOString() returns UTC, which
+    // skips notifications the morning after a late-evening trigger for users
+    // in negative offsets.
+    const d = new Date()
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     if (config.lastNotifiedDate === todayStr) { setTriggered(true); return }
 
     const hours = forecastDays.slice(0, 2).flatMap((d) => d.hours)
+    // Skip long-range fallback hours — those substitute total wave for swell
+    // and would fire on wind-chop days that look like clean groundswell.
     const hit = hours.find(
-      (h) => h.waveHeight >= config.minWaveHeightM && h.swellPeriod >= config.minPeriodS
+      (h) => !h.isLongRange && h.waveHeight >= config.minWaveHeightM && h.swellPeriod >= config.minPeriodS
     )
     if (!hit) return
 

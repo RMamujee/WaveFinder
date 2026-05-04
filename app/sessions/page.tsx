@@ -81,7 +81,10 @@ interface FormState {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayISO() {
-  return new Date().toISOString().split('T')[0]
+  // Local date — toISOString() returns UTC, which gives "tomorrow" for users
+  // in negative offsets after late afternoon and breaks the date picker default.
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function formatDuration(minutes: number): string {

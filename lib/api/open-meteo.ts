@@ -39,6 +39,7 @@ async function withCache<T>(key: string, ttlSeconds: number, tags: string[], fn:
 
 
 export interface OpenMeteoMarineResponse {
+  utc_offset_seconds?: number
   hourly: {
     time: string[]
     wave_height: number[]
@@ -51,6 +52,9 @@ export interface OpenMeteoMarineResponse {
     wind_wave_direction: number[]
     wind_wave_period: number[]
     sea_surface_temperature?: number[]
+    // True when the hour was filled from the long-range ECMWF WAM model
+    // because the primary best_match model returned null past day ~10.
+    is_long_range?: boolean[]
   }
 }
 
@@ -253,6 +257,11 @@ export async function fetchMarineForecast(
       })
     }
 
+    // Tag each hour where the primary model returned null wave_height — those
+    // are the ones the long-range fill actually substituted for. Consumers
+    // (UI, alerts) treat these as lower-confidence "outlook" data.
+    const isLongRange = main.hourly.wave_height.map((v) => v == null)
+
     const filled: OpenMeteoMarineResponse = {
       ...main,
       hourly: {
@@ -265,6 +274,7 @@ export async function fetchMarineForecast(
         swell_wave_height: fill(main.hourly.swell_wave_height, long.wave_height),
         swell_wave_period: fill(main.hourly.swell_wave_period, long.wave_period),
         swell_wave_direction: fill(main.hourly.swell_wave_direction, long.wave_direction),
+        is_long_range: isLongRange,
       } as OpenMeteoMarineResponse['hourly'],
     }
     return filled
