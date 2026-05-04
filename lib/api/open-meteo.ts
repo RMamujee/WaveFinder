@@ -183,7 +183,7 @@ export async function fetchMarineForecast(
   lng: number
 ): Promise<OpenMeteoMarineResponse> {
   // 2-decimal bucket (~1 km) — colocated spots share one upstream fetch.
-  const cacheKey = `om:marine:${lat.toFixed(2)},${lng.toFixed(2)}`
+  const cacheKey = `om:marine:v2:${lat.toFixed(2)},${lng.toFixed(2)}`
   return withCache(cacheKey, 3600, ['open-meteo', 'marine'], async () => {
     // Two parallel models: best_match has full swell decomposition but only
     // covers ~10 days reliably (nulls thereafter); ecmwf_wam025 reaches the
