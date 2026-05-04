@@ -135,7 +135,10 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
 
   useEffect(() => { setHighlighted(0) }, [query])
 
-  const isSelected = !!value
+  // Selected only when both a slug is set AND the matching spot has loaded.
+  // Without the second clause, an in-flight spots query causes selectedSpot
+  // to be null while value is set, leading to selectedSpot!.name crashes.
+  const isSelected = !!value && !!selectedSpot
 
   return (
     <div className="flex flex-col gap-1.5" ref={containerRef} style={{ position: 'relative' }}>
@@ -153,8 +156,8 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
           ref={inputRef}
           type="text"
           disabled={isLoading}
-          placeholder={isSelected ? selectedSpot!.name : 'Search spots…'}
-          value={open ? query : (isSelected ? selectedSpot!.name : '')}
+          placeholder={selectedSpot ? selectedSpot.name : 'Search spots…'}
+          value={open ? query : (selectedSpot ? selectedSpot.name : '')}
           onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
