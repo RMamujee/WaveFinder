@@ -18,7 +18,13 @@ export function WaveChart({ days, activeDayData }: Props) {
   const [mode, setMode] = useState<'7day' | 'daily'>('daily')
   const { unit } = useUnits()
 
-  const sevenDayData = days.flatMap((day) =>
+  // 7-day window anchored at the selected day so the chart aligns with the
+  // strip selection rather than always starting on day 0 of the 16-day range.
+  const anchorIdx = activeDayData ? days.findIndex((d) => d.date === activeDayData.date) : 0
+  const startIdx = Math.max(0, Math.min(anchorIdx, days.length - 7))
+  const sevenDayWindow = days.slice(startIdx, startIdx + 7)
+
+  const sevenDayData = sevenDayWindow.flatMap((day) =>
     day.hours
       .filter((_, i) => i % 3 === 0)
       .map((h) => ({

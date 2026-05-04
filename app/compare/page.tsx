@@ -371,17 +371,23 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
         <div className="px-4 pt-3 pb-2" style={{ borderBottom: '1px solid var(--sand-100)' }}>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>Select day</p>
           <div
-            className="flex gap-1 pb-0.5"
+            className="flex gap-1 pb-0.5 snap-x snap-mandatory overflow-x-auto overflow-y-hidden -mx-4 px-4"
             data-no-swipe="true"
-            style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              scrollPaddingLeft: '1rem',
+              touchAction: 'pan-x',
+            }}
           >
             {days.map((day) => (
-              <MiniDayCard
-                key={day.date}
-                day={day}
-                isSelected={(selectedDay ?? days[0]?.date) === day.date}
-                onClick={() => onDayChange(day.date)}
-              />
+              <div key={day.date} className="snap-start">
+                <MiniDayCard
+                  day={day}
+                  isSelected={(selectedDay ?? days[0]?.date) === day.date}
+                  onClick={() => onDayChange(day.date)}
+                />
+              </div>
             ))}
           </div>
         </div>

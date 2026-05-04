@@ -26,10 +26,11 @@ export async function fetchTidePredictions(stationId: string): Promise<TidePoint
   const today = new Date()
   today.setDate(today.getDate() - 1)
   const end = new Date(today)
-  end.setDate(today.getDate() + 8)
+  // 17 days = 1 day buffer + the 16-day marine forecast horizon
+  end.setDate(today.getDate() + 17)
 
-  // Fetch hourly predictions for 7 days — gives a smooth curve (168 points)
-  // and enough data to filter by any day in the forecast window.
+  // Hourly predictions across the full forecast window so the tide chart can
+  // be filtered by any day shown in the 16-day strip.
   const params = new URLSearchParams({
     begin_date: formatDate(today),
     end_date:   formatDate(end),
