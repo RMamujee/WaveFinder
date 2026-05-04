@@ -81,14 +81,19 @@ export async function fetchCurrentConditions(
   // Round to 2 decimal places (~1 km) for cache key — finer than the 1-decimal
   // bucket used in the route, so accuracy is preserved while still deduplicating
   // repeated calls from re-fetches or concurrent requests on a warm instance.
-  const cacheKey = `om:cond:${lat.toFixed(2)},${lng.toFixed(2)}`
+  // v2: bypass v1 entries that were poisoned with stored-null values before
+  // the fix that distinguishes "missing key" from "stored null".
+  const cacheKey = `om:cond:v2:${lat.toFixed(2)},${lng.toFixed(2)}`
 
   let cache: ReturnType<typeof getCache> | null = null
   try { cache = getCache() } catch { cache = null }
   if (cache) {
     try {
       const hit = await cache.get(cacheKey) as CurrentMarineConditions | null | undefined
-      if (hit !== undefined) return hit
+      // Vercel Runtime Cache returns null for missing keys, so we cannot
+      // distinguish a stored null from an absent entry — treat null as a miss
+      // and skip caching null results below.
+      if (hit !== null && hit !== undefined) return hit
     } catch { /* fall through */ }
   }
 
@@ -122,11 +127,7 @@ export async function fetchCurrentConditions(
       fetch(`${WEATHER_BASE}?${weatherParams}`, { signal: AbortSignal.timeout(4000), headers: HEADERS }),
     ])
 
-    if (marineSettled.status === 'rejected' || !marineSettled.value.ok) {
-      // Cache misses for 60 s so a downstream outage doesn't stampede Open-Meteo
-      try { await cache?.set(cacheKey, null, { ttl: 60, tags: ['open-meteo'] }) } catch {}
-      return null
-    }
+    if (marineSettled.status === 'rejected' || !marineSettled.value.ok) return null
 
     const marine = await marineSettled.value.json()
 
@@ -142,10 +143,7 @@ export async function fetchCurrentConditions(
     }
 
     const hourly = marine?.hourly
-    if (!hourly?.time?.length) {
-      try { await cache?.set(cacheKey, null, { ttl: 60, tags: ['open-meteo'] }) } catch {}
-      return null
-    }
+    if (!hourly?.time?.length) return null
 
     // Pick the nearest future hour — mirrors findNearestFutureHour from lib/forecast/merge.ts
     const now = new Date()
@@ -173,7 +171,6 @@ export async function fetchCurrentConditions(
     try { await cache?.set(cacheKey, result, { ttl: 5 * 60, tags: ['open-meteo'] }) } catch {}
     return result
   } catch {
-    try { await cache?.set(cacheKey, null, { ttl: 60, tags: ['open-meteo'] }) } catch {}
     return null
   }
 }
