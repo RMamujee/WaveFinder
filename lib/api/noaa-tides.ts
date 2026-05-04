@@ -1,4 +1,5 @@
 import type { TidePoint, CoastalWindReading } from '@/types/forecast'
+import { getCache } from '@vercel/functions'
 
 const NOAA_TIDES_BASE = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter'
 
@@ -20,6 +21,19 @@ function formatDate(d: Date): string {
 }
 
 export async function fetchTidePredictions(stationId: string): Promise<TidePoint[]> {
+  // Daily tide predictions for a given station are identical for everyone,
+  // so a shared runtime cache (cross-region, cross-instance) eliminates
+  // duplicate NOAA calls during the day.
+  let cache: ReturnType<typeof getCache> | null = null
+  try { cache = getCache() } catch { cache = null }
+  const cacheKey = `noaa:tides:${stationId}`
+  if (cache) {
+    try {
+      const hit = await cache.get(cacheKey) as TidePoint[] | null | undefined
+      if (Array.isArray(hit) && hit.length > 0) return hit
+    } catch { /* fall through */ }
+  }
+
   // Start 1 day before today so the server's UTC clock never misses the
   // spot's local "today" (Vercel runs UTC; a California spot at 11pm is
   // still "today" locally but "tomorrow" UTC).
@@ -70,6 +84,9 @@ export async function fetchTidePredictions(stationId: string): Promise<TidePoint
     else if (curr < prev && curr < next) raw[i].type = 'L'
   }
 
+  if (cache && raw.length > 0) {
+    try { await cache.set(cacheKey, raw, { ttl: 3600, tags: ['noaa', 'tides'] }) } catch {}
+  }
   return raw
 }
 
