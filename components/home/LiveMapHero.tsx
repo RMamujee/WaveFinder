@@ -33,9 +33,11 @@ interface Props {
 }
 
 export function LiveMapHero({ spotCount }: Props) {
+  // Slim payload: marker-essential fields only (~70% smaller than full)
+  // so the map can render pins as soon as possible on mobile.
   const { data: baseSpots = [] } = useQuery<SpotWithRating[]>({
     queryKey: ['spots-home-base'],
-    queryFn: () => fetch('/api/spots').then((r) => r.json()),
+    queryFn: () => fetch('/api/spots?slim=true').then((r) => r.json()),
     staleTime: 30 * 60 * 1000,
   })
 
@@ -150,40 +152,21 @@ export function LiveMapHero({ spotCount }: Props) {
           </Link>
         </div>
 
-        {/* Mobile: bottom overlay — Browse Spots + credits */}
+        {/* Mobile: single primary CTA — sources/credit moved to /spots footer */}
         <div
-          className="absolute bottom-0 left-0 right-0 z-10 lg:hidden flex flex-col items-center gap-3 px-5 pb-6 pt-12"
-          style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.32) 0%, transparent 100%)' }}
+          className="absolute bottom-0 left-0 right-0 z-10 lg:hidden flex justify-center px-5 pb-6 pt-10"
+          style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.28) 0%, transparent 100%)' }}
         >
           <Link
             href="/spots"
-            className="inline-flex items-center gap-2 rounded-2xl px-7 py-3.5 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
-            style={{ background: 'var(--ocean-600)', boxShadow: '0 4px 24px rgba(27,127,203,0.5)' }}
+            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+            style={{ background: 'var(--ocean-600)', boxShadow: '0 4px 24px rgba(27,127,203,0.45)' }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
             </svg>
-            Browse Spots
+            Browse {spotCount}+ spots
           </Link>
-
-          <div className="flex flex-wrap justify-center gap-x-4 gap-y-0.5" style={{ maxWidth: 'calc(100vw - 32px)', wordBreak: 'break-word' }}>
-            {['NOAA NDBC', 'Open-Meteo', 'NOAA Tides', 'OpenStreetMap'].map((s) => (
-              <span key={s} className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>{s}</span>
-            ))}
-          </div>
-
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            Made by{' '}
-            <a
-              href="https://www.linkedin.com/in/rmamujee"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold"
-              style={{ color: 'rgba(255,255,255,0.9)' }}
-            >
-              Rahil Mamujee
-            </a>
-          </p>
         </div>
 
         <SpotMap

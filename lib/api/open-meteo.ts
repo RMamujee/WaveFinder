@@ -185,53 +185,92 @@ export async function fetchMarineForecast(
   // 2-decimal bucket (~1 km) — colocated spots share one upstream fetch.
   const cacheKey = `om:marine:${lat.toFixed(2)},${lng.toFixed(2)}`
   return withCache(cacheKey, 3600, ['open-meteo', 'marine'], async () => {
-    // SST is included in the main request — it returns null values (not an error)
-    // for locations where the model has no ocean coverage, so it's safe to bundle.
-    const params = new URLSearchParams({
+    // Two parallel models: best_match has full swell decomposition but only
+    // covers ~10 days reliably (nulls thereafter); ecmwf_wam025 reaches the
+    // full 16-day horizon with wave_height/period/direction only. We merge:
+    // primary fields fill from best_match where present, fall back to the
+    // long-range model so days 11-16 show real data instead of zeros.
+    const fields = [
+      'wave_height', 'wave_direction', 'wave_period',
+      'swell_wave_height', 'swell_wave_direction', 'swell_wave_period',
+      'wind_wave_height', 'wind_wave_direction', 'wind_wave_period',
+      'sea_surface_temperature',
+    ]
+    const baseParams = new URLSearchParams({
       latitude: lat.toString(),
       longitude: lng.toString(),
-      hourly: [
-        'wave_height',
-        'wave_direction',
-        'wave_period',
-        'swell_wave_height',
-        'swell_wave_direction',
-        'swell_wave_period',
-        'wind_wave_height',
-        'wind_wave_direction',
-        'wind_wave_period',
-        'sea_surface_temperature',
-      ].join(','),
       forecast_days: '16',
       timezone: 'auto',
     })
+    const primary = new URLSearchParams(baseParams)
+    primary.set('hourly', fields.join(','))
+    const longRange = new URLSearchParams(baseParams)
+    // ECMWF WAM 0.25 only exposes the basic 3 wave fields
+    longRange.set('hourly', 'wave_height,wave_period,wave_direction')
+    longRange.set('models', 'ecmwf_wam025')
 
-    // One retry on cold-start fetch failures — Vercel functions occasionally hit a
-    // slow first-byte to Open-Meteo and abort. A second attempt almost always
-    // succeeds because the connection has warmed.
-    let lastErr: unknown
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const res = await fetch(`${MARINE_BASE}?${params}`, {
-          next: { revalidate: 3600 },
-          headers: HEADERS,
-          signal: AbortSignal.timeout(20000),
-        })
-
-        if (!res.ok) {
-          throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
+    const fetchOne = async (qs: URLSearchParams, timeoutMs: number) => {
+      let lastErr: unknown
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await fetch(`${MARINE_BASE}?${qs}`, {
+            next: { revalidate: 3600 },
+            headers: HEADERS,
+            signal: AbortSignal.timeout(timeoutMs),
+          })
+          if (!res.ok) throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
+          const data = await res.json() as OpenMeteoMarineResponse
+          if (!Array.isArray(data?.hourly?.time) || data.hourly.time.length === 0) {
+            throw new Error('Open-Meteo marine API returned empty or malformed hourly data')
+          }
+          return data
+        } catch (err) {
+          lastErr = err
         }
-
-        const data = await res.json() as OpenMeteoMarineResponse
-        if (!Array.isArray(data?.hourly?.time) || data.hourly.time.length === 0) {
-          throw new Error('Open-Meteo marine API returned empty or malformed hourly data')
-        }
-        return data
-      } catch (err) {
-        lastErr = err
       }
+      throw lastErr instanceof Error ? lastErr : new Error('Open-Meteo marine API failed')
     }
-    throw lastErr instanceof Error ? lastErr : new Error('Open-Meteo marine API failed')
+
+    // Run both in parallel. The primary is required; if the long-range fails
+    // we still return primary alone (days 11-16 will be null as before).
+    const [primaryRes, longRes] = await Promise.allSettled([
+      fetchOne(primary, 20000),
+      fetchOne(longRange, 15000),
+    ])
+    if (primaryRes.status === 'rejected') throw primaryRes.reason
+    const main = primaryRes.value
+    if (longRes.status !== 'fulfilled') return main
+
+    // Index long-range by time so we can fill gaps regardless of array offsets.
+    const long = longRes.value.hourly
+    const longByTime = new Map<string, number>()
+    long.time.forEach((t, i) => longByTime.set(t, i))
+
+    const fill = (arr: (number | null)[], srcArr: (number | null)[] | undefined) => {
+      if (!srcArr) return arr
+      return main.hourly.time.map((t, i) => {
+        const v = arr[i]
+        if (v != null) return v
+        const j = longByTime.get(t)
+        return j != null ? srcArr[j] ?? null : null
+      })
+    }
+
+    const filled: OpenMeteoMarineResponse = {
+      ...main,
+      hourly: {
+        ...main.hourly,
+        wave_height: fill(main.hourly.wave_height, long.wave_height),
+        wave_period: fill(main.hourly.wave_period, long.wave_period),
+        wave_direction: fill(main.hourly.wave_direction, long.wave_direction),
+        // No swell decomposition past day 10 — substitute total wave so the
+        // surf rating engine has *something* to score with rather than zero.
+        swell_wave_height: fill(main.hourly.swell_wave_height, long.wave_height),
+        swell_wave_period: fill(main.hourly.swell_wave_period, long.wave_period),
+        swell_wave_direction: fill(main.hourly.swell_wave_direction, long.wave_direction),
+      } as OpenMeteoMarineResponse['hourly'],
+    }
+    return filled
   })
 }
 
