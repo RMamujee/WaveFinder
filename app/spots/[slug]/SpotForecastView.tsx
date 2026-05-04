@@ -86,7 +86,7 @@ export function SpotForecastView({ spot }: Props) {
     router.replace(`/spots/${spot.slug}?date=${date}`, { scroll: false })
   }
 
-  const { data: forecast, isPending, error } = useQuery<SpotForecast>({
+  const { data: forecast, isPending, isFetching, error } = useQuery<SpotForecast>({
     queryKey: ['forecast', spot.slug],
     queryFn: async () => {
       const r = await fetch(`/api/forecast/${spot.slug}`)
@@ -94,7 +94,8 @@ export function SpotForecastView({ spot }: Props) {
       return r.json() as Promise<SpotForecast>
     },
     staleTime: 60 * 60 * 1000,
-    retry: 1,
+    retry: 2,
+    retryDelay: (n) => Math.min(1000 * 2 ** n, 4000),
   })
 
   const { data: alerts = [] } = useQuery<NWSAlert[]>({
@@ -314,7 +315,7 @@ export function SpotForecastView({ spot }: Props) {
 
       {/* Body */}
       {isPending && <WaveLoader label="Fetching forecast…" />}
-      {error && !isPending && (
+      {error && !isPending && !isFetching && (
         <div className="mx-auto max-w-7xl px-5 pt-4">
           <div className="rounded-2xl p-6 text-center" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
             <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>Failed to load forecast data.</p>
@@ -324,14 +325,24 @@ export function SpotForecastView({ spot }: Props) {
       )}
       <div className="mx-auto max-w-7xl px-5 py-4 space-y-4" style={{ display: isPending ? 'none' : undefined }}>
 
-        {/* 16-day strip — horizontally scrollable */}
+        {/* 16-day strip — horizontally scrollable, snap-aligned */}
         <div>
           <SectionTitle>16-Day Forecast</SectionTitle>
           {forecast?.forecast ? (
-            <div className="overflow-x-auto -mx-5 px-5" style={{ scrollbarWidth: 'none' }}>
+            <div
+              className="overflow-x-auto overflow-y-hidden -mx-5 px-5 snap-x snap-mandatory"
+              style={{
+                scrollbarWidth: 'none',
+                WebkitOverflowScrolling: 'touch',
+                scrollPaddingLeft: '1.25rem',
+              }}
+            >
               <div className="flex gap-2 pb-1" style={{ width: 'max-content' }}>
                 {forecast.forecast.map((day) => (
-                  <div key={day.date} style={{ width: 108, flexShrink: 0 }}>
+                  <div
+                    key={day.date}
+                    className="snap-start w-[88px] sm:w-[108px] flex-shrink-0"
+                  >
                     <ForecastDayCard
                       day={day}
                       isSelected={

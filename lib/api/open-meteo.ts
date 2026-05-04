@@ -171,29 +171,32 @@ export async function fetchMarineForecast(
     timezone: 'auto',
   })
 
-  const res = await fetch(`${MARINE_BASE}?${params}`, {
-    next: { revalidate: 3600 },
-    headers: HEADERS,
-    signal: AbortSignal.timeout(15000),
-  })
+  // One retry on cold-start fetch failures — Vercel functions occasionally hit a
+  // slow first-byte to Open-Meteo and abort. A second attempt almost always
+  // succeeds because the connection has warmed.
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(`${MARINE_BASE}?${params}`, {
+        next: { revalidate: 3600 },
+        headers: HEADERS,
+        signal: AbortSignal.timeout(20000),
+      })
 
-  if (!res.ok) {
-    throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
+      if (!res.ok) {
+        throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
+      }
+
+      const data = await res.json() as OpenMeteoMarineResponse
+      if (!Array.isArray(data?.hourly?.time) || data.hourly.time.length === 0) {
+        throw new Error('Open-Meteo marine API returned empty or malformed hourly data')
+      }
+      return data
+    } catch (err) {
+      lastErr = err
+    }
   }
-
-  let data: unknown
-  try {
-    data = await res.json()
-  } catch {
-    throw new Error('Open-Meteo marine API returned non-JSON response')
-  }
-
-  const marine = data as OpenMeteoMarineResponse
-  if (!Array.isArray(marine?.hourly?.time) || marine.hourly.time.length === 0) {
-    throw new Error('Open-Meteo marine API returned empty or malformed hourly data')
-  }
-
-  return marine
+  throw lastErr instanceof Error ? lastErr : new Error('Open-Meteo marine API failed')
 }
 
 export async function fetchWindForecast(
