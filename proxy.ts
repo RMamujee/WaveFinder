@@ -18,7 +18,7 @@ function maybeprune() {
   }
 }
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   if (!req.nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.next()
   }
