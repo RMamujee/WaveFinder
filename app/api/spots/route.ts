@@ -22,6 +22,10 @@ export async function GET(req: Request) {
     .filter((s) => /^[a-z0-9]{20,36}$/i.test(s))
     .slice(0, 50)
   const withConditions = searchParams.get('withConditions') === 'true'
+  // ?slim=true returns only the fields needed to render markers on a map.
+  // Cuts the home payload from ~500 KB to ~150 KB so first paint on mobile
+  // is faster.
+  const slim = searchParams.get('slim') === 'true'
 
   const spots = await prisma.surfSpot.findMany({
     where: {
@@ -37,9 +41,25 @@ export async function GET(req: Request) {
       ],
     },
     orderBy: { name: 'asc' },
+    ...(slim ? {
+      select: {
+        id: true, slug: true, name: true, region: true, country: true,
+        lat: true, lng: true, difficulty: true, facingDirection: true,
+      },
+    } : {}),
   })
 
-  if (!withConditions) return NextResponse.json(spots.map(s => ({ ...s, bottomType: inferBottomType(s.description, s.name) })))
+  if (!withConditions) {
+    if (slim) {
+      return NextResponse.json(spots, {
+        headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=1800' },
+      })
+    }
+    return NextResponse.json(spots.map(s => ({
+      ...s,
+      bottomType: inferBottomType(s.description ?? null, s.name),
+    })))
+  }
 
   // ── Conditions: Open-Meteo current conditions at actual beach coordinates ─────
   // Open-Meteo's nearshore marine model is the same source used by the individual
