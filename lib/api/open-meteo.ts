@@ -1,3 +1,5 @@
+import { getCache } from '@vercel/functions'
+
 const MARINE_BASE = 'https://marine-api.open-meteo.com/v1/marine'
 const WEATHER_BASE = 'https://api.open-meteo.com/v1/forecast'
 
@@ -5,6 +7,34 @@ const WEATHER_BASE = 'https://api.open-meteo.com/v1/forecast'
 const HEADERS = {
   'User-Agent': 'WaveFinder/1.0 surf-forecast-app',
   'Accept': 'application/json',
+}
+
+// Cross-region runtime cache wrapper. Falls back to fetching directly if the
+// runtime cache is unavailable (e.g. local `npm start` without Vercel runtime).
+async function withCache<T>(key: string, ttlSeconds: number, tags: string[], fn: () => Promise<T>): Promise<T> {
+  let cache: ReturnType<typeof getCache> | null = null
+  try {
+    cache = getCache()
+  } catch {
+    cache = null
+  }
+  if (cache) {
+    try {
+      const hit = await cache.get(key) as T | null | undefined
+      if (hit !== null && hit !== undefined) return hit
+    } catch {
+      // Cache read failed — fall through to origin fetch
+    }
+  }
+  const value = await fn()
+  if (cache && value !== null && value !== undefined) {
+    try {
+      await cache.set(key, value, { ttl: ttlSeconds, tags })
+    } catch {
+      // Cache write failed — return value anyway
+    }
+  }
+  return value
 }
 
 
@@ -44,12 +74,6 @@ export interface CurrentMarineConditions {
   windDirection: number
 }
 
-// Module-level cache — survives across requests on the same warm Vercel
-// function instance, drastically reducing Open-Meteo call volume for the
-// /api/spots?withConditions=true endpoint which fans out to 100+ locations.
-const _condCache = new Map<string, { result: CurrentMarineConditions | null; exp: number }>()
-const COND_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
 export async function fetchCurrentConditions(
   lat: number,
   lng: number
@@ -57,9 +81,16 @@ export async function fetchCurrentConditions(
   // Round to 2 decimal places (~1 km) for cache key — finer than the 1-decimal
   // bucket used in the route, so accuracy is preserved while still deduplicating
   // repeated calls from re-fetches or concurrent requests on a warm instance.
-  const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`
-  const cached = _condCache.get(cacheKey)
-  if (cached && Date.now() < cached.exp) return cached.result
+  const cacheKey = `om:cond:${lat.toFixed(2)},${lng.toFixed(2)}`
+
+  let cache: ReturnType<typeof getCache> | null = null
+  try { cache = getCache() } catch { cache = null }
+  if (cache) {
+    try {
+      const hit = await cache.get(cacheKey) as CurrentMarineConditions | null | undefined
+      if (hit !== undefined) return hit
+    } catch { /* fall through */ }
+  }
 
   try {
     // Use hourly endpoint (same model as spot forecast pages) and pick the nearest future hour.
@@ -92,7 +123,8 @@ export async function fetchCurrentConditions(
     ])
 
     if (marineSettled.status === 'rejected' || !marineSettled.value.ok) {
-      _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 }) // cache miss for 1 min
+      // Cache misses for 60 s so a downstream outage doesn't stampede Open-Meteo
+      try { await cache?.set(cacheKey, null, { ttl: 60, tags: ['open-meteo'] }) } catch {}
       return null
     }
 
@@ -111,7 +143,7 @@ export async function fetchCurrentConditions(
 
     const hourly = marine?.hourly
     if (!hourly?.time?.length) {
-      _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 })
+      try { await cache?.set(cacheKey, null, { ttl: 60, tags: ['open-meteo'] }) } catch {}
       return null
     }
 
@@ -138,10 +170,10 @@ export async function fetchCurrentConditions(
       windSpeed:     wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
       windDirection: wind?.current?.wind_direction_10m ?? windWaveDir,
     }
-    _condCache.set(cacheKey, { result, exp: Date.now() + COND_CACHE_TTL })
+    try { await cache?.set(cacheKey, result, { ttl: 5 * 60, tags: ['open-meteo'] }) } catch {}
     return result
   } catch {
-    _condCache.set(cacheKey, { result: null, exp: Date.now() + 60_000 }) // cache errors for 1 min
+    try { await cache?.set(cacheKey, null, { ttl: 60, tags: ['open-meteo'] }) } catch {}
     return null
   }
 }
@@ -150,94 +182,101 @@ export async function fetchMarineForecast(
   lat: number,
   lng: number
 ): Promise<OpenMeteoMarineResponse> {
-  // SST is included in the main request — it returns null values (not an error)
-  // for locations where the model has no ocean coverage, so it's safe to bundle.
-  const params = new URLSearchParams({
-    latitude: lat.toString(),
-    longitude: lng.toString(),
-    hourly: [
-      'wave_height',
-      'wave_direction',
-      'wave_period',
-      'swell_wave_height',
-      'swell_wave_direction',
-      'swell_wave_period',
-      'wind_wave_height',
-      'wind_wave_direction',
-      'wind_wave_period',
-      'sea_surface_temperature',
-    ].join(','),
-    forecast_days: '16',
-    timezone: 'auto',
-  })
+  // 2-decimal bucket (~1 km) — colocated spots share one upstream fetch.
+  const cacheKey = `om:marine:${lat.toFixed(2)},${lng.toFixed(2)}`
+  return withCache(cacheKey, 3600, ['open-meteo', 'marine'], async () => {
+    // SST is included in the main request — it returns null values (not an error)
+    // for locations where the model has no ocean coverage, so it's safe to bundle.
+    const params = new URLSearchParams({
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      hourly: [
+        'wave_height',
+        'wave_direction',
+        'wave_period',
+        'swell_wave_height',
+        'swell_wave_direction',
+        'swell_wave_period',
+        'wind_wave_height',
+        'wind_wave_direction',
+        'wind_wave_period',
+        'sea_surface_temperature',
+      ].join(','),
+      forecast_days: '16',
+      timezone: 'auto',
+    })
 
-  // One retry on cold-start fetch failures — Vercel functions occasionally hit a
-  // slow first-byte to Open-Meteo and abort. A second attempt almost always
-  // succeeds because the connection has warmed.
-  let lastErr: unknown
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const res = await fetch(`${MARINE_BASE}?${params}`, {
-        next: { revalidate: 3600 },
-        headers: HEADERS,
-        signal: AbortSignal.timeout(20000),
-      })
+    // One retry on cold-start fetch failures — Vercel functions occasionally hit a
+    // slow first-byte to Open-Meteo and abort. A second attempt almost always
+    // succeeds because the connection has warmed.
+    let lastErr: unknown
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(`${MARINE_BASE}?${params}`, {
+          next: { revalidate: 3600 },
+          headers: HEADERS,
+          signal: AbortSignal.timeout(20000),
+        })
 
-      if (!res.ok) {
-        throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
+        if (!res.ok) {
+          throw new Error(`Open-Meteo marine API error: ${res.status} ${res.statusText}`)
+        }
+
+        const data = await res.json() as OpenMeteoMarineResponse
+        if (!Array.isArray(data?.hourly?.time) || data.hourly.time.length === 0) {
+          throw new Error('Open-Meteo marine API returned empty or malformed hourly data')
+        }
+        return data
+      } catch (err) {
+        lastErr = err
       }
-
-      const data = await res.json() as OpenMeteoMarineResponse
-      if (!Array.isArray(data?.hourly?.time) || data.hourly.time.length === 0) {
-        throw new Error('Open-Meteo marine API returned empty or malformed hourly data')
-      }
-      return data
-    } catch (err) {
-      lastErr = err
     }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error('Open-Meteo marine API failed')
+    throw lastErr instanceof Error ? lastErr : new Error('Open-Meteo marine API failed')
+  })
 }
 
 export async function fetchWindForecast(
   lat: number,
   lng: number
 ): Promise<OpenMeteoWindResponse> {
-  const params = new URLSearchParams({
-    latitude: lat.toString(),
-    longitude: lng.toString(),
-    hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code,precipitation_probability',
-    wind_speed_unit: 'kmh',
-    forecast_days: '16',
-    timezone: 'auto',
-  })
-
-  try {
-    const res = await fetch(`${WEATHER_BASE}?${params}`, {
-      next: { revalidate: 3600 },
-      headers: HEADERS,
-      signal: AbortSignal.timeout(15000),
+  const cacheKey = `om:wind:${lat.toFixed(2)},${lng.toFixed(2)}`
+  return withCache(cacheKey, 3600, ['open-meteo', 'wind'], async () => {
+    const params = new URLSearchParams({
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code,precipitation_probability',
+      wind_speed_unit: 'kmh',
+      forecast_days: '16',
+      timezone: 'auto',
     })
 
-    if (!res.ok) throw new Error(`status ${res.status}`)
+    try {
+      const res = await fetch(`${WEATHER_BASE}?${params}`, {
+        next: { revalidate: 3600 },
+        headers: HEADERS,
+        signal: AbortSignal.timeout(15000),
+      })
 
-    const text = await res.text()
-    const data: OpenMeteoWindResponse = JSON.parse(text)
+      if (!res.ok) throw new Error(`status ${res.status}`)
 
-    return data
-  } catch {
-    // Wind API unavailable — return empty structure so forecast still loads
-    // Wind wave direction from marine API will be used as fallback in merge
-    return {
-      hourly: {
-        time: [] as string[],
-        wind_speed_10m: [] as number[],
-        wind_direction_10m: [] as number[],
-        wind_gusts_10m: [] as number[],
-        temperature_2m: [] as number[],
-        weather_code: [] as number[],
-        precipitation_probability: [] as number[],
-      },
+      const text = await res.text()
+      const data: OpenMeteoWindResponse = JSON.parse(text)
+
+      return data
+    } catch {
+      // Wind API unavailable — return empty structure so forecast still loads.
+      // Wind wave direction from marine API will be used as fallback in merge.
+      return {
+        hourly: {
+          time: [] as string[],
+          wind_speed_10m: [] as number[],
+          wind_direction_10m: [] as number[],
+          wind_gusts_10m: [] as number[],
+          temperature_2m: [] as number[],
+          weather_code: [] as number[],
+          precipitation_probability: [] as number[],
+        },
+      }
     }
-  }
+  })
 }
