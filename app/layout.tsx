@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { Providers } from '@/components/layout/Providers'
 import { Navbar } from '@/components/layout/Navbar'
@@ -8,12 +8,15 @@ import { InstallPrompt } from '@/components/layout/InstallPrompt'
 export const metadata: Metadata = {
   title: 'WaveFinder – Free Surf Forecast',
   description: 'Real-time surf forecasts powered by NOAA buoys and Open-Meteo. Wave height, swell period, wind, tides, and live conditions for every California surf spot — free forever.',
-  themeColor: '#0e4d88',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'WaveFinder',
   },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#0e4d88',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
