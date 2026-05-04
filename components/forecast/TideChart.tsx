@@ -29,10 +29,22 @@ export function TideChart({ tides, selectedDate }: Props) {
 
   // Tide times are stored as local "YYYY-MM-DDTHH:MM" (Pacific time from NOAA).
   // selectedDate is also in local format from the forecast grouping — safe to compare.
-  const filteredTides =
-    mode === 'daily' && selectedDate
-      ? tides.filter((t) => t.time.startsWith(selectedDate))
-      : tides
+  const dailyTides = selectedDate ? tides.filter((t) => t.time.startsWith(selectedDate)) : tides
+
+  // 7-day window anchored at the selected day. NOAA returns up to 17 days of
+  // hourly predictions — slice 7 of them centred on the selection so the chart
+  // matches the 16-day strip's currently-active day.
+  const sevenDayWindow = (() => {
+    if (!selectedDate) return tides
+    const startMs = new Date(`${selectedDate}T00:00`).getTime()
+    const endMs = startMs + 7 * 24 * 60 * 60 * 1000
+    return tides.filter((t) => {
+      const tMs = new Date(t.time).getTime()
+      return tMs >= startMs && tMs < endMs
+    })
+  })()
+
+  const filteredTides = mode === 'daily' ? dailyTides : sevenDayWindow
 
   // For 7-day view, thin to every 2nd point so the x-axis isn't overcrowded
   const displayTides =
