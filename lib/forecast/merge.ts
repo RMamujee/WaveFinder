@@ -85,6 +85,7 @@ export function mergeForecastData(
       airTempC: tempMap.get(time) ?? null,
       weatherCode: weatherCodeMap.get(time) ?? null,
       precipProb: precipProbMap.get(time) ?? null,
+      isLongRange: m.is_long_range?.[i] ?? false,
     }
   })
 }
@@ -136,9 +137,20 @@ export function groupHoursByDay(hours: ForecastHour[]): ForecastDay[] {
   })
 }
 
-export function findNearestFutureHour(hours: ForecastHour[]): ForecastHour | null {
-  const now = new Date()
+// Open-Meteo returns time strings as the spot's local clock, with no offset
+// suffix. `new Date(h.time)` would parse these as the server's local time
+// (UTC on Vercel), which produces a wrong "now" hour for any non-UTC spot —
+// e.g. a Hawaii forecast hour read at 12:00 UTC compares as if it were
+// 12:00 PT, picking the wrong hour. Pass utcOffsetSeconds (from Open-Meteo
+// response) so we can compute the spot's local "now".
+export function findNearestFutureHour(
+  hours: ForecastHour[],
+  utcOffsetSeconds = 0,
+): ForecastHour | null {
+  const nowAtSpot = new Date(Date.now() + utcOffsetSeconds * 1000)
+  // Strip Z to compare as local-clock against spot-local time strings.
+  const nowIso = nowAtSpot.toISOString().slice(0, 16)
   return (
-    hours.find((h) => new Date(h.time) >= now) ?? hours[hours.length - 1] ?? null
+    hours.find((h) => h.time >= nowIso) ?? hours[hours.length - 1] ?? null
   )
 }

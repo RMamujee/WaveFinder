@@ -32,6 +32,10 @@ export interface ForecastHour {
   airTempC: number | null
   weatherCode: number | null
   precipProb: number | null
+  // True for hours past day ~10 where the long-range model substitutes total
+  // wave for swell components; consumers (alerts, ratings UI) can treat these
+  // as lower-confidence and avoid triggering hard notifications on them.
+  isLongRange?: boolean
 }
 
 export interface ForecastDay {
