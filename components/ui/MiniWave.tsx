@@ -82,7 +82,7 @@ function drawFrame(
   }
 }
 
-export function MiniWave({ height, period, wind, width = 232, h = 48 }: Props) {
+export function MiniWave({ height, period, wind, width: _width = 232, h = 48 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef    = useRef<number>(0)
   const tRef      = useRef<number>(0)
@@ -93,10 +93,16 @@ export function MiniWave({ height, period, wind, width = 232, h = 48 }: Props) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Respect prefers-reduced-motion — draw one static frame and stop
+    // Size canvas to physical pixels for crisp rendering on high-DPI screens
+    const dpr  = window.devicePixelRatio ?? 1
+    const logW = canvas.offsetWidth || _width
+    canvas.width  = logW * dpr
+    canvas.height = h   * dpr
+    ctx.scale(dpr, dpr)
+
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (prefersReduced) {
-      drawFrame(ctx, width, h, height, period, wind, 1.5)
+      drawFrame(ctx, logW, h, height, period, wind, 1.5)
       return
     }
 
@@ -105,21 +111,19 @@ export function MiniWave({ height, period, wind, width = 232, h = 48 }: Props) {
       const dt = (now - last) / 1000
       last = now
       tRef.current += dt
-      if (ctx) drawFrame(ctx, width, h, height, period, wind, tRef.current)
+      if (ctx) drawFrame(ctx, logW, h, height, period, wind, tRef.current)
       rafRef.current = requestAnimationFrame(loop)
     }
 
     rafRef.current = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [height, period, wind, width, h])
+  }, [height, period, wind, _width, h])
 
   return (
     <canvas
       ref={canvasRef}
-      width={width}
-      height={h}
-      style={{ display: 'block', width: '100%', height: h }}
       aria-hidden="true"
+      style={{ display: 'block', width: '100%', height: h }}
     />
   )
 }
