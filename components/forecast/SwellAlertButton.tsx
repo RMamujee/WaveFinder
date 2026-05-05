@@ -28,19 +28,27 @@ interface Props {
 
 export function SwellAlertButton({ spotSlug, spotName, forecastDays }: Props) {
   const [open, setOpen]                 = useState(false)
-  const [config, setConfig]             = useState<AlertConfig | null>(null)
-  const [triggered, setTriggered]       = useState(false)
-  const [minWaveHeightM, setMinWH]      = useState(1.0)
-  const [minPeriodS, setMinPeriod]      = useState(12)
+  const saved = typeof window === 'undefined' ? undefined : loadAlerts()[spotSlug]
+  const [config, setConfig]             = useState<AlertConfig | null>(() => saved ?? null)
+  const [triggered, setTriggered]       = useState(() => {
+    if (!saved?.lastNotifiedDate) return false
+    const d = new Date()
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return saved.lastNotifiedDate === todayStr
+  })
+  const [minWaveHeightM, setMinWH]      = useState(() => saved?.minWaveHeightM ?? 1.0)
+  const [minPeriodS, setMinPeriod]      = useState(() => saved?.minPeriodS ?? 12)
   const wrapRef                         = useRef<HTMLDivElement>(null)
 
   // Load saved alert from localStorage
   useEffect(() => {
     const saved = loadAlerts()[spotSlug]
     if (saved) {
-      setConfig(saved)
-      setMinWH(saved.minWaveHeightM)
-      setMinPeriod(saved.minPeriodS)
+      queueMicrotask(() => {
+        setConfig(saved)
+        setMinWH(saved.minWaveHeightM)
+        setMinPeriod(saved.minPeriodS)
+      })
     }
   }, [spotSlug])
 
@@ -52,7 +60,10 @@ export function SwellAlertButton({ spotSlug, spotName, forecastDays }: Props) {
     // in negative offsets.
     const d = new Date()
     const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    if (config.lastNotifiedDate === todayStr) { setTriggered(true); return }
+    if (config.lastNotifiedDate === todayStr) {
+      if (!triggered) queueMicrotask(() => setTriggered(true))
+      return
+    }
 
     const hours = forecastDays.slice(0, 2).flatMap((d) => d.hours)
     // Skip long-range fallback hours — those substitute total wave for swell
@@ -62,7 +73,7 @@ export function SwellAlertButton({ spotSlug, spotName, forecastDays }: Props) {
     )
     if (!hit) return
 
-    setTriggered(true)
+    queueMicrotask(() => setTriggered(true))
 
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
 
@@ -78,7 +89,7 @@ export function SwellAlertButton({ spotSlug, spotName, forecastDays }: Props) {
       alerts[spotSlug].lastNotifiedDate = todayStr
       saveAlerts(alerts)
     }
-  }, [config, forecastDays, spotSlug, spotName])
+  }, [config, forecastDays, spotSlug, spotName, triggered])
 
   // Close popover on outside click
   useEffect(() => {

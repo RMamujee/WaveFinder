@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { SpotCard } from '@/components/spots/SpotCard'
@@ -85,14 +85,16 @@ function geoAutoSelect(
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SpotsPage() {
+  const searchParams = useSearchParams()
+  const initialRegion = searchParams.get('region') ?? ''
+  const initialCountry = searchParams.get('country') ?? ''
   const [search, setSearch]           = useState('')
   const [difficulty, setDifficulty]   = useState('')
-  const [selectedCountry, setSelectedCountry] = useState('')
+  const [selectedCountry, setSelectedCountry] = useState(initialCountry)
   const [selectedState, setSelectedState]     = useState('')
-  const [selectedRegion, setSelectedRegion]   = useState('')
-  const [view, setView] = useState<ViewMode>('map')
+  const [selectedRegion, setSelectedRegion]   = useState(initialRegion)
+  const [view, setView] = useState<ViewMode>(() => initialRegion ? 'list' : 'map')
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
-  const searchParams = useSearchParams()
 
   function handleGpsResult(lat: number, lng: number) {
     setUserLocation({ lat, lng })
@@ -104,17 +106,6 @@ export default function SpotsPage() {
       setSearch('')
     }
   }
-
-  // Pre-populate from URL params (?region=, ?country=, ?activity=)
-  useEffect(() => {
-    const region = searchParams.get('region')
-    if (region) {
-      setSelectedRegion(region)
-      setView('list')
-    }
-    const country = searchParams.get('country')
-    if (country) setSelectedCountry(country)
-  }, [searchParams])
 
   // Fetch distinct countries from DB
   const { data: metaData } = useQuery<{ countries: string[] }>({
@@ -186,6 +177,7 @@ export default function SpotsPage() {
     if (!conditionData || !Array.isArray(conditionData)) return baseSpots
     const condMap = new Map(conditionData.map((s) => [s.id, s]))
     return baseSpots.map((s) => ({ ...s, ...condMap.get(s.id) }))
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   }, [baseSpots, conditionData])
 
   // Map center

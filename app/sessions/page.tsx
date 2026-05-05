@@ -1129,8 +1129,8 @@ function Chip({
 
 function SessionsPageInner() {
   const searchParams = useSearchParams()
-  const [sessions, setSessions] = useState<SurfSession[]>([])
-  const [modalOpen, setModalOpen] = useState(false)
+  const [sessions, setSessions] = useState<SurfSession[]>(() => typeof window === 'undefined' ? [] : getSessions())
+  const [modalOpen, setModalOpen] = useState(() => !!searchParams.get('spot'))
   const [successBanner, setSuccessBanner] = useState(false)
 
   // Pre-fill from ?spot=&region=&slug= when coming from a spot page
@@ -1141,13 +1141,10 @@ function SessionsPageInner() {
   const prefillSlug = searchParams.get('slug') ?? undefined
   const hasPrefill = !!searchParams.get('spot')
 
-  useEffect(() => {
-    if (hasPrefill) setModalOpen(true)
-  }, [hasPrefill])
+  if (hasPrefill && !modalOpen) setModalOpen(true)
 
   // Load & sync from localStorage
   useEffect(() => {
-    setSessions(getSessions())
     const handler = () => setSessions(getSessions())
     window.addEventListener('storage', handler)
     return () => window.removeEventListener('storage', handler)

@@ -924,6 +924,7 @@ function matchesKeywords(region: string, keywords: string[]): boolean {
 }
 
 export function getSpotSeasons(region: string, _difficulty: string): SeasonData {
+  void _difficulty
   // Check specific international regions FIRST to prevent false positives from
   // generic US state abbreviations (e.g. "Tavarua, Mamanuca" contains ", ma").
   // Australia WA must be checked before Pacific NW since both use ", wa".

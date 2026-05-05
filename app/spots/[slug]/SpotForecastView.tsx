@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ForecastDay, ConditionRating } from '@/types/forecast'
@@ -34,7 +35,7 @@ import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
 import { Icon } from '@/components/ui/Icon'
 import { format, parseISO } from 'date-fns'
 import { useUnits } from '@/contexts/UnitsContext'
-import { fmtHeight, fmtWind, fmtTemp, fmtTide } from '@/lib/units'
+import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 
 interface Props { spot: SurfSpot }
 
@@ -139,7 +140,7 @@ export function SpotForecastView({ spot }: Props) {
         <div className="mx-auto max-w-7xl px-5 py-8 relative">
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 text-xs mb-4" style={{ color: 'var(--text-3)' }}>
-            <a href="/spots" style={{ color: 'var(--ocean-600)' }}>Spots</a>
+            <Link href="/spots" style={{ color: 'var(--ocean-600)' }}>Spots</Link>
             <span>/</span>
             <span>{spot.region}</span>
             <span>/</span>

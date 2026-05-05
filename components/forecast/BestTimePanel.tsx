@@ -12,10 +12,6 @@ interface Props {
 const WINDOW_ICONS: Record<string, WFIconName> = {
   dawn: 'moon', morning: 'sun', midday: 'sun', afternoon: 'wave', evening: 'moon',
 }
-const WIND_ICONS: Record<string, WFIconName> = {
-  glassy: 'wave', 'light offshore': 'wind', 'light onshore': 'wave', choppy: 'wind',
-}
-
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; bar: string }> = {
   poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', bar: '#d1d5db' },
   fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', bar: '#f59e0b' },

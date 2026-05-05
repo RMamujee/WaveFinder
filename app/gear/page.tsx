@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useId } from 'react'
+import { useState } from 'react'
 import {
   getGear, saveGear,
   BOARD_TYPES, WETSUIT_OPTIONS,
@@ -172,11 +172,9 @@ function Pill({ children }: { children: React.ReactNode }) {
 type AddState = 'board' | 'wetsuit' | null
 
 export default function GearPage() {
-  const [gear, setGear] = useState<GearItem[]>([])
+  const [gear, setGear] = useState<GearItem[]>(() => typeof window === 'undefined' ? [] : getGear())
   const [adding, setAdding] = useState<AddState>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-
-  useEffect(() => { setGear(getGear()) }, [])
 
   const persist = (items: GearItem[]) => { setGear(items); saveGear(items) }
 

@@ -165,7 +165,11 @@ export async function GET(req: Request) {
     spot.wavePower         = computeWavePower(wh, period)
   }
 
-  const response = enriched.map(({ _needsFallback: _, ...rest }) => ({ ...rest, bottomType: inferBottomType(rest.description, rest.name) }))
+  const response = enriched.map((spot) => {
+    const { _needsFallback, ...rest } = spot
+    void _needsFallback
+    return { ...rest, bottomType: inferBottomType(rest.description, rest.name) }
+  })
   return NextResponse.json(response, {
     headers: { 'Cache-Control': 's-maxage=180, stale-while-revalidate=60' },
   })

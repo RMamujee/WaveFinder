@@ -9,6 +9,24 @@ interface Props {
   spotName: string
 }
 
+function allowedEmbedUrl(value: string): string | null {
+  try {
+    const url = new URL(value)
+    const hostname = url.hostname.toLowerCase()
+    if (
+      hostname === 'www.youtube-nocookie.com' ||
+      hostname === 'www.youtube.com' ||
+      hostname === 'webcams.windy.com' ||
+      hostname.endsWith('.windy.com')
+    ) {
+      return url.toString()
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
 export function WindyWebcamsPanel({ slug, spotName }: Props) {
   const [active, setActive] = useState<WindyWebcam | null>(null)
 
@@ -116,12 +134,14 @@ export function WindyWebcamsPanel({ slug, spotName }: Props) {
             style={{ background: '#000', aspectRatio: '16/9' }}
             onClick={(e) => e.stopPropagation()}
           >
-            {active.playerEmbedUrl ? (
+            {allowedEmbedUrl(active.playerEmbedUrl) ? (
               <iframe
-                src={active.playerEmbedUrl}
+                src={allowedEmbedUrl(active.playerEmbedUrl)!}
                 title={active.title}
                 className="w-full h-full border-0"
                 allowFullScreen
+                referrerPolicy="no-referrer"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element

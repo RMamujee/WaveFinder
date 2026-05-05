@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useUnits } from '@/contexts/UnitsContext'
@@ -90,18 +90,14 @@ interface SwellHour {
 
 export default function TimelinePage() {
   const { unit } = useUnits()
-  const [mounted,  setMounted]  = useState(false)
-  const [hour,     setHour]     = useState(10)
+  const mounted = true
+  const [hour,     setHour]     = useState(() => {
+    const h = new Date().getHours()
+    return Math.max(6, Math.min(21, h))
+  })
   const [region,   setRegion]   = useState('Los Angeles')
   const [dayIdx,   setDayIdx]   = useState(0)
-  const [dates,    setDates]    = useState<string[]>([])
-
-  useEffect(() => {
-    const h = new Date().getHours()
-    setHour(Math.max(6, Math.min(21, h)))
-    setDates(Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)))
-    setMounted(true)
-  }, [])
+  const dates = useMemo(() => Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)), [])
 
   const selectedDate = dates[dayIdx] ?? ''
 
@@ -120,7 +116,7 @@ export default function TimelinePage() {
     staleTime: 30 * 60 * 1000,
   })
 
-  const spots: Spot[]      = data?.spots        ?? []
+  const spots: Spot[] = useMemo(() => data?.spots ?? [], [data?.spots])
   const swell: SwellHour[] = data?.regionalSwell ?? []
 
   const swellNow = swell.find(s => hrFromTime(s.time) === hour) ?? swell[0]

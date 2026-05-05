@@ -6,9 +6,11 @@ const SITE_URL =
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const spots = await prisma.surfSpot.findMany({
-    select: { slug: true, createdAt: true },
-  }).catch(() => [])
+  const spots = process.env.DATABASE_URL
+    ? await prisma.surfSpot.findMany({
+      select: { slug: true, createdAt: true },
+    }).catch(() => [])
+    : []
 
   const now = new Date()
 

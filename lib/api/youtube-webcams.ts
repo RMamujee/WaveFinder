@@ -6,6 +6,7 @@ export async function fetchYouTubeSurfCams(
   spotName: string,
   region: string
 ): Promise<WindyWebcam[]> {
+  void region
   const apiKey = process.env.YOUTUBE_API_KEY
   if (!apiKey) return []
 
