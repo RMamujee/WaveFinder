@@ -21,6 +21,8 @@ export function Navbar() {
     { href: '/sessions',  label: 'My Log' },
     { href: '/dashboard', label: 'My Spots' },
     { href: '/gear',      label: 'Gear Locker' },
+    { href: '/pricing',   label: 'Pricing' },
+    { href: '/sign-in',   label: 'Sign in' },
   ]
 
   return (

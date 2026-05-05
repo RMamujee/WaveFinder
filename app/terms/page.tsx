@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service — WaveFinder',
+  title: 'Terms of Service - WaveFinder',
   description: 'Terms governing your use of WaveFinder.',
 }
 
@@ -19,44 +19,45 @@ export default function TermsPage() {
       <h2>Use the service at your own risk</h2>
       <p>
         WaveFinder shows forecasts derived from third-party models. Forecasts are not guarantees.
-        Always check the actual conditions, lifeguard advisories, and your own ability before entering
-        the water. We are not responsible for accidents, injuries, or losses related to your decisions
-        about when, where, or whether to surf.
+        Always check actual conditions, lifeguard advisories, local rules, and your own ability before
+        entering the water. We are not responsible for accidents, injuries, or losses related to your
+        decisions about when, where, or whether to surf.
       </p>
 
       <h2>Free tier</h2>
       <p>
-        Most features are free with no account required. We may rate-limit excessive automated traffic
-        to keep the service available for everyone.
+        Most forecast and spot browsing features are free with no account required. We may rate-limit
+        excessive automated traffic to keep the service available for everyone.
       </p>
 
-      <h2>Pro tier</h2>
+      <h2>Pro trial and subscription</h2>
       <p>
-        A Pro subscription unlocks additional features (cross-device sync, unlimited alerts, extended
-        history, ad-free experience). Pricing is shown on the <a href="/pricing">pricing page</a>.
-        Subscriptions auto-renew until canceled. You can cancel anytime from your billing portal —
-        cancellation takes effect at the end of the current period and we don&rsquo;t prorate refunds
-        for unused time except where required by law.
+        Pro starts with a 7-day free trial and then renews monthly at the price shown on the{' '}
+        <a href="/pricing">pricing page</a>. The subscription renews automatically unless you cancel
+        before the trial or current billing period ends. You can cancel from the Stripe billing portal.
+        Cancellation takes effect at the end of the current trial or paid period. We do not prorate
+        refunds for unused time except where required by law.
       </p>
 
       <h2>Acceptable use</h2>
       <p>
-        Don&rsquo;t scrape the API at scale, attempt to bypass rate limits, or resell our forecasts as a
-        commercial weather product. The data we display is licensed from third parties; we&rsquo;re not
-        the rights holder, so we can&rsquo;t grant you those rights either.
+        Do not scrape the API at scale, attempt to bypass rate limits, attack authentication or billing
+        systems, or resell our forecasts as a commercial weather product. The data we display is licensed
+        from third parties; we are not the rights holder, so we cannot grant you those rights either.
       </p>
 
       <h2>Account termination</h2>
       <p>
-        We may suspend or terminate accounts that violate these terms or that abuse the service. If we
-        terminate your Pro account without cause, we&rsquo;ll refund the unused portion of your current
-        billing period.
+        We may suspend or terminate accounts that violate these terms or abuse the service. If we
+        terminate your Pro account without cause, we will refund the unused portion of your current
+        paid billing period.
       </p>
 
       <h2>Changes to these terms</h2>
       <p>
-        If we make material changes, we&rsquo;ll notify Pro subscribers by email at least 14 days before
-        the change takes effect. Continuing to use the service after that constitutes acceptance.
+        If we make material changes, we will notify Pro subscribers by email at least 14 days before
+        the change takes effect where practical. Continuing to use the service after changes take
+        effect constitutes acceptance.
       </p>
 
       <h2>Contact</h2>
@@ -65,9 +66,8 @@ export default function TermsPage() {
       </p>
 
       <p style={{ color: 'var(--text-3)', fontSize: '0.75rem', marginTop: '2rem' }}>
-        These terms are governed by the laws of the jurisdiction in which WaveFinder is operated. They
-        are written in plain English to be readable; this isn&rsquo;t a substitute for individualized
-        legal advice.
+        These terms are written in plain English to be readable; they are not a substitute for
+        individualized legal advice.
       </p>
     </article>
   )

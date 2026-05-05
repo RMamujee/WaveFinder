@@ -25,6 +25,25 @@ The Vercel project must have these variables available in Production and Preview
 - `YOUTUBE_API_KEY`
 - `WINDY_WEBCAM_API_KEY`
 
+### Billing
+
+Stripe is required before the Pro trial checkout can go live. Without these values, billing routes fail closed with `503`.
+
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRO_MONTHLY_PRICE_ID`
+
+Stripe webhook endpoint:
+
+- `https://wave-finder.vercel.app/api/stripe/webhook`
+
+Required webhook events:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
 ### Rate limiting
 
 Vercel's Upstash integration currently prefixes the Redis variables with `WaveFinderStorage_`.

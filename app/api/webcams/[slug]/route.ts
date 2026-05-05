@@ -4,7 +4,7 @@ import { fetchNearbyWebcams } from '@/lib/api/windy-webcams'
 import { fetchOSMWebcams } from '@/lib/api/osm-webcams'
 import { fetchYouTubeSurfCams } from '@/lib/api/youtube-webcams'
 
-export const revalidate = 3600
+export const revalidate = 21600
 export const maxDuration = 20
 
 export async function GET(
@@ -39,6 +39,6 @@ export async function GET(
   const all = [...merged, ...youtube]
 
   return NextResponse.json(all, {
-    headers: { 'Cache-Control': 's-maxage=3600, stale-while-revalidate=600' },
+    headers: { 'Cache-Control': 's-maxage=21600, stale-while-revalidate=86400' },
   })
 }
