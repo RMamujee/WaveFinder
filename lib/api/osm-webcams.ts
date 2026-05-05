@@ -21,7 +21,7 @@ export async function fetchOSMWebcams(lat: number, lng: number): Promise<WindyWe
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: query,
-      next: { revalidate: 3600 },
+      next: { revalidate: 21600 },
     })
 
     if (!res.ok) return []

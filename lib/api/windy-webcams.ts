@@ -33,7 +33,7 @@ export async function fetchNearbyWebcams(
 
     const res = await fetch(`${WINDY_BASE}?${params}`, {
       headers: { 'x-windy-api-key': apiKey },
-      next: { revalidate: 3600 },
+      next: { revalidate: 21600 },
     })
 
     if (!res.ok) return []

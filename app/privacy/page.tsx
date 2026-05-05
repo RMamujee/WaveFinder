@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy — WaveFinder',
+  title: 'Privacy Policy - WaveFinder',
   description: 'How WaveFinder handles your data.',
 }
 
@@ -18,52 +18,52 @@ export default function PrivacyPage() {
 
       <h2>What we collect</h2>
       <p>
-        WaveFinder is designed to collect as little as possible. Without a Pro account you can use the
-        full free tier with zero data leaving your device — saved spots, sessions, and alert preferences
-        live in your browser&rsquo;s local storage.
+        WaveFinder is designed to collect as little as possible. Without an account you can use the
+        full free tier with zero saved surf data leaving your device. Saved spots, sessions, and gear
+        logs live in your browser&apos;s local storage.
       </p>
 
-      <h3>If you create a Pro account</h3>
+      <h3>If you create an account or start a Pro trial</h3>
       <ul>
-        <li><strong>Email address</strong> — for sign-in, billing, and alert delivery.</li>
-        <li><strong>Stripe customer ID</strong> — to manage your subscription and process payments.
-          Card details are handled directly by Stripe; we never see them.</li>
-        <li><strong>Saved spots, surf sessions, gear locker</strong> — synced server-side so they follow
-          you across devices.</li>
+        <li><strong>Email address</strong> - for sign-in, billing, and service messages.</li>
+        <li><strong>Authentication records</strong> - session, account, and verification records handled by Better Auth.</li>
+        <li><strong>Stripe customer and subscription IDs</strong> - to manage the 7-day trial, monthly subscription, invoices, and cancellation. Card details are handled directly by Stripe; we never see them.</li>
+        <li><strong>Saved spots, surf sessions, and gear locker</strong> - synced server-side only when account sync features are enabled.</li>
       </ul>
 
       <h3>If you grant location access</h3>
       <p>
-        Your coordinates are used in your browser to find nearby spots. We don&rsquo;t store them.
+        Your coordinates are used in your browser to find nearby spots. We do not store them.
       </p>
 
-      <h3>Anonymous usage analytics</h3>
+      <h3>Analytics and monitoring</h3>
       <p>
-        We use Vercel Analytics and Vercel Speed Insights, both of which run cookieless and never
-        identify individual users. They report aggregate page views and Core Web Vitals only.
+        We use Vercel Analytics and Vercel Speed Insights for aggregate performance data. We also log
+        security, billing, and uptime events such as webhook failures, checkout creation, and database
+        health errors. Monitoring logs may include account IDs or Stripe IDs needed to debug a specific
+        issue, but not payment card data.
       </p>
 
-      <h2>What we don&rsquo;t do</h2>
+      <h2>What we do not do</h2>
       <ul>
-        <li>We don&rsquo;t sell your data.</li>
-        <li>We don&rsquo;t share your data with advertisers.</li>
-        <li>We don&rsquo;t use third-party tracking pixels.</li>
+        <li>We do not sell your data.</li>
+        <li>We do not share your data with advertisers.</li>
+        <li>We do not use third-party tracking pixels.</li>
       </ul>
 
       <h2>Data sources we display</h2>
       <p>
-        Forecast data comes from <a href="https://open-meteo.com/">Open-Meteo</a> (CC-BY 4.0),{' '}
+        Forecast data comes from <a href="https://open-meteo.com/">Open-Meteo</a>,{' '}
         <a href="https://www.ndbc.noaa.gov/">NOAA NDBC buoys</a>,{' '}
         <a href="https://api.tidesandcurrents.noaa.gov/api/prod/">NOAA CO-OPS tides</a>,
         USGS, and EPA. Webcam previews come from <a href="https://www.windy.com/">Windy.com</a> and
-        YouTube. None of those services receive your identity from us.
+        YouTube. None of those services receive your account identity from us.
       </p>
 
       <h2>Your rights</h2>
       <p>
-        If you have a Pro account, you can export or delete all your data anytime from{' '}
-        <a href="/dashboard">your dashboard</a>. For free users, clearing your browser&rsquo;s site data
-        removes everything.
+        If you have an account, you can request export or deletion of your account data. For free users,
+        clearing your browser&apos;s site data removes locally stored saved spots, sessions, and gear logs.
       </p>
 
       <h2>Contact</h2>
@@ -72,9 +72,8 @@ export default function PrivacyPage() {
       </p>
 
       <p style={{ color: 'var(--text-3)', fontSize: '0.75rem', marginTop: '2rem' }}>
-        This is a plain-language summary, not a legal document. If you operate or use the service from
-        a jurisdiction with specific privacy laws (GDPR, CCPA), the rights granted by those laws apply
-        in addition to this policy.
+        This is a plain-language summary, not individualized legal advice. Rights granted by privacy
+        laws such as GDPR or CCPA apply where those laws cover you.
       </p>
     </article>
   )
