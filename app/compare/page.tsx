@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ConditionRating, ForecastDay, ForecastHour } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
-import { weatherIcon, tempF } from '@/lib/forecast/weather-code'
+import { weatherIcon } from '@/lib/forecast/weather-code'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
@@ -133,8 +133,6 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
     else if (e.key === 'Escape') { setOpen(false); setQuery('') }
   }
 
-  useEffect(() => { setHighlighted(0) }, [query])
-
   // Selected only when both a slug is set AND the matching spot has loaded.
   // Without the second clause, an in-flight spots query causes selectedSpot
   // to be null while value is set, leading to selectedSpot!.name crashes.
@@ -158,7 +156,7 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
           disabled={isLoading}
           placeholder={selectedSpot ? selectedSpot.name : 'Search spots…'}
           value={open ? query : (selectedSpot ? selectedSpot.name : '')}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+          onChange={(e) => { setQuery(e.target.value); setHighlighted(0); setOpen(true) }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           autoComplete="off"
@@ -558,17 +556,13 @@ function MobileSwipeCompare({
   setExpandedSlugs: React.Dispatch<React.SetStateAction<Set<string>>>
 }) {
   const [idx, setIdx] = useState(0)
+  const clampedIdx = Math.min(idx, Math.max(0, activeSlugs.length - 1))
   const containerRef  = useRef<HTMLDivElement>(null)
   // Store mutable gesture state in a ref so event handlers don't go stale
   const gesture = useRef({ startX: 0, startY: 0, decided: false, isHoriz: false, skip: false })
   // Keep a ref of the count so the touchend closure always has the latest value
   const countRef = useRef(activeSlugs.length)
   useEffect(() => { countRef.current = activeSlugs.length }, [activeSlugs.length])
-
-  // Clamp index when spot list shrinks
-  useEffect(() => {
-    setIdx((i) => Math.min(i, Math.max(0, activeSlugs.length - 1)))
-  }, [activeSlugs.length])
 
   // Native touch listeners with passive:false on touchmove so we can call preventDefault
   // — this is the only reliable way to block page scroll during a horizontal swipe on iOS
@@ -636,7 +630,8 @@ function MobileSwipeCompare({
             onExpandToggle={() =>
               setExpandedSlugs((prev) => {
                 const next = new Set(prev)
-                next.has(slug) ? next.delete(slug) : next.add(slug)
+                if (next.has(slug)) next.delete(slug)
+                else next.add(slug)
                 return next
               })
             }
@@ -648,7 +643,7 @@ function MobileSwipeCompare({
       <div className="flex items-center justify-between mt-4 px-1">
         <button
           onClick={() => setIdx((i) => Math.max(i - 1, 0))}
-          disabled={idx === 0}
+          disabled={clampedIdx === 0}
           className="rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-30"
           style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)', WebkitTapHighlightColor: 'transparent' }}
         >
@@ -670,13 +665,13 @@ function MobileSwipeCompare({
                 <div
                   className="rounded-full transition-all"
                   style={{
-                    width:      i === idx ? 10 : 7,
-                    height:     i === idx ? 10 : 7,
-                    background: i === idx ? 'var(--ocean-600)' : 'var(--border)',
+                    width:      i === clampedIdx ? 10 : 7,
+                    height:     i === clampedIdx ? 10 : 7,
+                    background: i === clampedIdx ? 'var(--ocean-600)' : 'var(--border)',
                   }}
                 />
                 {spot && (
-                  <span className="text-xs font-medium" style={{ color: i === idx ? 'var(--ocean-600)' : 'var(--text-3)', fontSize: 10 }}>
+                  <span className="text-xs font-medium" style={{ color: i === clampedIdx ? 'var(--ocean-600)' : 'var(--text-3)', fontSize: 10 }}>
                     {spot.name.split(' ')[0]}
                   </span>
                 )}
@@ -687,7 +682,7 @@ function MobileSwipeCompare({
 
         <button
           onClick={() => setIdx((i) => Math.min(i + 1, activeSlugs.length - 1))}
-          disabled={idx === activeSlugs.length - 1}
+          disabled={clampedIdx === activeSlugs.length - 1}
           className="rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-30"
           style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)', WebkitTapHighlightColor: 'transparent' }}
         >
@@ -709,7 +704,22 @@ const STORAGE_KEY = 'wavefinder-compare-slugs'
 const SLUG_RE     = /^[a-z0-9-]{1,120}$/
 
 export default function ComparePage() {
-  const [selectedSlugs, setSelectedSlugs] = useState<string[]>(['', '', ''])
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return ['', '', '']
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return ['', '', '']
+      const parsed = JSON.parse(raw)
+      if (
+        Array.isArray(parsed) &&
+        parsed.length === MAX_SPOTS &&
+        parsed.every((s) => typeof s === 'string' && (s === '' || SLUG_RE.test(s)))
+      ) {
+        return parsed
+      }
+    } catch { /* corrupt storage - ignore */ }
+    return ['', '', '']
+  })
   const [selectedDays,  setSelectedDays]  = useState<Record<string, string>>({})
   const [expandedSlugs, setExpandedSlugs] = useState<Set<string>>(new Set())
 
@@ -724,7 +734,7 @@ export default function ComparePage() {
         parsed.length === MAX_SPOTS &&
         parsed.every((s) => typeof s === 'string' && (s === '' || SLUG_RE.test(s)))
       ) {
-        setSelectedSlugs(parsed)
+        queueMicrotask(() => setSelectedSlugs(parsed))
       }
     } catch { /* corrupt storage — ignore */ }
   }, [])
@@ -847,7 +857,8 @@ export default function ComparePage() {
                   onExpandToggle={() =>
                     setExpandedSlugs((prev) => {
                       const next = new Set(prev)
-                      next.has(slug) ? next.delete(slug) : next.add(slug)
+                      if (next.has(slug)) next.delete(slug)
+                      else next.add(slug)
                       return next
                     })
                   }

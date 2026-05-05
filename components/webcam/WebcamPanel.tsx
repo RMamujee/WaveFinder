@@ -27,6 +27,7 @@ function RefreshingImage({ src }: { src: string }) {
 
 export function WebcamPanel({ webcamUrl, webcamType, spotName, lat, lng }: Props) {
   const hasCamera = webcamType !== 'none' && webcamUrl
+  const youtubeId = webcamUrl ? getYouTubeId(webcamUrl) : null
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'white' }}>
@@ -43,12 +44,14 @@ export function WebcamPanel({ webcamUrl, webcamType, spotName, lat, lng }: Props
       </div>
 
       <div className="aspect-video">
-        {webcamType === 'youtube' && webcamUrl ? (
+        {webcamType === 'youtube' && youtubeId ? (
           <iframe
-            src={`https://www.youtube-nocookie.com/embed/${getYouTubeId(webcamUrl)}?autoplay=1&mute=1&controls=0`}
+            src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&mute=1&controls=0`}
             title={`${spotName} live cam`}
             className="h-full w-full border-0"
             allow="autoplay; encrypted-media"
+            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin allow-presentation"
           />
         ) : webcamType === 'image' && webcamUrl ? (
           <RefreshingImage src={webcamUrl} />
@@ -58,6 +61,8 @@ export function WebcamPanel({ webcamUrl, webcamType, spotName, lat, lng }: Props
             title={`Map of ${spotName}`}
             className="h-full w-full border-0"
             loading="lazy"
+            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin"
           />
         )}
       </div>

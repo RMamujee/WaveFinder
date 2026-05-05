@@ -147,7 +147,6 @@ function popupHtml(spot: SpotWithRating): string {
   const h = spot.currentWaveHeight
   const hasWave = h !== null && h !== undefined && h > 0
   const heightFt = hasWave ? Math.round(h! * 3.281) : null
-  const heightM  = hasWave ? h!.toFixed(1) : null
   const period   = spot.currentPeriod != null ? Math.round(spot.currentPeriod!) : null
   const power    = spot.wavePower != null ? Math.round(spot.wavePower!) : null
 
@@ -204,7 +203,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
   const seamarkLayerRef = useRef<import('leaflet').TileLayer | null>(null)
   const [seamarkOn, setSeamarkOn] = useState(false)
   const [locating, setLocating] = useState<'idle' | 'loading' | 'located' | 'error'>('idle')
-  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(userLocation ?? null)
   const userMarkerRef   = useRef<import('leaflet').Marker | null>(null)
   // Always holds the latest spots so async Leaflet init reads enriched data
   // even when conditions arrive between when the effect was scheduled and when
@@ -521,6 +520,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       if (!mapInstance.current) return
       await rebuildCluster(mapInstance.current, L, MCG2, spotsRef.current)
     })().catch(console.error)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterVersion])
 
   function handleLocate() {
@@ -561,7 +561,6 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
         { animate: true }
       )
     })().catch(console.error)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gpsLocation])
 
   return (
