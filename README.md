@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WaveFinder
 
-## Getting Started
+Free, Surfline-style surf forecasts for 1,490+ surf spots worldwide. WaveFinder
+pulls 100% free public data (NOAA NDBC buoys, NOAA CO-OPS tides, and Open-Meteo
+marine forecasts) and turns it into wave-height, swell, wind, tide, and live
+buoy readings with a surf-condition rating for every spot.
 
-First, run the development server:
+## Stack
+
+- **Framework:** Next.js 16 (App Router) + React 19
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS v4
+- **Auth:** better-auth (email + password)
+- **ORM / DB:** Prisma 5 + Neon Postgres
+- **Payments:** Stripe (Pro subscription)
+- **Rate limiting:** Upstash Redis
+- **Data / charts:** TanStack Query, Recharts, Leaflet (+ MarkerCluster)
+- **Monitoring:** Sentry (optional)
+- **Testing:** Vitest
+
+## Required environment variables
+
+All configuration is supplied via environment variables. See
+[`.env.example`](./.env.example) for the full list, grouped and documented with
+placeholder values. Copy it to `.env.local` and fill in real values:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+At minimum the app needs `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_URL`,
+`BETTER_AUTH_SECRET`, and `NEXT_PUBLIC_SITE_URL`. Stripe, Upstash, Resend, and
+Sentry variables enable their respective features.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Local development
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Node 22 is required (see [`.nvmrc`](./.nvmrc)).
 
-## Learn More
+```bash
+npm install            # install dependencies
+npx prisma generate    # generate the Prisma client
+npx prisma db push     # sync the schema to your database
+npm run db:seed        # (optional) seed surf spots
+npm run dev            # start the dev server at http://localhost:3000
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Testing
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm test               # run the Vitest suite once
+npm run test:watch     # watch mode
+npm run typecheck      # type-check with tsc --noEmit
+npm run lint           # ESLint
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploy notes
 
-## Deploy on Vercel
+WaveFinder is built to deploy on Vercel.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Set the same variables from `.env.example` in your Vercel project's
+  **Production** environment.
+- Use the Neon **pooled** endpoint for `DATABASE_URL`
+  (`?sslmode=require&pgbouncer=true&connection_limit=1`) and the **direct**
+  (non-pooler) host for `DIRECT_URL`.
+- Apply schema changes with `npx prisma db push` (or adopt `prisma migrate`).
+- Point an uptime monitor at `/api/health`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A step-by-step production cutover checklist lives in
+[`docs/RUNBOOK.md`](./docs/RUNBOOK.md).
