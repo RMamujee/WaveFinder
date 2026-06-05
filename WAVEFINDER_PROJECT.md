@@ -4,6 +4,29 @@
 
 ---
 
+> ## ⚠️ Accuracy notice — trust the code, not this doc
+>
+> Parts of this reference describe features that are **PLANNED / NOT IMPLEMENTED**
+> in the current codebase. When in doubt, **read the source — the code is the
+> source of truth, not this document.** Specifically, as of this writing the
+> following do **not** exist in the repo:
+>
+> - **Resend email alerts** (`lib/email.ts` and alert-email sending). Resend is
+>   only wired into `lib/auth.ts` for optional account email verification.
+> - **The `/api/cron/check-alerts` cron route** — there is no `app/api/cron/`
+>   directory at all.
+> - **The saved-spots and sessions sync API routes** (`/api/saved-spots/**`,
+>   `/api/sessions/**`) — these are not present.
+> - **The `SpotAlert`, `SavedSpot`, and `SurfSession` Prisma models** — the
+>   current `prisma/schema.prisma` only defines `SurfSpot`, `User`, `Session`,
+>   `Account`, and `Verification`. Any feature described below that depends on
+>   those models may not exist.
+>
+> The historical content below is retained for context, but verify against the
+> actual code before relying on it.
+
+---
+
 ## App Summary
 
 **WaveFinder** is a free Surfline-style surf forecast web app. Uses 100% free government data (NOAA NDBC buoys, NOAA CO-OPS tides, Open-Meteo marine forecasts). Built with Next.js 16 App Router, TypeScript, Tailwind CSS v4, Prisma v5 + **Neon PostgreSQL**, better-auth, TanStack Query, Leaflet maps (with clustering), and Recharts.

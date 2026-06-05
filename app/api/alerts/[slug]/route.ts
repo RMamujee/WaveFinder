@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchSurfAlerts } from '@/lib/api/noaa-alerts'
+import { handleRouteError } from '@/lib/route-helpers'
 
 export const revalidate = 1800
 export const maxDuration = 15
@@ -14,16 +15,20 @@ export async function GET(
     return NextResponse.json([], { status: 400 })
   }
 
-  const spot = await prisma.surfSpot.findUnique({
-    where: { slug },
-    select: { lat: true, lng: true },
-  })
+  try {
+    const spot = await prisma.surfSpot.findUnique({
+      where: { slug },
+      select: { lat: true, lng: true },
+    })
 
-  if (!spot) return NextResponse.json([], { status: 404 })
+    if (!spot) return NextResponse.json([], { status: 404 })
 
-  const alerts = await fetchSurfAlerts(spot.lat, spot.lng)
+    const alerts = await fetchSurfAlerts(spot.lat, spot.lng)
 
-  return NextResponse.json(alerts, {
-    headers: { 'Cache-Control': 's-maxage=1800, stale-while-revalidate=900' },
-  })
+    return NextResponse.json(alerts, {
+      headers: { 'Cache-Control': 's-maxage=1800, stale-while-revalidate=900' },
+    })
+  } catch (error) {
+    return handleRouteError(error, 'alerts_error')
+  }
 }

@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'WaveFinder',
     short_name: 'WaveFinder',
-    description: 'Free surf forecasts for every California spot',
+    description: 'Free surf forecasts for 1,490+ surf spots worldwide',
     start_url: '/',
     display: 'standalone',
     background_color: '#fdfaf5',

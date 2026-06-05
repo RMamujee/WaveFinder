@@ -6,6 +6,8 @@ import { getAppUrl, stripe } from '@/lib/stripe'
 export async function POST() {
   const session = await getServerSession()
   if (!session?.user) return NextResponse.json({ error: 'Sign in required' }, { status: 401 })
+  // TODO: require session.user.emailVerified here once email verification is
+  // enforced (no email provider is wired yet, so we cannot gate on it today).
   if (!stripe) return NextResponse.json({ error: 'Stripe is not configured' }, { status: 503 })
 
   const user = await prisma.user.findUnique({

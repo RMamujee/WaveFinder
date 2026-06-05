@@ -4,6 +4,7 @@ import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
 import { fetchTidePredictions, fetchCoastalWind } from '@/lib/api/noaa-tides'
 import { fetchBuoyData } from '@/lib/api/noaa-buoy'
 import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
+import { handleRouteError } from '@/lib/route-helpers'
 
 export const revalidate = 3600
 export const maxDuration = 60
@@ -16,6 +17,7 @@ export async function GET(
   if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
+  try {
   const spot = await prisma.surfSpot.findUnique({ where: { slug } })
 
   if (!spot) {
@@ -78,4 +80,7 @@ export async function GET(
       },
     }
   )
+  } catch (error) {
+    return handleRouteError(error, 'forecast_error')
+  }
 }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { fetchNearbyWebcams } from '@/lib/api/windy-webcams'
 import { fetchOSMWebcams } from '@/lib/api/osm-webcams'
 import { fetchYouTubeSurfCams } from '@/lib/api/youtube-webcams'
+import { handleRouteError } from '@/lib/route-helpers'
 
 export const revalidate = 21600
 export const maxDuration = 20
@@ -16,10 +17,15 @@ export async function GET(
     return NextResponse.json([], { status: 400 })
   }
 
-  const spot = await prisma.surfSpot.findUnique({
-    where: { slug },
-    select: { lat: true, lng: true, name: true, region: true },
-  })
+  let spot
+  try {
+    spot = await prisma.surfSpot.findUnique({
+      where: { slug },
+      select: { lat: true, lng: true, name: true, region: true },
+    })
+  } catch (error) {
+    return handleRouteError(error, 'webcams_error')
+  }
 
   if (!spot) return NextResponse.json([], { status: 404 })
 
