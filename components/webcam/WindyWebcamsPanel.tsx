@@ -84,7 +84,11 @@ export function WindyWebcamsPanel({ slug, spotName }: Props) {
               <img
                 src={cam.thumbnail}
                 alt={cam.title}
+                loading="lazy"
+                width={320}
+                height={180}
                 className="w-full h-full object-cover"
+                style={{ aspectRatio: '16 / 9' }}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center" style={{ color: 'var(--text-3)' }}>
@@ -145,7 +149,7 @@ export function WindyWebcamsPanel({ slug, spotName }: Props) {
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={active.previewUrl || active.thumbnail} alt={active.title} className="w-full h-full object-cover" />
+              <img src={active.previewUrl || active.thumbnail} alt={active.title} loading="lazy" width={768} height={432} className="w-full h-full object-cover" style={{ aspectRatio: '16 / 9' }} />
             )}
 
             <button

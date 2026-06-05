@@ -9,7 +9,13 @@ export async function GET(
   if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
-  const spot = await prisma.surfSpot.findUnique({ where: { slug } })
+  let spot
+  try {
+    spot = await prisma.surfSpot.findUnique({ where: { slug } })
+  } catch (err) {
+    console.error('[api/spots/[slug]] findUnique failed', err)
+    return NextResponse.json({ error: 'Failed to load spot' }, { status: 500 })
+  }
 
   if (!spot) {
     return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
