@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Redis } from '@upstash/redis'
+import { ipAddress } from '@vercel/functions'
 
 const WINDOW_MS = 60_000   // 1 minute
 
 const RATE_LIMITS: { pattern: RegExp; limit: number }[] = [
+  { pattern: /^\/api\/auth(?:\/|$)/, limit: 10 },
   { pattern: /^\/api\/debug(?:\/|$)/, limit: 10 },
   { pattern: /^\/api\/webcams(?:\/|$)/, limit: 20 },
   { pattern: /^\/api\/water-quality(?:\/|$)/, limit: 30 },
@@ -42,6 +44,7 @@ function maybeprune() {
 
 function rateLimitKey(req: NextRequest) {
   const ip =
+    ipAddress(req) ??
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     req.headers.get('x-real-ip') ??
     '0.0.0.0'

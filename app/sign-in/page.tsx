@@ -25,7 +25,9 @@ export default function SignInPage() {
       setError(res.error.message ?? 'Unable to sign in.')
       return
     }
-    router.push(searchParams.get('next') ?? '/dashboard')
+    const raw = searchParams.get('next') ?? '/dashboard'
+    const next = (raw.startsWith('/') && !raw.startsWith('//')) ? raw : '/dashboard'
+    router.push(next)
   }
 
   return (

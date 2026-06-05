@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
 import { rateSurfConditions, degreesToCompass } from '@/lib/forecast/rating'
+import { requireProAccess } from '@/lib/entitlements'
+import { handleRouteError } from '@/lib/route-helpers'
 
-export const revalidate = 1800
+// Per-user Pro-gated route: never share-cache. Explicit so the no-cache
+// guarantee survives future refactors even if req.url access changes.
+export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
@@ -68,6 +72,10 @@ export interface BestSpotsSpotEntry {
 }
 
 export async function GET(req: Request) {
+  const gate = await requireProAccess()
+  if (!gate.ok) return NextResponse.json({ error: gate.status === 401 ? 'Sign in required' : 'Pro required' }, { status: gate.status })
+
+  try {
   const { searchParams } = new URL(req.url)
   const region = (searchParams.get('region') ?? '').slice(0, 100)
   const date   = (searchParams.get('date') ?? '').slice(0, 10)
@@ -176,6 +184,9 @@ export async function GET(req: Request) {
 
   return NextResponse.json(
     { spots: spotsData, regionalSwell, date },
-    { headers: { 'Cache-Control': 's-maxage=1800, stale-while-revalidate=900' } }
+    { headers: { 'Cache-Control': 'private, no-store' } }
   )
+  } catch (error) {
+    return handleRouteError(error, 'best_spots_error')
+  }
 }
