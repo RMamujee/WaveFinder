@@ -4,7 +4,6 @@ import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
 import { inferBottomType } from '@/lib/bottom-type'
 
-export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 
@@ -27,27 +26,33 @@ export async function GET(req: Request) {
   // is faster.
   const slim = searchParams.get('slim') === 'true'
 
-  const spots = await prisma.surfSpot.findMany({
-    where: {
-      AND: [
-        ids.length ? { id: { in: ids } } : {},
-        search ? { OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { region: { contains: search, mode: 'insensitive' } },
-          { country: { contains: search, mode: 'insensitive' } },
-        ]} : {},
-        difficulty ? { difficulty } : {},
-        country ? { country } : {},
-      ],
-    },
-    orderBy: { name: 'asc' },
-    ...(slim ? {
-      select: {
-        id: true, slug: true, name: true, region: true, country: true,
-        lat: true, lng: true, difficulty: true, facingDirection: true,
+  let spots
+  try {
+    spots = await prisma.surfSpot.findMany({
+      where: {
+        AND: [
+          ids.length ? { id: { in: ids } } : {},
+          search ? { OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { region: { contains: search, mode: 'insensitive' } },
+            { country: { contains: search, mode: 'insensitive' } },
+          ]} : {},
+          difficulty ? { difficulty } : {},
+          country ? { country } : {},
+        ],
       },
-    } : {}),
-  })
+      orderBy: { name: 'asc' },
+      ...(slim ? {
+        select: {
+          id: true, slug: true, name: true, region: true, country: true,
+          lat: true, lng: true, difficulty: true, facingDirection: true,
+        },
+      } : {}),
+    })
+  } catch (err) {
+    console.error('[api/spots] findMany failed', err)
+    return NextResponse.json({ error: 'Failed to load spots' }, { status: 500 })
+  }
 
   if (!withConditions) {
     if (slim) {

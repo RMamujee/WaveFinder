@@ -22,7 +22,7 @@ function RefreshingImage({ src }: { src: string }) {
     return () => clearInterval(timer)
   }, [])
   // eslint-disable-next-line @next/next/no-img-element
-  return <img key={key} src={src} alt="Live cam" className="h-full w-full object-cover" />
+  return <img key={key} src={src} alt="Live cam" loading="lazy" width={768} height={432} className="h-full w-full object-cover" style={{ aspectRatio: '16 / 9' }} />
 }
 
 export function WebcamPanel({ webcamUrl, webcamType, spotName, lat, lng }: Props) {

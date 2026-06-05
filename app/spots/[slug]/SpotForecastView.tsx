@@ -2,15 +2,16 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ForecastDay, ConditionRating } from '@/types/forecast'
-import { WaveChart } from '@/components/forecast/WaveChart'
-import { WindChart } from '@/components/forecast/WindChart'
-import { WindRoseChart } from '@/components/forecast/WindRoseChart'
-import { TideChart } from '@/components/forecast/TideChart'
-import { UVChart } from '@/components/forecast/UVChart'
+const WaveChart = dynamic(() => import('@/components/forecast/WaveChart').then((m) => m.WaveChart), { ssr: false, loading: () => null })
+const WindChart = dynamic(() => import('@/components/forecast/WindChart').then((m) => m.WindChart), { ssr: false, loading: () => null })
+const WindRoseChart = dynamic(() => import('@/components/forecast/WindRoseChart').then((m) => m.WindRoseChart), { ssr: false, loading: () => null })
+const TideChart = dynamic(() => import('@/components/forecast/TideChart').then((m) => m.TideChart), { ssr: false, loading: () => null })
+const UVChart = dynamic(() => import('@/components/forecast/UVChart').then((m) => m.UVChart), { ssr: false, loading: () => null })
 import { GearPanel } from '@/components/forecast/GearPanel'
 import { ForecastDayCard } from '@/components/forecast/ForecastDayCard'
 import { BuoyReadings } from '@/components/forecast/BuoyReadings'

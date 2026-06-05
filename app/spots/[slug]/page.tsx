@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
+import { cache } from 'react'
 import { SpotForecastView } from './SpotForecastView'
 import { SpotCard } from '@/components/spots/SpotCard'
 import { WaveLoader } from '@/components/layout/WaveLoader'
@@ -37,9 +38,13 @@ interface Props {
   params: Promise<{ slug: string }>
 }
 
+const getSpot = cache(async (slug: string) =>
+  prisma.surfSpot.findUnique({ where: { slug } })
+)
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  const spot = await prisma.surfSpot.findUnique({ where: { slug } })
+  const spot = await getSpot(slug)
   if (!spot) return {}
   return {
     title: `${spot.name} Surf Forecast – WaveFinder`,
@@ -55,7 +60,7 @@ function broadRegion(region: string): string {
 
 export default async function SpotPage({ params }: Props) {
   const { slug } = await params
-  const spot = await prisma.surfSpot.findUnique({ where: { slug } })
+  const spot = await getSpot(slug)
 
   if (!spot) notFound()
 
