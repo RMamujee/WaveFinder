@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { degreesToCompass, computeWavePower } from '@/lib/forecast/rating'
+import { handleRouteError } from '@/lib/route-helpers'
 
 export const revalidate = 1800
 
@@ -74,7 +75,12 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
 
-  const spot = await prisma.surfSpot.findUnique({ where: { slug: spotSlug } })
+  let spot
+  try {
+    spot = await prisma.surfSpot.findUnique({ where: { slug: spotSlug } })
+  } catch (error) {
+    return handleRouteError(error, 'surf_reports_error')
+  }
 
   if (!spot) {
     return NextResponse.json({ error: 'Spot not found' }, { status: 404 })

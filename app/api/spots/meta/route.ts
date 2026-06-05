@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-export const revalidate = 3600
+export const revalidate = 86400
 
 // Returns distinct countries and (optionally) regions for a given country
 export async function GET(req: Request) {

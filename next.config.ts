@@ -28,6 +28,9 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizePackageImports: ["recharts", "date-fns"],
+  },
   turbopack: {
     root: __dirname,
   },

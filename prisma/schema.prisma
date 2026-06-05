@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model SurfSpot {
@@ -28,6 +29,7 @@ model SurfSpot {
 
   @@index([region])
   @@index([difficulty])
+  @@index([country])
 }
 
 model User {
@@ -64,6 +66,7 @@ model Session {
 
   @@unique([token])
   @@index([userId])
+  @@index([expiresAt])
   @@map("session")
 }
 
@@ -96,5 +99,6 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
+  @@index([expiresAt])
   @@map("verification")
 }
