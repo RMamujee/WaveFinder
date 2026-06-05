@@ -13,6 +13,20 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Disallow stray console.log; allow console.warn/console.error everywhere.
+  {
+    rules: {
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  // The monitoring helper, scripts, and the Prisma seed script intentionally
+  // use all console methods (CLI/dev tooling, not application source).
+  {
+    files: ["lib/monitoring.ts", "scripts/**", "prisma/seed.ts"],
+    rules: {
+      "no-console": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
