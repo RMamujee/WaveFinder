@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useSession } from '@/lib/auth-client'
 
-export function CheckoutButton() {
+export function CheckoutButton({ plan = 'monthly' }: { plan?: 'monthly' | 'annual' }) {
   const { data: session, isPending } = useSession()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +29,11 @@ export function CheckoutButton() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/billing/checkout', { method: 'POST' })
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      })
       const data = await res.json()
       if (!res.ok || !data.url) throw new Error(data.error ?? 'Checkout failed')
       window.location.href = data.url
