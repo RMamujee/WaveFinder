@@ -1,11 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CheckoutButton } from '@/components/billing/CheckoutButton'
+import { ProPlanCard } from '@/components/billing/ProPlanCard'
 import { STRIPE_TRIAL_DAYS } from '@/lib/stripe'
 
 export const metadata: Metadata = {
   title: 'Pricing - WaveFinder',
-  description: 'Simple, friendly pricing. Start Pro with a 7-day free trial, then pay monthly.',
+  description: 'Simple, friendly pricing. Start Pro with a 7-day free trial — $1.49/mo or $10/yr.',
 }
 
 const FREE_FEATURES = [
@@ -42,7 +43,7 @@ export default function PricingPage() {
           <span style={{ color: 'var(--ocean-600)', fontStyle: 'italic' }}>Pro when you want it.</span>
         </h1>
         <p className="text-sm sm:text-base max-w-xl mx-auto" style={{ color: 'var(--text-2)' }}>
-          The forecast itself stays free. Try every Pro feature for {STRIPE_TRIAL_DAYS} days, then keep it monthly if it is useful.
+          The forecast itself stays free. Try every Pro feature for {STRIPE_TRIAL_DAYS} days, then keep it monthly or yearly if it is useful.
         </p>
       </div>
 
@@ -54,14 +55,7 @@ export default function PricingPage() {
           features={FREE_FEATURES}
           highlight={false}
         />
-        <PlanCard
-          name="Pro"
-          price="$2.99"
-          cadence="per month"
-          annualNote={`${STRIPE_TRIAL_DAYS}-day free trial, then monthly billing`}
-          features={PRO_FEATURES}
-          highlight={true}
-        />
+        <ProPlanCard proFeatures={PRO_FEATURES} trialDays={STRIPE_TRIAL_DAYS} />
       </div>
 
       <p className="text-center mt-10 text-xs" style={{ color: 'var(--text-3)' }}>

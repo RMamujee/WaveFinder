@@ -3,7 +3,7 @@ import type Stripe from 'stripe'
 import { Redis } from '@upstash/redis'
 import { prisma } from '@/lib/prisma'
 import { monitor } from '@/lib/monitoring'
-import { stripe, STRIPE_PRO_MONTHLY_PRICE_ID } from '@/lib/stripe'
+import { stripe, getProPriceIds } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,18 +105,19 @@ async function syncSubscription(subscription: Stripe.Subscription, allowLink = f
   }
 
   // Price validation: only grant Pro for active/trialing subscriptions whose
-  // price matches the configured Pro monthly price. Otherwise sync the raw
-  // status but never let an unexpected price confer Pro entitlement.
+  // price matches a configured Pro price (monthly OR annual). Otherwise sync the
+  // raw status but never let an unexpected price confer Pro entitlement.
+  const proPriceIds = getProPriceIds()
+  const subscriptionPriceIds = subscription.items.data.map((item) => item.price.id)
   const isProGrantStatus = subscription.status === 'active' || subscription.status === 'trialing'
-  const priceMatches = STRIPE_PRO_MONTHLY_PRICE_ID
-    ? priceId === STRIPE_PRO_MONTHLY_PRICE_ID
-    : false
+  const priceMatches =
+    proPriceIds.length > 0 && subscriptionPriceIds.some((id) => proPriceIds.includes(id))
   if (isProGrantStatus && !priceMatches) {
     monitor('warn', 'stripe.webhook.price_mismatch', {
       customerId,
       subscriptionId: subscription.id,
       priceId,
-      expected: STRIPE_PRO_MONTHLY_PRICE_ID ?? null,
+      expected: proPriceIds,
     })
   }
   const grantPro = isProGrantStatus && priceMatches
