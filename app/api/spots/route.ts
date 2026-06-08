@@ -171,9 +171,24 @@ export async function GET(req: Request) {
   }
 
   const response = enriched.map((spot) => {
-    const { _needsFallback, ...rest } = spot
+    // Drop fields the map/list UI never reads. Across ~1490 spots this trims the
+    // conditions payload by ~38% (~405 KB): `description` alone is ~285 KB and
+    // the webcam/NOAA id fields ~121 KB. `bottomType` is derived from
+    // `description` here, so the heavy text is consumed and then dropped —
+    // the map only ever consumes the derived `bottomType`. `parkingOptions`
+    // stays because the map's parking layer renders it.
+    const {
+      _needsFallback,
+      description,
+      webcamUrl,
+      webcamType,
+      noaaTideStationId,
+      noaaBuoyId,
+      ...rest
+    } = spot
     void _needsFallback
-    return { ...rest, bottomType: inferBottomType(rest.description, rest.name) }
+    void webcamUrl; void webcamType; void noaaTideStationId; void noaaBuoyId
+    return { ...rest, bottomType: inferBottomType(description, rest.name) }
   })
   return NextResponse.json(response, {
     headers: { 'Cache-Control': 's-maxage=180, stale-while-revalidate=60' },
