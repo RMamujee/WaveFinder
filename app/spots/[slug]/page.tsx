@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { SURF_SPOTS_SEED } from '@/lib/spots-data'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { cache } from 'react'
@@ -39,15 +40,22 @@ interface Props {
 }
 
 // Spot metadata (name, region, coordinates, description) only changes when the
-// seed data changes, so render each spot page once a day via ISR instead of
-// hitting the database on every request. Forecast data stays live — it loads
-// client-side from /api/forecast.
+// seed data changes, so prerender every spot page at build and revalidate daily
+// instead of hitting the database on every request. Forecast data stays live —
+// it loads client-side from /api/forecast.
 export const revalidate = 86400
 
-// No paths prerendered at build (the build has no DB access); each spot page
-// is generated on first visit, then served from the cache for `revalidate`.
+// All slugs are prerendered from the static dataset, and dynamicParams=false
+// makes unknown slugs return a real 404 without rendering. (On-demand ISR
+// rendering of unknown slugs produced soft-404s: notFound() after the streamed
+// shell got cached as a 200 — see docs/audit/05-post-deploy-audit-2026-06-09.md.)
+export const dynamicParams = false
+
 export function generateStaticParams() {
-  return []
+  // Local builds without a database can't render the pages, so skip
+  // prerendering there; the Vercel build always has DATABASE_URL.
+  if (!process.env.DATABASE_URL) return []
+  return SURF_SPOTS_SEED.map((s) => ({ slug: s.slug }))
 }
 
 const getSpot = cache(async (slug: string) =>
