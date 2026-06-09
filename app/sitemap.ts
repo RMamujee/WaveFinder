@@ -1,17 +1,13 @@
 import type { MetadataRoute } from 'next'
-import { prisma } from '@/lib/prisma'
+import { SLUGS } from '@/lib/spots/static-store'
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const spots = process.env.DATABASE_URL
-    ? await prisma.surfSpot.findMany({
-      select: { slug: true, createdAt: true },
-    }).catch(() => [])
-    : []
-
+  // Spots come from the in-memory static store; their "lastModified" is no
+  // longer a per-row createdAt, so use the current build time for every entry.
   const now = new Date()
 
   return [
@@ -25,11 +21,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/pricing`,            priority: 0.7, changeFrequency: 'monthly',lastModified: now },
     { url: `${SITE_URL}/privacy`,            priority: 0.3, changeFrequency: 'yearly', lastModified: now },
     { url: `${SITE_URL}/terms`,              priority: 0.3, changeFrequency: 'yearly', lastModified: now },
-    ...spots.map((s) => ({
-      url: `${SITE_URL}/spots/${s.slug}`,
+    ...SLUGS.map((slug) => ({
+      url: `${SITE_URL}/spots/${slug}`,
       priority: 0.7,
       changeFrequency: 'hourly' as const,
-      lastModified: s.createdAt ?? now,
+      lastModified: now,
     })),
   ]
 }

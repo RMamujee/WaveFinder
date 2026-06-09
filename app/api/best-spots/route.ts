@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { spotsInRegion } from '@/lib/spots/static-store'
 import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
 import { rateSurfConditions, degreesToCompass } from '@/lib/forecast/rating'
 import { requireProAccess } from '@/lib/entitlements'
@@ -84,10 +84,7 @@ export async function GET(req: Request) {
   if (!/^[\w\s',.()-]{1,100}$/.test(region)) return NextResponse.json({ error: 'Invalid region' }, { status: 400 })
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
 
-  const spots = await prisma.surfSpot.findMany({
-    where: { region: { contains: region, mode: 'insensitive' } },
-    orderBy: { name: 'asc' },
-  })
+  const spots = spotsInRegion(region)
 
   if (!spots.length) {
     return NextResponse.json({ spots: [], regionalSwell: [], date })

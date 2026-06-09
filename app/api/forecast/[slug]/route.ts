@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
 import { fetchTidePredictions, fetchCoastalWind } from '@/lib/api/noaa-tides'
 import { fetchBuoyData } from '@/lib/api/noaa-buoy'
@@ -18,7 +18,7 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
   try {
-  const spot = await prisma.surfSpot.findUnique({ where: { slug } })
+  const spot = getSpotBySlug(slug)
 
   if (!spot) {
     return NextResponse.json({ error: 'Spot not found' }, { status: 404 })

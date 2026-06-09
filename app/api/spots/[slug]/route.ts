@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 
 export async function GET(
   _req: Request,
@@ -9,17 +9,16 @@ export async function GET(
   if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
-  let spot
-  try {
-    spot = await prisma.surfSpot.findUnique({ where: { slug } })
-  } catch (err) {
-    console.error('[api/spots/[slug]] findUnique failed', err)
-    return NextResponse.json({ error: 'Failed to load spot' }, { status: 500 })
-  }
+
+  const spot = getSpotBySlug(slug)
 
   if (!spot) {
     return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
   }
 
-  return NextResponse.json(spot)
+  // This route's response has historically carried no bottomType — keep that
+  // exact shape (the store precomputes bottomType, so strip it here).
+  const { bottomType: _bottomType, ...rest } = spot
+  void _bottomType
+  return NextResponse.json(rest)
 }
