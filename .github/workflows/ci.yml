@@ -1,7 +1,10 @@
 name: CI
 
+# push is scoped to main so PR branches don't run every job twice
+# (push + pull_request both fired before).
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
