@@ -18,12 +18,15 @@ export async function GET(req: Request) {
   const rawDiff    = searchParams.get('difficulty') ?? ''
   const difficulty = VALID_DIFFICULTIES.has(rawDiff) ? rawDiff : ''
   const country    = (searchParams.get('country') ?? '').slice(0, 100).replace(/[%_\\]/g, '')
-  // Validate each ID looks like a cuid/uuid before querying. Spots are now
-  // keyed by slug in the in-memory store; legacy saved-spot localStorage still
-  // holds prod cuids, so those resolve via Postgres as a transitional fallback.
+  // Accept both slug-shaped tokens (spots are now keyed by slug in the
+  // in-memory store) and legacy cuid-shaped tokens (saved-spot localStorage
+  // still holds prod cuids until the client migration runs). Slugs resolve via
+  // the store; cuids fall through to the Postgres fallback below. The widened
+  // pattern (lowercase alnum + hyphen, ≤120) is a superset of the old cuid
+  // pattern, so cuids keep validating.
   const ids        = (searchParams.get('ids') ?? '').split(',')
     .map((s) => s.trim())
-    .filter((s) => /^[a-z0-9]{20,36}$/i.test(s))
+    .filter((s) => /^[a-z0-9-]{1,120}$/i.test(s))
     .slice(0, 50)
   const withConditions = searchParams.get('withConditions') === 'true'
   // ?slim=true returns only the fields needed to render markers on a map.
