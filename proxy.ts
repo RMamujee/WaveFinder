@@ -1,35 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Redis } from '@upstash/redis'
 import { ipAddress } from '@vercel/functions'
+import { redis } from '@/lib/redis'
 
 const WINDOW_MS = 60_000   // 1 minute
 
-const RATE_LIMITS: { pattern: RegExp; limit: number }[] = [
-  { pattern: /^\/api\/auth(?:\/|$)/, limit: 10 },
-  { pattern: /^\/api\/debug(?:\/|$)/, limit: 10 },
-  { pattern: /^\/api\/webcams(?:\/|$)/, limit: 20 },
-  { pattern: /^\/api\/water-quality(?:\/|$)/, limit: 30 },
-  { pattern: /^\/api\/best-spots(?:\/|$)/, limit: 30 },
-  { pattern: /^\/api\/forecast(?:\/|$)/, limit: 45 },
-  { pattern: /^\/api\/surf-reports(?:\/|$)/, limit: 45 },
-  { pattern: /^\/api\/alerts(?:\/|$)/, limit: 60 },
-  { pattern: /^\/api\/health(?:\/|$)/, limit: 120 },
-  { pattern: /^\/api\/spots(?:\/|$)/, limit: 120 },
+const RATE_LIMITS: { bucket: string; pattern: RegExp; limit: number }[] = [
+  { bucket: 'auth', pattern: /^\/api\/auth(?:\/|$)/, limit: 10 },
+  { bucket: 'debug', pattern: /^\/api\/debug(?:\/|$)/, limit: 10 },
+  { bucket: 'webcams', pattern: /^\/api\/webcams(?:\/|$)/, limit: 20 },
+  { bucket: 'water-quality', pattern: /^\/api\/water-quality(?:\/|$)/, limit: 30 },
+  { bucket: 'best-spots', pattern: /^\/api\/best-spots(?:\/|$)/, limit: 30 },
+  { bucket: 'forecast', pattern: /^\/api\/forecast(?:\/|$)/, limit: 45 },
+  { bucket: 'surf-reports', pattern: /^\/api\/surf-reports(?:\/|$)/, limit: 45 },
+  { bucket: 'alerts', pattern: /^\/api\/alerts(?:\/|$)/, limit: 60 },
+  { bucket: 'health', pattern: /^\/api\/health(?:\/|$)/, limit: 120 },
+  { bucket: 'spots', pattern: /^\/api\/spots(?:\/|$)/, limit: 120 },
 ]
-const DEFAULT_LIMIT = 80
+const DEFAULT_RULE = { bucket: 'default', limit: 80 }
 
 const store = new Map<string, { count: number; resetAt: number }>()
-const redisUrl =
-  process.env.UPSTASH_REDIS_REST_URL ??
-  process.env.KV_REST_API_URL ??
-  process.env.WaveFinderStorage_KV_REST_API_URL
-const redisToken =
-  process.env.UPSTASH_REDIS_REST_TOKEN ??
-  process.env.KV_REST_API_TOKEN ??
-  process.env.WaveFinderStorage_KV_REST_API_TOKEN
-const redis = redisUrl && redisToken
-  ? new Redis({ url: redisUrl, token: redisToken })
-  : null
 
 // Prune stale entries every 200 requests to prevent unbounded memory growth
 let pruneCounter = 0
@@ -42,17 +31,19 @@ function maybeprune() {
   }
 }
 
-function rateLimitKey(req: NextRequest) {
-  const ip =
-    ipAddress(req) ??
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    req.headers.get('x-real-ip') ??
-    '0.0.0.0'
-  return `${ip}:${req.nextUrl.pathname}`
+function rateLimitKey(req: NextRequest, bucket: string) {
+  // Only trust the platform-derived IP (Vercel's edge sets x-real-ip itself).
+  // Falling back to client-settable headers would let an attacker mint a fresh
+  // bucket per request; instead, requests without a platform IP all share one
+  // 'unknown' bucket. Keying on the matched rule's bucket (not the raw
+  // pathname) keeps cardinality bounded — varying the slug on
+  // /api/forecast/[slug] etc. must not reset the counter.
+  const ip = ipAddress(req) ?? 'unknown'
+  return `${ip}:${bucket}`
 }
 
-function limitForPath(pathname: string) {
-  return RATE_LIMITS.find(({ pattern }) => pattern.test(pathname))?.limit ?? DEFAULT_LIMIT
+function ruleForPath(pathname: string) {
+  return RATE_LIMITS.find(({ pattern }) => pattern.test(pathname)) ?? DEFAULT_RULE
 }
 
 async function checkRedisLimit(key: string) {
@@ -95,8 +86,8 @@ export async function proxy(req: NextRequest) {
   }
 
   const now = Date.now()
-  const key = rateLimitKey(req)
-  const limit = limitForPath(req.nextUrl.pathname)
+  const { bucket, limit } = ruleForPath(req.nextUrl.pathname)
+  const key = rateLimitKey(req, bucket)
   const entry = await checkRedisLimit(key).catch(() => null) ?? checkMemoryLimit(key)
 
   if (entry.count > limit) {
