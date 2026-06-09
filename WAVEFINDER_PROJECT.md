@@ -4,26 +4,11 @@
 
 ---
 
-> ## ⚠️ Accuracy notice — trust the code, not this doc
+> ## ⚠️ Accuracy notice
 >
-> Parts of this reference describe features that are **PLANNED / NOT IMPLEMENTED**
-> in the current codebase. When in doubt, **read the source — the code is the
-> source of truth, not this document.** Specifically, as of this writing the
-> following do **not** exist in the repo:
->
-> - **Resend email alerts** (`lib/email.ts` and alert-email sending). Resend is
->   only wired into `lib/auth.ts` for optional account email verification.
-> - **The `/api/cron/check-alerts` cron route** — there is no `app/api/cron/`
->   directory at all.
-> - **The saved-spots and sessions sync API routes** (`/api/saved-spots/**`,
->   `/api/sessions/**`) — these are not present.
-> - **The `SpotAlert`, `SavedSpot`, and `SurfSession` Prisma models** — the
->   current `prisma/schema.prisma` only defines `SurfSpot`, `User`, `Session`,
->   `Account`, and `Verification`. Any feature described below that depends on
->   those models may not exist.
->
-> The historical content below is retained for context, but verify against the
-> actual code before relying on it.
+> This document is the current source of truth for WaveFinder's architecture and
+> feature set. All claims are grounded in the actual codebase. See `CLAUDE.md`
+> and `docs/audit/` for current issues and implementation status.
 
 ---
 
@@ -42,36 +27,53 @@
 
 | Layer | Library | Version |
 |---|---|---|
-| Framework | Next.js App Router | 16.2.2 |
+| Framework | Next.js App Router | 16.2.7 |
 | Language | TypeScript | 5.x |
 | Styling | Tailwind CSS | v4 |
-| Auth | better-auth | ^1.6.0 |
+| Auth | better-auth | ^1.6.11 |
 | ORM | Prisma | ^5.22.0 |
-| DB | **Neon PostgreSQL** | (migrated from SQLite) |
+| DB | **Neon PostgreSQL** | (provider: postgresql) |
 | State | TanStack Query | v5 |
 | Maps | Leaflet + MarkerCluster | ^1.9.4 |
 | Charts | Recharts | ^3.8.1 |
-| Email | Resend | ^6.10.0 |
+| Payments | Stripe | ^22.1.0 |
+| Rate limiting | Upstash Redis | ^1.37.0 |
+| Monitoring | Sentry | ^10.20.0 |
+| Testing | Vitest | ^4.1.8 |
 | Fonts | Playfair Display + DM Sans | self-hosted via next/font |
 
 ---
 
 ## Environment Variables
 
-**`.env.local`** (all required):
+**Required for local development:**
 ```
-DATABASE_URL="postgresql://neondb_owner:<password>@<host>/neondb?sslmode=require"
-BETTER_AUTH_SECRET="<64-char random string>"
+DATABASE_URL="postgresql://...?sslmode=require"
+DIRECT_URL="postgresql://...?sslmode=require"
 BETTER_AUTH_URL="http://localhost:3000"
+BETTER_AUTH_SECRET="<64-char random string>"
+NEXT_PUBLIC_SITE_URL="http://localhost:3000"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
-RESEND_API_KEY="re_..."
-CRON_SECRET="<random secret for cron auth>"
 ```
 
-For production add:
+**Optional (enable features):**
 ```
-NEXT_PUBLIC_BASE_URL="https://your-domain.vercel.app"
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+STRIPE_PRO_MONTHLY_PRICE_ID="price_..."
+STRIPE_PRO_ANNUAL_PRICE_ID="price_..."
+UPSTASH_REDIS_REST_URL="https://..."
+UPSTASH_REDIS_REST_TOKEN="..."
+RESEND_API_KEY="re_..."
+RESEND_FROM="WaveFinder <noreply@example.com>"
+SENTRY_DSN="https://..."
+NEXT_PUBLIC_SENTRY_DSN="https://..."
+CRON_SECRET="<random secret for Vercel cron>"
+ENABLE_DEBUG_API="false"
 ```
+
+See `.env.example` for full documentation of each variable. Copy it to `.env.local`
+and fill in values for your environment.
 
 ---
 
@@ -93,19 +95,23 @@ surf-app/
 │   │       ├── page.tsx          ← Server component (fetches spot from DB)
 │   │       └── SpotForecastView.tsx ← Full forecast UI (client component)
 │   └── api/
-│       ├── auth/[...all]/route.ts
-│       ├── spots/route.ts        ← GET spots; withConditions=true adds live data
-│       ├── spots/[slug]/route.ts ← GET single spot by slug
-│       ├── forecast/[slug]/route.ts ← Full 7-day forecast + tides + buoy
-│       ├── saved-spots/route.ts  ← GET/POST saved spots
-│       ├── saved-spots/[spotId]/route.ts ← DELETE saved spot
-│       ├── sessions/route.ts     ← GET/POST surf sessions (user log)
-│       ├── sessions/[id]/route.ts ← PATCH/DELETE surf session
-│       ├── alerts/route.ts       ← GET/POST spot alerts
-│       ├── alerts/[id]/route.ts  ← DELETE alert
-│       ├── cron/check-alerts/route.ts ← Daily cron — send alert emails
-│       ├── surf-reports/[spotSlug]/route.ts ← NOAA live conditions report
-│       └── water-quality/[spotSlug]/route.ts
+│       ├── auth/[...all]/route.ts          ← better-auth endpoints
+│       ├── account/route.ts                ← GET/PUT user account
+│       ├── best-spots/route.ts             ← GET optimal-conditions spots (Pro-gated)
+│       ├── billing/
+│       │   ├── checkout/route.ts           ← POST create checkout session
+│       │   └── portal/route.ts             ← GET customer portal link
+│       ├── health/route.ts                 ← GET health check (DB + Redis)
+│       ├── spots/route.ts                  ← GET spots; slim=true or withConditions=true
+│       ├── spots/[slug]/route.ts           ← GET single spot by slug
+│       ├── spots/meta/route.ts             ← GET countries/regions for filters
+│       ├── forecast/[slug]/route.ts        ← GET 7-day forecast + tides + buoy + best times
+│       ├── surf-reports/[spotSlug]/route.ts ← GET NOAA live conditions
+│       ├── water-quality/[slug]/route.ts   ← GET EPA water quality (where available)
+│       ├── webcams/[slug]/route.ts         ← GET webcam links (multiple sources)
+│       ├── alerts/[slug]/route.ts          ← GET/POST/DELETE spot alert subscriptions
+│       ├── stripe/webhook/route.ts         ← POST Stripe webhook handler
+│       └── debug/conditions/route.ts       ← POST force-refresh forecast cache (dev only)
 ├── components/
 │   ├── layout/
 │   │   ├── Navbar.tsx
@@ -171,35 +177,86 @@ surf-app/
 
 ```prisma
 model SurfSpot {
-  id, slug, name, region, country, lat, lng
-  description, difficulty, facingDirection (Float)
-  noaaTideStationId, noaaBuoyId
-  webcamUrl, webcamType, parkingOptions (Json)
-  createdAt DateTime
-  savedBy SavedSpot[]
-  alerts  SpotAlert[]
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  name              String
+  region            String   @index
+  country           String   @index
+  lat               Float
+  lng               Float
+  description       String?
+  difficulty        String   @default("intermediate")
+  facingDirection   Float    @default(180)
+  noaaTideStationId String?
+  noaaBuoyId        String?
+  webcamUrl         String?
+  webcamType        String?
+  parkingOptions    Json?
+  activities        String[] @default([])
+  createdAt         DateTime @default(now())
 }
 
-model SavedSpot { userId, spotId, createdAt — @@unique([userId, spotId]) }
-
-model SpotAlert {
-  userId, spotId, spotName
-  minRating  String   // 'good' | 'epic'
-  email      String
-  active     Boolean  @default(true)
-  lastSentAt DateTime?
-  — @@unique([userId, spotId])
+model User {
+  id                   String    @id
+  name                 String
+  email                String    @unique
+  emailVerified        Boolean   @default(false)
+  image                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  stripeSubscriptionStatus String?
+  stripeCurrentPeriodEnd DateTime?
+  stripeTrialEndsAt    DateTime?
+  sessions             Session[]
+  accounts             Account[]
 }
 
-model SurfSession {
-  userId, spotName, spotSlug?, region?
-  sessionDate DateTime            // stored at T12:00:00 to avoid timezone date-shift
-  duration?, waveHeightFt?, wavePeriod?
-  windSpeed?, windDir?, waterTempC?
-  boardType?, wetsuitMm?
-  rating (Int 1-10)?, highlights?, buddies?
+model Session {
+  id        String   @id
+  expiresAt DateTime @index
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String   @index
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String    @index
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model Verification {
+  id         String   @id
+  identifier String   @index
+  value      String
+  expiresAt  DateTime @index
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 ```
+
+**Notes:**
+- `SurfSpot` is immutable, seeded once from `lib/spots-data.ts` (1,490+ spots worldwide).
+- `User`, `Session`, `Account`, and `Verification` are managed by better-auth (email + password auth).
+- All spot data lives in the `SurfSpot` table; historical user data would use separate collections if implemented.
 
 ---
 
@@ -211,10 +268,12 @@ If they were cached at different times they start at different hours. Using raw 
 the marine array to index into the weather array caused misaligned data (wrong temp/weatherCode
 for many spots). All fields now use `Map<time, value>` lookups.
 
-### Cron auth
-`/api/cron/check-alerts` requires `Authorization: Bearer <CRON_SECRET>`.
-Guard is `if (!process.env.CRON_SECRET || auth !== ...)` — missing env var **blocks** all requests.
-Previously the `&&` form would have passed all requests if the env var was unset.
+### Cron cleanup
+`/api/cron/cleanup` is invoked daily by Vercel's cron service. It purges expired
+`Session` and `Verification` rows (better-auth doesn't delete them automatically).
+The route requires `Authorization: Bearer <CRON_SECRET>`. If the header or secret
+is missing or wrong, the request returns 401. Set `CRON_SECRET` in Vercel's
+production environment.
 
 ### Session date storage
 `sessionDate` is stored as `new Date(body.sessionDate + 'T12:00:00')` (noon UTC).
@@ -283,25 +342,46 @@ Condition: Poor=grey, Fair=amber (#fde68a), Good=green (#bbf7d0), Epic=purple (#
 
 ---
 
-## Commands
+## Common Commands
 
 ```bash
-npm run dev                 # localhost:3000
-npx prisma db push          # Push schema to Neon
-npx prisma db seed          # Seed 134+ spots
-npx prisma generate         # Regenerate client after schema change
-npx prisma studio           # DB browser
-npx tsc --noEmit            # Type check
-npm run db:reset            # Force reset + reseed (destructive)
+# Development
+npm run dev                    # Start dev server (http://localhost:3000)
+npm run build                  # Build for production
+npm start                      # Run production build
+
+# Database
+npm run db:push                # Sync schema to database (development)
+npm run db:seed                # Seed 1,490 spots
+npm run db:studio              # Open Prisma Studio (interactive DB browser)
+npm run db:reset               # Force-reset + reseed (destructive, dev only)
+npm run migrate:dev            # Create a new migration
+npm run migrate:deploy         # Apply pending migrations (runs in Vercel build)
+
+# Quality checks
+npm run typecheck              # Type-check with tsc --noEmit
+npm run lint                   # Run ESLint (fails on warnings)
+npm test                       # Run Vitest once
+npm run test:watch             # Run Vitest in watch mode
+
+# Deployment
+npm run smoke:prod             # Smoke-test the production deployment
 ```
 
 ---
 
 ## Known Issues / Remaining Work
 
-1. **Email validation**: `/api/alerts` stores email with no format check — invalid emails fail silently.
-2. **No rate limiting** on `/api/spots?withConditions=true` — triggers 13+ NOAA + N Open-Meteo calls per request.
-3. **Webcams**: No free public API. Shows OpenStreetMap embed as placeholder.
-4. **Marine model coverage**: Open-Meteo has ~9km resolution. Very sheltered spots may show 0ft (accurate — no swell reaches them — but looks like a bug).
-5. **More spots**: Oregon, Washington, full East Coast not yet seeded.
-6. **Session social**: Buddies field in schema, no sharing UI yet.
+See [`docs/audit/05-post-deploy-audit-2026-06-09.md`](./docs/audit/05-post-deploy-audit-2026-06-09.md)
+for the most current list, prioritized by impact.
+
+**Summary of notable gaps:**
+
+- **Email verification not enforced**: Unverified emails can currently reach Stripe checkout. Before going live with real payments, enforce `requireEmailVerification: true` in better-auth and gate checkout on `user.emailVerified`.
+- **Sentry DSN not set in production**: Error monitoring is wired but disabled. Set `SENTRY_DSN` in Vercel environment.
+- **No external uptime monitoring**: No service currently monitors `/api/health`. Set up a basic HTTP probe.
+- **Forecast is client-fetched after hydration**: Adds a waterfall on slow networks. Can be folded into a future static-spots refactor.
+- **Spot data still hits Postgres**: 1,490 immutable spots round-trip the database. Switching to an in-memory map from `SURF_SPOTS_SEED` would cut latency and decouple forecast uptime from Neon.
+- **Marine model coverage**: Open-Meteo has ~9 km resolution. Very sheltered spots may correctly show 0 ft (no swell reaches them), but it can look like a bug.
+- **Webcam data**: No single free API covers all spots. Currently pulls from multiple sources and falls back gracefully.
+- **East Coast and Alaska coverage**: Spot data is seeded but incomplete. More regions can be added to `lib/spots/` files.
