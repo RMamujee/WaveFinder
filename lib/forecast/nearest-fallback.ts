@@ -39,6 +39,23 @@ export function buildSpatialIndex<T extends LatLng>(spots: T[]): SpatialIndex<T>
   return { cells }
 }
 
+function collectRing<T extends LatLng>(
+  index: SpatialIndex<T>,
+  latCell: number,
+  lngCell: number,
+  ring: number,
+  out: T[]
+): void {
+  for (let dLat = -ring; dLat <= ring; dLat++) {
+    for (let dLng = -ring; dLng <= ring; dLng++) {
+      // Only the perimeter of the ring — inner cells were checked already.
+      if (ring > 0 && Math.abs(dLat) !== ring && Math.abs(dLng) !== ring) continue
+      const bucket = index.cells.get(cellKey(latCell + dLat, wrapLngCell(lngCell + dLng)))
+      if (bucket) out.push(...bucket)
+    }
+  }
+}
+
 export function findNearestInIndex<T extends LatLng>(
   index: SpatialIndex<T>,
   lat: number,
@@ -49,15 +66,13 @@ export function findNearestInIndex<T extends LatLng>(
 
   for (let ring = 0; ring <= MAX_RINGS; ring++) {
     const candidates: T[] = []
-    for (let dLat = -ring; dLat <= ring; dLat++) {
-      for (let dLng = -ring; dLng <= ring; dLng++) {
-        // Only the perimeter of the ring — inner cells were checked already.
-        if (ring > 0 && Math.abs(dLat) !== ring && Math.abs(dLng) !== ring) continue
-        const bucket = index.cells.get(cellKey(latCell + dLat, wrapLngCell(lngCell + dLng)))
-        if (bucket) candidates.push(...bucket)
-      }
-    }
+    collectRing(index, latCell, lngCell, ring, candidates)
     if (candidates.length === 0) continue
+
+    // A query point near a cell edge can have its true nearest neighbour one
+    // ring further out than the first populated ring (e.g. lat 33.99 vs a spot
+    // at 34.01), so widen by one ring before picking the minimum.
+    collectRing(index, latCell, lngCell, ring + 1, candidates)
 
     let closest = candidates[0]
     let minDist = Infinity

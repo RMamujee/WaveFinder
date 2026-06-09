@@ -49,7 +49,10 @@ export function LiveMapHero({ spotCount }: Props) {
   })
 
   const spots = enrichedSpots ?? baseSpots
-  const conditionsPending = spotsLoading || conditionsLoading
+  // Gate on data presence: a disabled query reports isLoading=false, so an
+  // empty base list would otherwise show the steady "Live conditions" state
+  // for conditions that were never fetched.
+  const conditionsPending = spotsLoading || (baseSpots.length > 0 && conditionsLoading)
 
   return (
     <section
