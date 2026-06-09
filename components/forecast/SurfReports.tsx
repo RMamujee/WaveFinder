@@ -29,7 +29,7 @@ function StatCard({ label, value, unit, sub }: { label: string; value: string | 
       {value != null ? (
         <>
           <div className="flex items-baseline gap-1">
-            <span className="text-xl font-bold" style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+            <span className="text-xl font-bold" style={{ color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}>
               {value}
             </span>
             {unit && <span className="text-xs" style={{ color: 'var(--text-3)' }}>{unit}</span>}

@@ -11,7 +11,7 @@ export default function TermsPage() {
       className="mx-auto max-w-3xl px-5 py-10 prose prose-sm"
       style={{ color: 'var(--text-2)' }}
     >
-      <h1 style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>Terms of Service</h1>
+      <h1 style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>Terms of Service</h1>
       <p style={{ color: 'var(--text-3)' }}>
         <em>Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</em>
       </p>

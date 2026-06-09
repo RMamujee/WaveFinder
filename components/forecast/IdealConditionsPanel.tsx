@@ -184,7 +184,7 @@ export function IdealConditionsPanel({ spot, current, buoy, coastalWind }: Props
               fontSize: 30,
               fontWeight: 800,
               lineHeight: 1,
-              fontFamily: 'Playfair Display, serif',
+              fontFamily: 'var(--font-playfair), serif',
               color: 'var(--text)',
             }}
           >
@@ -210,7 +210,7 @@ export function IdealConditionsPanel({ spot, current, buoy, coastalWind }: Props
               </p>
               <p
                 className="font-black"
-                style={{ fontSize: 22, fontFamily: 'Playfair Display, serif', color: breakColor, lineHeight: 1 }}
+                style={{ fontSize: 22, fontFamily: 'var(--font-playfair), serif', color: breakColor, lineHeight: 1 }}
               >
                 {breakLabel}
               </p>

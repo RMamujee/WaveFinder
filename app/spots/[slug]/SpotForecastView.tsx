@@ -154,7 +154,7 @@ export function SpotForecastView({ spot }: Props) {
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h1
                   style={{
-                    fontFamily: 'Playfair Display, serif',
+                    fontFamily: 'var(--font-playfair), serif',
                     fontSize: 'clamp(24px, 4vw, 36px)',
                     fontWeight: 700,
                     color: 'var(--text)',
@@ -190,7 +190,7 @@ export function SpotForecastView({ spot }: Props) {
                   {/* Wave height — hero stat, larger */}
                   <div style={{ minWidth: '52px' }}>
                     <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Height</p>
-                    <p style={{ fontSize: '34px', fontWeight: 700, lineHeight: 1, color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+                    <p style={{ fontSize: '34px', fontWeight: 700, lineHeight: 1, color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}>
                       {fmtHeight(current.waveHeight, unit)}
                     </p>
                   </div>
@@ -268,7 +268,7 @@ export function SpotForecastView({ spot }: Props) {
                       style={{
                         fontSize: current.rating === 'epic' ? '22px' : '20px',
                         color: ratingStyle.text,
-                        fontFamily: 'Playfair Display, serif',
+                        fontFamily: 'var(--font-playfair), serif',
                       }}
                     >
                       {current.rating === 'epic' ? 'EPIC' : current.rating.charAt(0).toUpperCase() + current.rating.slice(1)}
@@ -646,7 +646,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2
       className="mb-2 font-semibold text-sm"
-      style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
+      style={{ color: 'var(--text-2)', fontFamily: 'var(--font-dm-sans), sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
     >
       {children}
     </h2>

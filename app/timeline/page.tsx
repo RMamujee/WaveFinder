@@ -156,7 +156,7 @@ export default function TimelinePage() {
           <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--ocean-500)' }}>
             Interactive
           </p>
-          <h1 className="text-3xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+          <h1 className="text-3xl font-bold" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
             Timeline
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-2)' }}>
@@ -230,7 +230,7 @@ export default function TimelinePage() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <div className="text-4xl font-bold"
-                style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ocean-700)', letterSpacing: '-0.02em' }}>
+                style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--ocean-700)', letterSpacing: '-0.02em' }}>
                 {hrLabel(hour)}
               </div>
               <div className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
@@ -293,7 +293,7 @@ export default function TimelinePage() {
         {/* ── Spot rows ── */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+            <h2 className="text-xl font-bold" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
               Best at {hrLabel(hour)}
             </h2>
             {!isLoading && !isError && sorted.length > 0 && (
@@ -343,7 +343,7 @@ export default function TimelinePage() {
                     {/* Name + stats */}
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold truncate"
-                        style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+                        style={{ color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}>
                         {spot.name}
                       </div>
                       <div className="flex items-center gap-3 mt-1 flex-wrap">

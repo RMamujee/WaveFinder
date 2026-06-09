@@ -116,7 +116,7 @@ export function QuickLogModal({ open, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
-            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>
+            <h2 style={{ fontFamily: 'var(--font-playfair), serif', fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>
               Log a Session
             </h2>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Saved to this device</p>
@@ -131,7 +131,7 @@ export function QuickLogModal({ open, onClose }: Props) {
         {saved ? (
           <div className="px-6 py-10 text-center">
             <div className="flex justify-center mb-3"><Icon name="surfer" size={36} style={{ color: 'var(--ocean-600)' }} /></div>
-            <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '20px', fontWeight: 700, color: 'var(--text)' }}>
+            <p style={{ fontFamily: 'var(--font-playfair), serif', fontSize: '20px', fontWeight: 700, color: 'var(--text)' }}>
               Session logged!
             </p>
             <div className="mt-5 flex gap-2 justify-center">

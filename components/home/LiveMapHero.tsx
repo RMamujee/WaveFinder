@@ -71,7 +71,7 @@ export function LiveMapHero({ spotCount }: Props) {
 
         <h1
           style={{
-            fontFamily: 'Playfair Display, serif',
+            fontFamily: 'var(--font-playfair), serif',
             fontSize: 'clamp(32px, 4vw, 54px)',
             fontWeight: 700,
             lineHeight: 1.08,
