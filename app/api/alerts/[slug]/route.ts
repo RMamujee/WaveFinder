@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 import { fetchSurfAlerts } from '@/lib/api/noaa-alerts'
 import { handleRouteError } from '@/lib/route-helpers'
 
@@ -16,10 +16,7 @@ export async function GET(
   }
 
   try {
-    const spot = await prisma.surfSpot.findUnique({
-      where: { slug },
-      select: { lat: true, lng: true },
-    })
+    const spot = getSpotBySlug(slug)
 
     if (!spot) return NextResponse.json([], { status: 404 })
 
