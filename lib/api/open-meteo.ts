@@ -9,6 +9,20 @@ const HEADERS = {
   'Accept': 'application/json',
 }
 
+// In-flight request dedup: when a cache entry expires, every concurrent
+// request misses and would independently re-run the same multi-second
+// Open-Meteo fan-out. Joining concurrent misses on one promise per key means
+// a cold/expired key costs one upstream fetch per instance, not one per caller.
+const inflight = new Map<string, Promise<unknown>>()
+
+function dedupe<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inflight.get(key)
+  if (existing) return existing as Promise<T>
+  const p = fn().finally(() => inflight.delete(key))
+  inflight.set(key, p)
+  return p
+}
+
 // Cross-region runtime cache wrapper. Falls back to fetching directly if the
 // runtime cache is unavailable (e.g. local `npm start` without Vercel runtime).
 async function withCache<T>(key: string, ttlSeconds: number, tags: string[], fn: () => Promise<T>): Promise<T> {
@@ -26,15 +40,17 @@ async function withCache<T>(key: string, ttlSeconds: number, tags: string[], fn:
       // Cache read failed — fall through to origin fetch
     }
   }
-  const value = await fn()
-  if (cache && value !== null && value !== undefined) {
-    try {
-      await cache.set(key, value, { ttl: ttlSeconds, tags })
-    } catch {
-      // Cache write failed — return value anyway
+  return dedupe(key, async () => {
+    const value = await fn()
+    if (cache && value !== null && value !== undefined) {
+      try {
+        await cache.set(key, value, { ttl: ttlSeconds, tags })
+      } catch {
+        // Cache write failed — return value anyway
+      }
     }
-  }
-  return value
+    return value
+  })
 }
 
 
@@ -101,6 +117,15 @@ export async function fetchCurrentConditions(
     } catch { /* fall through */ }
   }
 
+  return dedupe(cacheKey, () => fetchCurrentConditionsUncached(lat, lng, cacheKey, cache))
+}
+
+async function fetchCurrentConditionsUncached(
+  lat: number,
+  lng: number,
+  cacheKey: string,
+  cache: ReturnType<typeof getCache> | null
+): Promise<CurrentMarineConditions | null> {
   try {
     // Use hourly endpoint (same model as spot forecast pages) and pick the nearest future hour.
     // The previous `current=` endpoint returned an instantaneous interpolated reading that
