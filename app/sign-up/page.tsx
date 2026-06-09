@@ -30,7 +30,7 @@ export default function SignUpPage() {
 
   return (
     <main className="mx-auto max-w-sm px-5 py-12">
-      <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>Create account</h1>
+      <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>Create account</h1>
       <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>Start your 7-day Pro trial after account creation.</p>
       <form onSubmit={submit} className="flex flex-col gap-3">
         <input name="name" required placeholder="Name" className="rounded-xl px-4 py-3 text-sm" style={{ border: '1px solid var(--border)' }} />

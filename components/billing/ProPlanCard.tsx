@@ -25,7 +25,7 @@ export function ProPlanCard({ proFeatures, trialDays }: { proFeatures: string[];
       }}
     >
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+        <h2 className="text-xl font-bold" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
           Pro
         </h2>
         <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: 'var(--ocean-50)', color: 'var(--ocean-700)' }}>

@@ -17,7 +17,7 @@ export default function Error({ error, reset }: { error: Error; reset: () => voi
     >
       <p
         style={{
-          fontFamily: 'Playfair Display, serif',
+          fontFamily: 'var(--font-playfair), serif',
           fontSize: '64px',
           fontWeight: 700,
           color: 'var(--ocean-600)',
@@ -29,7 +29,7 @@ export default function Error({ error, reset }: { error: Error; reset: () => voi
       </p>
       <h1
         style={{
-          fontFamily: 'Playfair Display, serif',
+          fontFamily: 'var(--font-playfair), serif',
           fontSize: '24px',
           fontWeight: 700,
           color: 'var(--text)',

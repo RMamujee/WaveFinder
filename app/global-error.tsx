@@ -34,7 +34,7 @@ export default function GlobalError({
       >
         <p
           style={{
-            fontFamily: 'Playfair Display, Georgia, serif',
+            fontFamily: 'var(--font-playfair), Georgia, serif',
             fontSize: '64px',
             fontWeight: 700,
             color: '#0284c7',
@@ -46,7 +46,7 @@ export default function GlobalError({
         </p>
         <h1
           style={{
-            fontFamily: 'Playfair Display, Georgia, serif',
+            fontFamily: 'var(--font-playfair), Georgia, serif',
             fontSize: '24px',
             fontWeight: 700,
             marginBottom: '10px',

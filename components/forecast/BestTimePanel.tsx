@@ -38,7 +38,7 @@ export function BestTimePanel({ slots, tides }: Props) {
           <div>
             <h3
               className="font-semibold"
-              style={{ fontFamily: 'Playfair Display, serif', fontSize: '16px', color: 'var(--text)' }}
+              style={{ fontFamily: 'var(--font-playfair), serif', fontSize: '16px', color: 'var(--text)' }}
             >
               Best Times to Surf Today
             </h3>

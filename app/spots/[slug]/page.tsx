@@ -90,7 +90,7 @@ export default async function SpotPage({ params }: Props) {
             <div className="flex items-center justify-between mb-4">
               <h2
                 className="font-semibold text-sm uppercase tracking-widest"
-                style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif' }}
+                style={{ color: 'var(--text-2)', fontFamily: 'var(--font-dm-sans), sans-serif' }}
               >
                 More in {regionKeyword}
               </h2>

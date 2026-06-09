@@ -103,7 +103,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         {/* Wave height */}
         <p
           style={{
-            fontFamily: 'Playfair Display, serif',
+            fontFamily: 'var(--font-playfair), serif',
             fontSize: 22,
             fontWeight: 700,
             lineHeight: 1,

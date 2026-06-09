@@ -338,7 +338,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
           <a
             href={`/spots/${spot.slug}`}
             className="font-bold text-base leading-tight hover:underline"
-            style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}
+            style={{ color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}
           >
             {spot.name}
           </a>
@@ -413,7 +413,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                 <p className="text-xs font-medium mb-0.5" style={{ color: ratingStyle.text }}>
                   {activeDayObj ? shortDay(activeDayObj.date) : 'Now'}
                 </p>
-                <p className="font-black uppercase tracking-wide" style={{ color: ratingStyle.text, fontSize: '18px', fontFamily: 'Playfair Display, serif' }}>
+                <p className="font-black uppercase tracking-wide" style={{ color: ratingStyle.text, fontSize: '18px', fontFamily: 'var(--font-playfair), serif' }}>
                   {displayHour.rating === 'epic' ? 'EPIC' : displayHour.rating.charAt(0).toUpperCase() + displayHour.rating.slice(1)}
                 </p>
               </div>
@@ -775,7 +775,7 @@ export default function ComparePage() {
             <div>
               <h1
                 className="text-xl sm:text-2xl font-bold leading-tight"
-                style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}
+                style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}
               >
                 Compare Spots
               </h1>
@@ -821,7 +821,7 @@ export default function ComparePage() {
                   stroke="var(--seafoam)" strokeWidth="2" strokeLinecap="round" opacity="0.7" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+            <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
               Select at least 2 spots to compare
             </h2>
             <p className="text-sm max-w-sm" style={{ color: 'var(--text-3)' }}>
