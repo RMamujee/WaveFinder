@@ -132,6 +132,27 @@ describe('migrateSavedSpots', () => {
     expect(ctx.read()).toEqual(['blacks-beach', CUID_B])
   })
 
+  it('preserves a concurrent save that lands during the fetch window', async () => {
+    // Snapshot at start: [CUID_A]. While the fetch is in flight, SaveSpotButton
+    // does a read-modify-write appending a fresh slug. The migration must
+    // compare-and-set against the FRESH array, not clobber it with the stale
+    // snapshot.
+    const ctx = installStorage([CUID_A])
+    const fetchImpl = vi.fn(async () => {
+      // Simulate the concurrent save resolving before the fetch does.
+      const current = ctx.read()
+      current.push('mavericks')
+      localStorage.setItem(SAVED_KEY, JSON.stringify(current))
+      return jsonResponse([{ id: CUID_A, slug: 'blacks-beach' }])
+    })
+
+    const changed = await migrateSavedSpots(fetchImpl as unknown as typeof fetch)
+
+    expect(changed).toBe(true)
+    // CUID_A migrated to its slug AND the concurrent save survived.
+    expect(ctx.read()).toEqual(['blacks-beach', 'mavericks'])
+  })
+
   it('empty saved array is a no-op', async () => {
     const ctx = installStorage([])
     const fetchImpl = vi.fn(async () => jsonResponse([]))

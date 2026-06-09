@@ -78,12 +78,18 @@ export async function migrateSavedSpots(
     return false // network/timeout/parse error — leave the array untouched
   }
 
+  // Compare-and-set: the snapshot read at the top is now stale — the awaited
+  // fetch above yielded the event loop, during which SaveSpotButton may have
+  // done its own read-modify-write of 'wavefinder_saved'. Re-read the FRESH
+  // array and apply the cuid→slug mapping to it so a concurrent save survives.
+  const fresh = readSaved()
+
   // Rewrite: cuids we resolved become their slug; everything else is kept as-is
   // (unresolved cuids stay so a future run can retry — no data loss).
   const seen = new Set<string>()
   const next: string[] = []
   let changed = false
-  for (const token of saved) {
+  for (const token of fresh) {
     const mapped = isCuidShaped(token) ? cuidToSlug.get(token) : undefined
     const value = mapped ?? token
     if (mapped) changed = true
