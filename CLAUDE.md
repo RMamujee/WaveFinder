@@ -34,8 +34,8 @@ https://wave-finder.vercel.app.
   spots) seeded into Postgres; the DB cuid `id` keys saved-spots localStorage,
   so don't swap id sources.
 - Fonts are self-hosted via `next/font` (CSP has no Google Fonts origins).
-- `WAVEFINDER_PROJECT.md` and `docs/deployment.md` are partially stale — trust
-  the code.
+- `docs/deployment.md` is partially stale — trust the code. (README.md and
+  WAVEFINDER_PROJECT.md were reconciled with the code on 2026-06-09.)
 
 ## Verify before claiming done
 
