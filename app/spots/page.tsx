@@ -411,13 +411,11 @@ export default function SpotsPage() {
 
 
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center z-[999]">
-              <div
-                className="rounded-xl px-4 py-3 text-sm"
-                style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-2)' }}
-              >
-                Loading spots…
-              </div>
+            <div
+              className="absolute inset-0 flex items-center justify-center z-[999]"
+              style={{ background: 'var(--sand-50)' }}
+            >
+              <WaveLoader compact label="Loading spots…" />
             </div>
           )}
           {!isLoading && !conditionData && (
