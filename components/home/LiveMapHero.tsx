@@ -35,13 +35,13 @@ interface Props {
 export function LiveMapHero({ spotCount }: Props) {
   // Slim payload: marker-essential fields only (~70% smaller than full)
   // so the map can render pins as soon as possible on mobile.
-  const { data: baseSpots = [] } = useQuery<SpotWithRating[]>({
+  const { data: baseSpots = [], isLoading: spotsLoading } = useQuery<SpotWithRating[]>({
     queryKey: ['spots-home-base'],
     queryFn: () => fetch('/api/spots?slim=true').then((r) => r.json()),
     staleTime: 30 * 60 * 1000,
   })
 
-  const { data: enrichedSpots } = useQuery<SpotWithRating[]>({
+  const { data: enrichedSpots, isLoading: conditionsLoading } = useQuery<SpotWithRating[]>({
     queryKey: ['spots-home-conditions'],
     queryFn: () => fetch('/api/spots?withConditions=true').then((r) => r.json()),
     staleTime: 30 * 60 * 1000,
@@ -49,6 +49,7 @@ export function LiveMapHero({ spotCount }: Props) {
   })
 
   const spots = enrichedSpots ?? baseSpots
+  const conditionsPending = spotsLoading || conditionsLoading
 
   return (
     <section
@@ -131,7 +132,8 @@ export function LiveMapHero({ spotCount }: Props) {
 
       {/* ── Map ───────────────────────────────────────────────────────── */}
       <div className="flex-1 relative">
-        {/* Live conditions chip */}
+        {/* Live conditions chip — doubles as the loading indicator while the
+            slim pins and then the live-conditions payload stream in */}
         <div
           className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full px-4 py-1.5 pointer-events-none"
           style={{
@@ -141,8 +143,27 @@ export function LiveMapHero({ spotCount }: Props) {
             boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
           }}
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Live conditions</span>
+          {conditionsPending ? (
+            <>
+              <svg
+                className="animate-spin"
+                width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="var(--ocean-600)" strokeWidth="3" strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" strokeOpacity="0.25" />
+                <path d="M21 12a9 9 0 0 0-9-9" />
+              </svg>
+              <span className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
+                {spotsLoading ? 'Loading spots…' : 'Loading live conditions…'}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Live conditions</span>
+            </>
+          )}
           <Link
             href="/spots"
             className="text-xs font-semibold pointer-events-auto"
@@ -175,6 +196,17 @@ export function LiveMapHero({ spotCount }: Props) {
           centerLng={-120.5}
           zoom={6}
         />
+
+        {/* Keep the loader up until the first pins exist — otherwise the map
+            chunk can finish before the spots fetch and show an empty ocean */}
+        {spotsLoading && (
+          <div
+            className="absolute inset-0 z-[5] flex items-center justify-center"
+            style={{ background: 'var(--sand-50)' }}
+          >
+            <WaveLoader compact label="Loading live map…" />
+          </div>
+        )}
       </div>
     </section>
   )

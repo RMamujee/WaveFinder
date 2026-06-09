@@ -31,6 +31,7 @@ import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { BOTTOM_TYPE_STYLE } from '@/lib/bottom-type'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
+import { LazyMount } from '@/components/util/LazyMount'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
 import { Icon } from '@/components/ui/Icon'
@@ -417,12 +418,14 @@ export function SpotForecastView({ spot }: Props) {
                 className="rounded-2xl overflow-hidden"
                 style={{ border: '1px solid var(--border)', flex: 1, minHeight: '260px' }}
               >
-                <SpotSatelliteMap
-                  lat={spot.lat}
-                  lng={spot.lng}
-                  spotName={spot.name}
-                  facingDirection={spot.facingDirection}
-                />
+                <LazyMount minHeight={260} style={{ height: '100%' }}>
+                  <SpotSatelliteMap
+                    lat={spot.lat}
+                    lng={spot.lng}
+                    spotName={spot.name}
+                    facingDirection={spot.facingDirection}
+                  />
+                </LazyMount>
               </div>
             </div>
           </div>
@@ -432,20 +435,24 @@ export function SpotForecastView({ spot }: Props) {
         {spot.webcamType !== 'none' && !!spot.webcamUrl && (
           <div>
             <SectionTitle>Live Cam</SectionTitle>
-            <WebcamPanel
-              webcamUrl={spot.webcamUrl}
-              webcamType={spot.webcamType}
-              spotName={spot.name}
-              lat={spot.lat}
-              lng={spot.lng}
-            />
+            <LazyMount minHeight={200}>
+              <WebcamPanel
+                webcamUrl={spot.webcamUrl}
+                webcamType={spot.webcamType}
+                spotName={spot.name}
+                lat={spot.lat}
+                lng={spot.lng}
+              />
+            </LazyMount>
           </div>
         )}
 
         {/* Nearby live cams from Windy — auto-discovered within 10 km, YouTube fallback */}
         <div>
           <SectionTitle>Nearby Live Cams</SectionTitle>
-          <WindyWebcamsPanel slug={spot.slug} spotName={spot.name} />
+          <LazyMount minHeight={60}>
+            <WindyWebcamsPanel slug={spot.slug} spotName={spot.name} />
+          </LazyMount>
         </div>
 
         {/* Row 3: Hourly table — full width */}
@@ -584,7 +591,9 @@ export function SpotForecastView({ spot }: Props) {
           {/* Left — Community Reports at natural full height */}
           <div>
             <SectionTitle>Community Reports</SectionTitle>
-            <SurfReports spotSlug={spot.slug} />
+            <LazyMount minHeight={160}>
+              <SurfReports spotSlug={spot.slug} />
+            </LazyMount>
           </div>
 
           {/* Right — Buoy Data (compact) then Season Calendar directly below */}
@@ -603,7 +612,9 @@ export function SpotForecastView({ spot }: Props) {
         </div>
 
         {/* Water Quality — only renders when USGS/EPA data exists within 20 miles */}
-        <WaterQualityPanel spotSlug={spot.slug} />
+        <LazyMount minHeight={0}>
+          <WaterQualityPanel spotSlug={spot.slug} />
+        </LazyMount>
 
       </div>
     </div>
