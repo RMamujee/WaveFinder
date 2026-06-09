@@ -52,7 +52,7 @@
 | Maps | Leaflet + MarkerCluster | ^1.9.4 |
 | Charts | Recharts | ^3.8.1 |
 | Email | Resend | ^6.10.0 |
-| Fonts | Playfair Display + DM Sans | via Google Fonts |
+| Fonts | Playfair Display + DM Sans | self-hosted via next/font |
 
 ---
 
