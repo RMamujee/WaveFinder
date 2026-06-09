@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { listSpots } from '@/lib/spots/static-store'
+import { monitor } from '@/lib/monitoring'
 import type { SurfSpot } from '@/types/spot'
 import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
@@ -48,6 +49,10 @@ export async function GET(req: Request) {
       const resolved = new Set(spots.map((s) => s.id))
       const unresolved = ids.filter((id) => !resolved.has(id))
       if (unresolved.length) {
+        // Telemetry: residual cuid traffic still hitting Postgres. Tracks how
+        // much the client-side slug migration has drained so the transitional
+        // cuid bridge (and the SurfSpot table) can be retired in a follow-up.
+        monitor('info', 'spots.ids.cuid_resolved', { count: unresolved.length })
         const dbSpots = await prisma.surfSpot.findMany({
           where: {
             AND: [
