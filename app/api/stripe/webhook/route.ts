@@ -1,23 +1,11 @@
 import { NextResponse } from 'next/server'
 import type Stripe from 'stripe'
-import { Redis } from '@upstash/redis'
 import { prisma } from '@/lib/prisma'
 import { monitor } from '@/lib/monitoring'
+import { redis } from '@/lib/redis'
 import { stripe, getProPriceIds } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
-
-const redisUrl =
-  process.env.UPSTASH_REDIS_REST_URL ??
-  process.env.KV_REST_API_URL ??
-  process.env.WaveFinderStorage_KV_REST_API_URL
-const redisToken =
-  process.env.UPSTASH_REDIS_REST_TOKEN ??
-  process.env.KV_REST_API_TOKEN ??
-  process.env.WaveFinderStorage_KV_REST_API_TOKEN
-const redis = redisUrl && redisToken
-  ? new Redis({ url: redisUrl, token: redisToken })
-  : null
 
 const EVENT_TTL_SECONDS = 60 * 60 * 24 // 24h
 

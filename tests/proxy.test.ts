@@ -7,9 +7,15 @@ let ipCounter = 0
 // Each call gets a unique client IP so the module-level in-memory rate-limit
 // store never bleeds counts between assertions. Redis is not configured in the
 // test environment, so proxy() always falls back to the in-memory limiter.
-function makeRequest(pathname: string, ip = `10.0.0.${++ipCounter % 250}-${ipCounter}`) {
+// x-real-ip is the platform-set header that ipAddress() reads — the limiter
+// must ignore everything else.
+function makeRequest(
+  pathname: string,
+  ip = `10.0.0.${++ipCounter % 250}-${ipCounter}`,
+  extraHeaders: Record<string, string> = {}
+) {
   return new NextRequest(`https://wavefinder.test${pathname}`, {
-    headers: { 'x-forwarded-for': ip },
+    headers: { 'x-real-ip': ip, ...extraHeaders },
   })
 }
 
@@ -88,5 +94,53 @@ describe('proxy rate limiter — 429 behaviour', () => {
     expect(first.headers.get('X-RateLimit-Limit')).toBe('20')
     expect(Number(first.headers.get('X-RateLimit-Remaining'))).toBe(19)
     expect(Number(second.headers.get('X-RateLimit-Remaining'))).toBe(18)
+  })
+})
+
+describe('proxy rate limiter — key derivation', () => {
+  it('shares one bucket across all paths matching the same rule (slug variation cannot reset the counter)', async () => {
+    const ip = `192.0.2.${++ipCounter}`
+
+    const first = await proxy(makeRequest('/api/forecast/malibu', ip))
+    const second = await proxy(makeRequest('/api/forecast/pipeline', ip))
+
+    expect(Number(first.headers.get('X-RateLimit-Remaining'))).toBe(44)
+    expect(Number(second.headers.get('X-RateLimit-Remaining'))).toBe(43)
+  })
+
+  it('keeps separate counters for different rule buckets from the same IP', async () => {
+    const ip = `192.0.2.${++ipCounter}-buckets`
+
+    const forecast = await proxy(makeRequest('/api/forecast/malibu', ip))
+    const webcams = await proxy(makeRequest('/api/webcams/malibu', ip))
+
+    expect(Number(forecast.headers.get('X-RateLimit-Remaining'))).toBe(44)
+    expect(Number(webcams.headers.get('X-RateLimit-Remaining'))).toBe(19)
+  })
+
+  it('ignores spoofable x-forwarded-for: requests without a platform IP share the unknown bucket', async () => {
+    // No x-real-ip header — only attacker-settable headers. Varying them must
+    // NOT mint fresh buckets.
+    const spoofed = (xff: string) =>
+      new NextRequest('https://wavefinder.test/api/water-quality/spot', {
+        headers: { 'x-forwarded-for': xff },
+      })
+
+    const first = await proxy(spoofed('1.1.1.1'))
+    const second = await proxy(spoofed('2.2.2.2'))
+
+    const firstRemaining = Number(first.headers.get('X-RateLimit-Remaining'))
+    const secondRemaining = Number(second.headers.get('X-RateLimit-Remaining'))
+    expect(secondRemaining).toBe(firstRemaining - 1)
+  })
+
+  it('ignores x-forwarded-for when a platform IP is present', async () => {
+    const ip = `192.0.2.${++ipCounter}-xff`
+
+    const first = await proxy(makeRequest('/api/alerts/a', ip, { 'x-forwarded-for': '3.3.3.3' }))
+    const second = await proxy(makeRequest('/api/alerts/b', ip, { 'x-forwarded-for': '4.4.4.4' }))
+
+    expect(Number(first.headers.get('X-RateLimit-Remaining'))).toBe(59)
+    expect(Number(second.headers.get('X-RateLimit-Remaining'))).toBe(58)
   })
 })

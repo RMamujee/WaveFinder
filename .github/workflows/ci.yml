@@ -34,8 +34,28 @@ jobs:
       - name: Test
         run: npm test
 
-      # NOTE: `next build` is intentionally NOT run here. It requires real
-      # runtime env (DATABASE_URL, Stripe keys, Upstash, better-auth secret,
-      # Sentry) that are not available in CI. Build verification happens on
-      # Vercel preview deployments instead. See followups if a build-in-CI step
-      # is desired (it would need mock/placeholder env wired up).
+  next-build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Without DATABASE_URL the build skips the 1,490-spot prerender by design
+      # (app/spots/[slug]/page.tsx); all other env degrades gracefully at build
+      # time, so this catches compile/build breaks before the Vercel deploy.
+      - name: Build
+        run: npm run build
