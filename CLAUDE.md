@@ -7,10 +7,14 @@ https://wave-finder.vercel.app.
 ## Current state & open work
 
 - **Latest audit (read this first):** `docs/audit/05-post-deploy-audit-2026-06-09.md`
-  — post-deploy audit with the prioritized open-work list. Top items: baseline
-  Prisma migrations (CRITICAL — no migration history, `db push` only), fix the
-  two rate-limit key HIGHs in `proxy.ts`, set `SENTRY_DSN` in Vercel prod, add
-  uptime monitoring, CI doesn't run `next build`.
+  — post-deploy audit with the prioritized open-work list. Done since
+  (2026-06-09, second pass): Prisma migrations baselined (`0_init` marked
+  applied in prod; `migrate deploy` runs in the Vercel build — use
+  `npm run migrate:dev` for schema changes now, NOT `db push`), the two
+  `proxy.ts` rate-limit HIGHs fixed (platform IP only + per-bucket keys),
+  `/api/health` now pings Redis, CI gates `next build` + lint warnings.
+  Still open: set `SENTRY_DSN` in Vercel prod, external uptime monitoring,
+  email verification, Stripe go-live, session-cleanup cron, CSP nonce.
 - Earlier audits: `docs/audit/00-AUDIT-SUMMARY.md` (2026-06-05) + per-area
   reports. Ops runbook: `docs/RUNBOOK.md`.
 
@@ -36,8 +40,8 @@ https://wave-finder.vercel.app.
 ## Verify before claiming done
 
 `npm run typecheck` · `npm run lint` · `npm test` (vitest) · `npm run build`.
-CI runs lint+typecheck+test on push/PR but NOT build — build breaks surface at
-Vercel deploy.
+CI runs lint (zero-warnings) + typecheck + test + `next build` (build job has
+no `DATABASE_URL`, so the spot prerender is skipped there by design).
 
 ## Before real customers (Stripe is in TEST mode)
 
