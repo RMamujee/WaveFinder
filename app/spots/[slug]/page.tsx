@@ -38,6 +38,18 @@ interface Props {
   params: Promise<{ slug: string }>
 }
 
+// Spot metadata (name, region, coordinates, description) only changes when the
+// seed data changes, so render each spot page once a day via ISR instead of
+// hitting the database on every request. Forecast data stays live — it loads
+// client-side from /api/forecast.
+export const revalidate = 86400
+
+// No paths prerendered at build (the build has no DB access); each spot page
+// is generated on first visit, then served from the cache for `revalidate`.
+export function generateStaticParams() {
+  return []
+}
+
 const getSpot = cache(async (slug: string) =>
   prisma.surfSpot.findUnique({ where: { slug } })
 )
@@ -90,7 +102,7 @@ export default async function SpotPage({ params }: Props) {
             <div className="flex items-center justify-between mb-4">
               <h2
                 className="font-semibold text-sm uppercase tracking-widest"
-                style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif' }}
+                style={{ color: 'var(--text-2)', fontFamily: 'var(--font-dm-sans), sans-serif' }}
               >
                 More in {regionKeyword}
               </h2>

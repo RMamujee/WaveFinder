@@ -67,7 +67,7 @@ export function WaterQualityPanel({ spotSlug }: Props) {
     <div>
       <h2
         className="mb-2 font-semibold text-sm"
-        style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
+        style={{ color: 'var(--text-2)', fontFamily: 'var(--font-dm-sans), sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
       >
         Water Quality
       </h2>
@@ -99,7 +99,7 @@ export function WaterQualityPanel({ spotSlug }: Props) {
       {/* Big reading */}
       <div className="flex items-baseline gap-2 mb-4">
         <span
-          style={{ fontSize: 40, fontWeight: 800, lineHeight: 1, fontFamily: 'Playfair Display, serif', color: threshold.color }}
+          style={{ fontSize: 40, fontWeight: 800, lineHeight: 1, fontFamily: 'var(--font-playfair), serif', color: threshold.color }}
         >
           {latestReading.value < 1 ? '<1' : Math.round(latestReading.value)}
         </span>

@@ -14,8 +14,9 @@ const securityHeaders = [
       // unsafe-inline required for Next.js hydration scripts and Leaflet inline styles.
       // unsafe-eval removed — React 19 and Leaflet 1.9 do not require it in production.
       "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
+      // Fonts are self-hosted via next/font — no Google Fonts origins needed.
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self'",
       "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.wikimedia.org https://tile.openstreetmap.org https://server.arcgisonline.com https://*.arcgisonline.com https://*.arcgis.com https://*.basemaps.cartocdn.com https://cartodb-basemaps-*.global.ssl.fastly.net https://tiles.openseamap.org https://i.ytimg.com https://*.ytimg.com https://images.windy.com https://*.windy.com",
       "connect-src 'self' https://*.open-meteo.com https://api.open-meteo.com https://www.ndbc.noaa.gov https://tidesandcurrents.noaa.gov https://www.waterqualitydata.us https://server.arcgisonline.com https://*.arcgisonline.com https://*.basemaps.cartocdn.com https://api.windy.com",
       "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://webcams.windy.com https://*.windy.com https://www.openstreetmap.org",

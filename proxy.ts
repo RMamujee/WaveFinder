@@ -58,11 +58,19 @@ function limitForPath(pathname: string) {
 async function checkRedisLimit(key: string) {
   if (!redis) return null
 
+  // Single pipelined round-trip instead of 3 sequential ones — this runs in
+  // middleware on every API request, so each extra Redis RTT is added latency
+  // on every response (including edge-cached ones).
   const redisKey = `rl:${key}`
-  const count = await redis.incr(redisKey)
-  if (count === 1) await redis.pexpire(redisKey, WINDOW_MS)
-  const ttl = await redis.pttl(redisKey)
-  const resetAt = Date.now() + Math.max(ttl, 0)
+  const [count, ttl] = await redis
+    .pipeline()
+    .incr(redisKey)
+    .pttl(redisKey)
+    .exec<[number, number]>()
+  // First hit of the window (or a key that lost its expiry) pays one extra
+  // round-trip to arm the TTL; every other request stays at one.
+  if (count === 1 || ttl < 0) await redis.pexpire(redisKey, WINDOW_MS)
+  const resetAt = Date.now() + (ttl > 0 ? ttl : WINDOW_MS)
   return { count, resetAt }
 }
 

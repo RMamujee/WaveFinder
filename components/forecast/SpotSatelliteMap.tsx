@@ -87,7 +87,7 @@ export function SpotSatelliteMap({ lat, lng, spotName, facingDirection = 180, zo
 
       L.marker([shLat, shLng], { icon })
         .addTo(map)
-        .bindPopup(`<strong style="font-family:DM Sans,sans-serif">${spotName}</strong>`)
+        .bindPopup(`<strong style="font-family:var(--font-dm-sans),sans-serif">${spotName}</strong>`)
     })().catch(console.error)
 
     return () => {

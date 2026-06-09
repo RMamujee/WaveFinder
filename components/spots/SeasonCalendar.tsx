@@ -50,7 +50,7 @@ export function SeasonCalendar({ region, difficulty }: Props) {
       <div className="mb-4">
         <h3
           className="text-sm font-semibold mb-0.5"
-          style={{ color: 'var(--text)', fontFamily: 'DM Sans, sans-serif' }}
+          style={{ color: 'var(--text)', fontFamily: 'var(--font-dm-sans), sans-serif' }}
         >
           Surf Season Calendar
         </h3>

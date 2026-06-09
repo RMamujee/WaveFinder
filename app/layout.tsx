@@ -1,5 +1,24 @@
 import type { Metadata, Viewport } from 'next'
+import { Playfair_Display, DM_Sans } from 'next/font/google'
 import './globals.css'
+
+// Self-hosted via next/font: fonts are served from this origin with a
+// preloaded woff2 and a size-adjusted fallback, replacing the render-blocking
+// Google Fonts CSS @import that previously delayed first paint.
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  weight: ['400', '600', '700'],
+  style: ['normal', 'italic'],
+  variable: '--font-playfair',
+  display: 'swap',
+})
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600'],
+  variable: '--font-dm-sans',
+  display: 'swap',
+})
 import { Providers } from '@/components/layout/Providers'
 import { Navbar } from '@/components/layout/Navbar'
 import { PWAInit } from '@/components/layout/PWAInit'
@@ -49,7 +68,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className={`h-full ${playfair.variable} ${dmSans.variable}`}>
       <body className="min-h-full flex flex-col antialiased">
         <Providers>
           <Navbar />

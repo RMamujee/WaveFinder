@@ -34,7 +34,7 @@ export function Navbar() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group" onClick={() => setMobileOpen(false)}>
           <Image src="/logo.png" alt="WaveFinder" width={36} height={36} className="rounded-lg" />
-          <span className="text-lg font-bold tracking-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ocean-700)' }}>
+          <span className="text-lg font-bold tracking-tight" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--ocean-700)' }}>
             Wave<span style={{ color: 'var(--seafoam)', fontStyle: 'italic' }}>Finder</span>
           </span>
         </Link>

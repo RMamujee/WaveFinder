@@ -66,7 +66,7 @@ function DirectionCompass({ degrees }: { degrees: number }) {
       {/* Cardinal labels */}
       {[['N', 36, 8], ['S', 36, 68], ['E', 67, 40], ['W', 5, 40]].map(([l, x, y]) => (
         <text key={l as string} x={x as number} y={y as number} textAnchor="middle"
-          fontSize="8" fontWeight="600" fill="#94a3b8" fontFamily="DM Sans, sans-serif">
+          fontSize="8" fontWeight="600" fill="#94a3b8" style={{ fontFamily: 'var(--font-dm-sans), sans-serif' }}>
           {l}
         </text>
       ))}
@@ -140,7 +140,7 @@ export function SwellPanel({ current, activeDayData }: Props) {
                 style={{
                   fontSize: '56px',
                   fontWeight: 800,
-                  fontFamily: 'Playfair Display, serif',
+                  fontFamily: 'var(--font-playfair), serif',
                   color: type.accent,
                   lineHeight: 1,
                   letterSpacing: '-0.03em',
@@ -216,7 +216,7 @@ export function SwellPanel({ current, activeDayData }: Props) {
               </p>
             </div>
             <div className="text-right">
-              <p className="text-lg font-black" style={{ color: type.accent, fontFamily: 'Playfair Display, serif' }}>
+              <p className="text-lg font-black" style={{ color: type.accent, fontFamily: 'var(--font-playfair), serif' }}>
                 {format(parseISO(peakHour.time), 'h a')}
               </p>
               <p className="text-xs font-bold" style={{ color: type.text }}>

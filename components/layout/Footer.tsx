@@ -9,7 +9,7 @@ export function Footer() {
       <div className="mx-auto max-w-7xl px-5 py-8">
         <div className="grid gap-8 md:grid-cols-4">
           <div>
-            <p className="text-sm font-bold mb-3" style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+            <p className="text-sm font-bold mb-3" style={{ color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}>
               WaveFinder
             </p>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>
