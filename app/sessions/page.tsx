@@ -413,7 +413,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
               </p>
               <h2
                 style={{
-                  fontFamily: 'Playfair Display, serif',
+                  fontFamily: 'var(--font-playfair), serif',
                   fontSize: '22px',
                   fontWeight: 700,
                   color: 'var(--text)',
@@ -830,7 +830,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                   style={{
                     ...inputStyle(),
                     resize: 'vertical',
-                    fontFamily: 'DM Sans, sans-serif',
+                    fontFamily: 'var(--font-dm-sans), sans-serif',
                     minHeight: '72px',
                   }}
                 />
@@ -870,7 +870,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
               opacity: mutation.isPending ? 0.6 : 1,
               width: '100%',
               transition: 'opacity 0.2s',
-              fontFamily: 'DM Sans, sans-serif',
+              fontFamily: 'var(--font-dm-sans), sans-serif',
             }}
           >
             {mutation.isPending ? 'Logging session…' : 'Log Session'}
@@ -929,7 +929,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
               padding: '3px 9px',
               fontSize: '12px',
               fontWeight: 700,
-              fontFamily: 'DM Sans, sans-serif',
+              fontFamily: 'var(--font-dm-sans), sans-serif',
               letterSpacing: '0.02em',
             }}
           >
@@ -1004,7 +1004,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
           <div>
             <h3
               style={{
-                fontFamily: 'Playfair Display, serif',
+                fontFamily: 'var(--font-playfair), serif',
                 fontSize: '18px',
                 fontWeight: 700,
                 color: 'var(--text)',
@@ -1217,7 +1217,7 @@ function SessionsPageInner() {
                 </p>
                 <h1
                   style={{
-                    fontFamily: 'Playfair Display, serif',
+                    fontFamily: 'var(--font-playfair), serif',
                     fontSize: '30px',
                     fontWeight: 700,
                     color: 'var(--text)',
@@ -1245,7 +1245,7 @@ function SessionsPageInner() {
                   fontWeight: 700,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
-                  fontFamily: 'DM Sans, sans-serif',
+                  fontFamily: 'var(--font-dm-sans), sans-serif',
                   transition: 'opacity 0.2s',
                   flexShrink: 0,
                 }}
@@ -1272,7 +1272,7 @@ function SessionsPageInner() {
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}><Icon name="log" size={48} style={{ color: 'var(--text-3)' }} /></div>
               <h2
                 style={{
-                  fontFamily: 'Playfair Display, serif',
+                  fontFamily: 'var(--font-playfair), serif',
                   fontSize: '22px',
                   fontWeight: 700,
                   color: 'var(--text)',
@@ -1295,7 +1295,7 @@ function SessionsPageInner() {
                   fontSize: '14px',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  fontFamily: 'DM Sans, sans-serif',
+                  fontFamily: 'var(--font-dm-sans), sans-serif',
                 }}
               >
                 Log your first session
@@ -1353,7 +1353,7 @@ function SessionsPageInner() {
                         fontSize: '16px',
                         fontWeight: 700,
                         color: 'var(--text)',
-                        fontFamily: 'Playfair Display, serif',
+                        fontFamily: 'var(--font-playfair), serif',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',

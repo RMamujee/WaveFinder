@@ -204,7 +204,7 @@ export default function GearPage() {
       <div style={{ background: 'white', borderBottom: '1px solid var(--border)' }}>
         <div className="mx-auto max-w-3xl px-5 py-8">
           <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--text-3)' }}>My Gear</p>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>Gear Locker</h1>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>Gear Locker</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-3)' }}>
             Save your boards and wetsuits to quickly log what you used each session.
           </p>

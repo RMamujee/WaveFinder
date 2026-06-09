@@ -15,7 +15,7 @@ export default function NotFound() {
     >
       <p
         style={{
-          fontFamily: 'Playfair Display, serif',
+          fontFamily: 'var(--font-playfair), serif',
           fontSize: '80px',
           fontWeight: 700,
           color: 'var(--ocean-600)',
@@ -27,7 +27,7 @@ export default function NotFound() {
       </p>
       <h1
         style={{
-          fontFamily: 'Playfair Display, serif',
+          fontFamily: 'var(--font-playfair), serif',
           fontSize: '26px',
           fontWeight: 700,
           color: 'var(--text)',

@@ -37,7 +37,7 @@ export default function PricingPage() {
         </p>
         <h1
           className="text-3xl sm:text-5xl font-bold mb-4"
-          style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}
+          style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}
         >
           Free forever.{' '}
           <span style={{ color: 'var(--ocean-600)', fontStyle: 'italic' }}>Pro when you want it.</span>
@@ -87,7 +87,7 @@ function PlanCard({ name, price, cadence, annualNote, features, highlight }: Pla
       <div className="flex items-baseline justify-between mb-4">
         <h2
           className="text-xl font-bold"
-          style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}
+          style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}
         >
           {name}
         </h2>

@@ -70,7 +70,7 @@ function parkingPopupHtml(p: ParkingOption): string {
   const priceColor = p.isFree ? '#15803d' : '#b45309'
   const timeLimit = p.maxStayHours ? `${p.maxStayHours}hr max stay` : 'No time limit'
 
-  return `<div style="width:200px;padding:12px 14px;font-family:'DM Sans',sans-serif;">
+  return `<div style="width:200px;padding:12px 14px;font-family:var(--font-dm-sans),sans-serif;">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
       <div style="background:#1e40af;border-radius:6px;width:26px;height:26px;display:flex;align-items:center;
         justify-content:center;font-size:14px;font-weight:900;color:white;flex-shrink:0;">P</div>
@@ -114,13 +114,13 @@ function tooltipHtml(spot: SpotWithRating): string {
     <div style="display:flex;gap:12px;margin:8px 0 6px;">
       <div>
         <div style="font-size:10px;color:#8888aa;margin-bottom:1px;">Wave Height</div>
-        <div style="font-size:16px;font-weight:700;color:#1a1a2e;font-family:'Playfair Display',serif;">${heightFt}ft</div>
+        <div style="font-size:16px;font-weight:700;color:#1a1a2e;font-family:var(--font-playfair),serif;">${heightFt}ft</div>
         <div style="font-size:10px;color:#8888aa;">${heightM}m</div>
       </div>
       ${period ? `<div><div style="font-size:10px;color:#8888aa;margin-bottom:1px;">Period</div>
-        <div style="font-size:16px;font-weight:700;color:#1a1a2e;font-family:'Playfair Display',serif;">${period}s</div></div>` : ''}
+        <div style="font-size:16px;font-weight:700;color:#1a1a2e;font-family:var(--font-playfair),serif;">${period}s</div></div>` : ''}
       ${power ? `<div><div style="font-size:10px;color:#8888aa;margin-bottom:1px;">Power</div>
-        <div style="font-size:16px;font-weight:700;color:#1a1a2e;font-family:'Playfair Display',serif;">${power}</div>
+        <div style="font-size:16px;font-weight:700;color:#1a1a2e;font-family:var(--font-playfair),serif;">${power}</div>
         <div style="font-size:10px;color:#8888aa;">kW/m</div></div>` : ''}
     </div>
     ${spot.currentWindSpeed != null ? `<div style="font-size:11px;color:#6b7280;margin-bottom:6px;">
@@ -128,7 +128,7 @@ function tooltipHtml(spot: SpotWithRating): string {
   ` : h === 0 ? `<div style="font-size:11px;color:#8888aa;margin:6px 0;font-style:italic;">Flat — no rideable waves today</div>`
     : `<div style="font-size:11px;color:#8888aa;margin:6px 0;font-style:italic;">No live data — click for forecast</div>`
 
-  return `<div style="font-family:'DM Sans',sans-serif;padding:12px 14px;min-width:180px;">
+  return `<div style="font-family:var(--font-dm-sans),sans-serif;padding:12px 14px;min-width:180px;">
     <div style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">${spot.region}</div>
     <div style="font-size:14px;font-weight:700;color:#1a1a2e;line-height:1.2;">${spot.name}</div>
     <div style="font-size:10px;color:${DIFFICULTY_COLOR[spot.difficulty] ?? '#6b7280'};margin-top:2px;text-transform:capitalize;font-weight:600;">${spot.difficulty}</div>
@@ -170,7 +170,7 @@ function popupHtml(spot: SpotWithRating): string {
     ? `<div style="font-size:13px;color:#8888aa;font-style:italic;margin-bottom:10px;text-align:center;padding:10px;background:#f8fafc;border-radius:10px;">Flat — no rideable waves today</div>`
     : `<div style="font-size:13px;color:#8888aa;font-style:italic;margin-bottom:10px;text-align:center;padding:10px;background:#f8fafc;border-radius:10px;">No live data available</div>`
 
-  return `<div style="width:250px;padding:14px 16px;font-family:'DM Sans',sans-serif;">
+  return `<div style="width:250px;padding:14px 16px;font-family:var(--font-dm-sans),sans-serif;">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">
       <div style="min-width:0;">
         <div style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:1px;">${spot.region}</div>
@@ -247,7 +247,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
             border:2px solid ${isFree ? '#93c5fd' : '#9ca3af'};
             border-radius:6px;width:22px;height:22px;
             display:flex;align-items:center;justify-content:center;
-            font-family:'DM Sans',sans-serif;font-size:12px;font-weight:900;color:white;
+            font-family:var(--font-dm-sans),sans-serif;font-size:12px;font-weight:900;color:white;
             box-shadow:0 1px 4px rgba(0,0,0,0.3);cursor:pointer;">P</div>`,
           iconSize: [22, 22],
           iconAnchor: [11, 11],
@@ -304,7 +304,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
           className: '',
           html: `<div style="background:${c.bg};border:3px solid ${c.border};border-radius:50%;
             width:44px;height:44px;display:flex;align-items:center;justify-content:center;
-            font-family:'DM Sans',sans-serif;font-size:13px;font-weight:800;color:${c.text};
+            font-family:var(--font-dm-sans),sans-serif;font-size:13px;font-weight:800;color:${c.text};
             box-shadow:0 3px 12px rgba(0,0,0,0.2);cursor:pointer;">${count}</div>`,
           iconSize: [44, 44],
           iconAnchor: [22, 22],
@@ -336,7 +336,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
           style="display:flex;flex-direction:column;align-items:center;cursor:pointer;">
           <div style="background:${colors.bg};border:2.5px solid ${colors.border};border-radius:50%;
             width:38px;height:38px;display:flex;align-items:center;justify-content:center;
-            font-family:'DM Sans',sans-serif;font-size:${fontSize};font-weight:800;color:${colors.text};
+            font-family:var(--font-dm-sans),sans-serif;font-size:${fontSize};font-weight:800;color:${colors.text};
             box-shadow:0 2px 8px rgba(0,0,0,0.15);letter-spacing:-0.3px;line-height:1;">${label}</div>
           <div style="width:2px;height:6px;background:${colors.border};margin-top:1px;"></div>
         </div>`,

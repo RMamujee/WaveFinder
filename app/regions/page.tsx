@@ -103,7 +103,7 @@ function RegionCard({ title, subtitle, icon, color, bg, border, description, onC
             </span>
           )}
         </div>
-        <h2 className="font-bold text-lg leading-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+        <h2 className="font-bold text-lg leading-tight" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
           {title}
         </h2>
       </div>
@@ -183,7 +183,7 @@ export default function RegionsPage() {
           <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--ocean-500)' }}>
             {selectedState ? selectedCountry : selectedCountry ? selectedWorldRegion : 'Worldwide'}
           </p>
-          <h1 className="text-4xl font-bold leading-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+          <h1 className="text-4xl font-bold leading-tight" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
             {pageTitle}
           </h1>
           <p className="mt-2 text-base" style={{ color: 'var(--text-2)', maxWidth: '520px' }}>

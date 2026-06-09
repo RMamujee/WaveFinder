@@ -20,7 +20,7 @@ export function WaveLoader({ fullScreen = false, compact = false, label }: Props
     <div style={wrapStyle}>
       {/* Wordmark */}
       {!compact && (
-        <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, fontWeight: 700, color: 'var(--ocean-700)', letterSpacing: '-0.4px', marginBottom: 28, lineHeight: 1 }}>
+        <p style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 26, fontWeight: 700, color: 'var(--ocean-700)', letterSpacing: '-0.4px', marginBottom: 28, lineHeight: 1 }}>
           Wave<span style={{ color: 'var(--seafoam)', fontStyle: 'italic' }}>Finder</span>
         </p>
       )}

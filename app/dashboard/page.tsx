@@ -64,7 +64,7 @@ export default function DashboardPage() {
               <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--text-3)' }}>
                 My Dashboard
               </p>
-              <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '28px', fontWeight: 700, color: 'var(--text)' }}>
+              <h1 style={{ fontFamily: 'var(--font-playfair), serif', fontSize: '28px', fontWeight: 700, color: 'var(--text)' }}>
                 Saved Spots
               </h1>
               <p className="mt-1 text-sm" style={{ color: 'var(--text-3)' }}>

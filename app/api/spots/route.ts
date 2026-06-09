@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
+import { buildSpatialIndex, findNearestInIndex } from '@/lib/forecast/nearest-fallback'
 import { inferBottomType } from '@/lib/bottom-type'
 
 export const maxDuration = 60
@@ -63,7 +64,9 @@ export async function GET(req: Request) {
     return NextResponse.json(spots.map(s => ({
       ...s,
       bottomType: inferBottomType(s.description ?? null, s.name),
-    })))
+    })), {
+      headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=1800' },
+    })
   }
 
   // ── Conditions: Open-Meteo current conditions at actual beach coordinates ─────
@@ -147,15 +150,15 @@ export async function GET(req: Request) {
 
   // ── Nearest-neighbour fallback — no permanently-grey nodes ───────────────────
   // Only fires for spots where Open-Meteo timed out (not for genuine flat days).
+  // Spatial-grid lookup keeps this cheap when the upstream API degrades; spots
+  // with no data within ~300 km stay "unknown" rather than borrowing conditions
+  // from a different coastline.
   const withData = enriched.filter((s) => s.currentWaveHeight !== null)
+  const dataIndex = buildSpatialIndex(withData)
   for (const spot of enriched) {
     if (spot.currentWaveHeight !== null) continue
-    if (withData.length === 0) continue
-    let closest = withData[0], minDist = Infinity
-    for (const s of withData) {
-      const d = Math.hypot(s.lat - spot.lat, s.lng - spot.lng)
-      if (d < minDist) { minDist = d; closest = s }
-    }
+    const closest = findNearestInIndex(dataIndex, spot.lat, spot.lng)
+    if (!closest) continue
     const wh = closest.currentWaveHeight ?? 0
     const period = closest.currentPeriod ?? 8
     const { rating } = rateSurfConditions({
