@@ -16,7 +16,10 @@ export async function GET(req: Request) {
       distinct: ['region'],
       orderBy: { region: 'asc' },
     })
-    return NextResponse.json({ regions: rows.map((r) => r.region) })
+    return NextResponse.json(
+      { regions: rows.map((r) => r.region) },
+      { headers: { 'Cache-Control': 's-maxage=86400, stale-while-revalidate=86400' } }
+    )
   }
 
   // Return distinct countries
@@ -25,5 +28,8 @@ export async function GET(req: Request) {
     distinct: ['country'],
     orderBy: { country: 'asc' },
   })
-  return NextResponse.json({ countries: rows.map((r) => r.country) })
+  return NextResponse.json(
+    { countries: rows.map((r) => r.country) },
+    { headers: { 'Cache-Control': 's-maxage=86400, stale-while-revalidate=86400' } }
+  )
 }
