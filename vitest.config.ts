@@ -9,6 +9,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': repoRoot,
+      // `server-only` is a build-time marker package Next aliases during its
+      // own bundling; it isn't resolvable under plain Node/vitest. Point it at
+      // Next's no-op (react-server) shim so server modules guarded with
+      // `import 'server-only'` can be imported in tests.
+      'server-only': fileURLToPath(
+        new URL('./node_modules/next/dist/compiled/server-only/empty.js', import.meta.url)
+      ),
     },
   },
   test: {

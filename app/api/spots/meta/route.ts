@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { COUNTRIES, regionsForCountry } from '@/lib/spots/static-store'
 
 export const revalidate = 86400
 
@@ -10,26 +10,15 @@ export async function GET(req: Request) {
 
   if (country) {
     // Return distinct region values for this country
-    const rows = await prisma.surfSpot.findMany({
-      where: { country },
-      select: { region: true },
-      distinct: ['region'],
-      orderBy: { region: 'asc' },
-    })
     return NextResponse.json(
-      { regions: rows.map((r) => r.region) },
+      { regions: regionsForCountry(country) },
       { headers: { 'Cache-Control': 's-maxage=86400, stale-while-revalidate=86400' } }
     )
   }
 
   // Return distinct countries
-  const rows = await prisma.surfSpot.findMany({
-    select: { country: true },
-    distinct: ['country'],
-    orderBy: { country: 'asc' },
-  })
   return NextResponse.json(
-    { countries: rows.map((r) => r.country) },
+    { countries: [...COUNTRIES] },
     { headers: { 'Cache-Control': 's-maxage=86400, stale-while-revalidate=86400' } }
   )
 }
