@@ -32,6 +32,14 @@ describe('buildSpatialIndex / findNearestInIndex', () => {
     expect(findNearestInIndex(index, 33.6, -117.6)?.name).toBe('b')
   })
 
+  it('prefers a closer spot just across a cell boundary over a far same-cell spot', () => {
+    const index = buildSpatialIndex([
+      spot(33.0, -117.5, 'far-same-cell'),   // ~110 km away, same 1° cell
+      spot(34.01, -117.5, 'near-next-cell'), // ~2 km away, adjacent cell
+    ])
+    expect(findNearestInIndex(index, 33.99, -117.5)?.name).toBe('near-next-cell')
+  })
+
   it('searches across the antimeridian', () => {
     const index = buildSpatialIndex([spot(-17.8, 179.9, 'fiji-east')])
     expect(findNearestInIndex(index, -17.9, -179.8)?.name).toBe('fiji-east')
