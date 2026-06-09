@@ -10,7 +10,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
+    "db:reset": "tsx scripts/assert-local-db.ts && prisma db push --force-reset && tsx prisma/seed.ts",
     "smoke:prod": "tsx scripts/smoke-prod.ts",
     "test": "vitest run",
     "test:watch": "vitest",
