@@ -28,6 +28,7 @@ export async function fetchNearbyWebcams(
       lng: lng.toString(),
       radius: radiusKm.toString(),
       limit: '6',
+      categories: 'beach,coast',
       show: 'webcam:images,player,location',
     })
 
