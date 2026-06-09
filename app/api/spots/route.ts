@@ -109,10 +109,9 @@ export async function GET(req: Request) {
         headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=1800' },
       })
     }
-    return NextResponse.json(spots.map(s => ({
-      ...s,
-      bottomType: inferBottomType(s.description ?? null, s.name),
-    })), {
+    // Store spots already carry precomputed bottomType; DB-fallback spots get
+    // it set where they're merged above — so no re-map is needed here.
+    return NextResponse.json(spots, {
       headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=1800' },
     })
   }
