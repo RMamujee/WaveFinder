@@ -418,7 +418,7 @@ export function SpotForecastView({ spot }: Props) {
                 className="rounded-2xl overflow-hidden"
                 style={{ border: '1px solid var(--border)', flex: 1, minHeight: '260px' }}
               >
-                <LazyMount minHeight={260} style={{ height: '100%' }}>
+                <LazyMount minHeight={280} style={{ height: '100%' }}>
                   <SpotSatelliteMap
                     lat={spot.lat}
                     lng={spot.lng}

@@ -57,7 +57,10 @@ const getSpot = cache(async (slug: string) =>
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
   const spot = await getSpot(slug)
-  if (!spot) return {}
+  // Throw notFound here, not just in the page body: metadata resolves before
+  // the response starts streaming, so this is what guarantees unknown slugs
+  // get a real 404 status instead of an ISR-cached 200 with not-found UI.
+  if (!spot) notFound()
   return {
     title: `${spot.name} Surf Forecast – WaveFinder`,
     description: `7-day surf forecast for ${spot.name}, ${spot.region}. Wave height, swell period, wind, and tides.`,
