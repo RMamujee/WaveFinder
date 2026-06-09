@@ -166,10 +166,13 @@ export default function SpotsPage() {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     }),
-    staleTime: 0,
-    gcTime: 60 * 1000,
+    // Match the route's edge cache (s-maxage=180): refetching sooner than that
+    // just re-downloads the same cached payload, and a focus refetch on a cold
+    // edge re-runs the whole Open-Meteo fan-out.
+    staleTime: 180 * 1000,
+    gcTime: 10 * 60 * 1000,
     retry: 1,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     enabled: baseSpots.length > 0,
   })
 
