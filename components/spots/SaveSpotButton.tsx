@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { migrateSavedSpots } from '@/lib/spots/saved-spots-migration'
 
 const SAVED_KEY = 'wavefinder_saved'
 
@@ -15,7 +16,14 @@ export function SaveSpotButton({ spotId }: { spotId: string }) {
   const [isSaved, setIsSaved] = useState(false)
 
   useEffect(() => {
-    setIsSaved(getSavedIds().includes(spotId))
+    let active = true
+    // Migrate any legacy cuid saved ids to slugs before checking membership, so
+    // the saved state matches the now slug-based spotId. Idempotent + failure-
+    // safe. Re-check after it resolves regardless of outcome.
+    migrateSavedSpots().finally(() => {
+      if (active) setIsSaved(getSavedIds().includes(spotId))
+    })
+    return () => { active = false }
   }, [spotId])
 
   const handleClick = () => {

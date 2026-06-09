@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { listSpots } from '@/lib/spots/static-store'
+import { monitor } from '@/lib/monitoring'
+import type { SurfSpot } from '@/types/spot'
 import { fetchCurrentConditions } from '@/lib/api/open-meteo'
 import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
 import { buildSpatialIndex, findNearestInIndex } from '@/lib/forecast/nearest-fallback'
@@ -16,10 +19,15 @@ export async function GET(req: Request) {
   const rawDiff    = searchParams.get('difficulty') ?? ''
   const difficulty = VALID_DIFFICULTIES.has(rawDiff) ? rawDiff : ''
   const country    = (searchParams.get('country') ?? '').slice(0, 100).replace(/[%_\\]/g, '')
-  // Validate each ID looks like a cuid/uuid before querying
+  // Accept both slug-shaped tokens (spots are now keyed by slug in the
+  // in-memory store) and legacy cuid-shaped tokens (saved-spot localStorage
+  // still holds prod cuids until the client migration runs). Slugs resolve via
+  // the store; cuids fall through to the Postgres fallback below. The widened
+  // pattern (lowercase alnum + hyphen, ≤120) is a superset of the old cuid
+  // pattern, so cuids keep validating.
   const ids        = (searchParams.get('ids') ?? '').split(',')
     .map((s) => s.trim())
-    .filter((s) => /^[a-z0-9]{20,36}$/i.test(s))
+    .filter((s) => /^[a-z0-9-]{1,120}$/i.test(s))
     .slice(0, 50)
   const withConditions = searchParams.get('withConditions') === 'true'
   // ?slim=true returns only the fields needed to render markers on a map.
@@ -27,44 +35,83 @@ export async function GET(req: Request) {
   // is faster.
   const slim = searchParams.get('slim') === 'true'
 
-  let spots
+  // Resolve from the in-memory static store. The store's `id` is the slug, so
+  // an ids= filter matches slug-shaped tokens; cuid-shaped tokens never match
+  // the store and fall through to the Postgres fallback below.
+  let spots: SurfSpot[]
   try {
-    spots = await prisma.surfSpot.findMany({
-      where: {
-        AND: [
-          ids.length ? { id: { in: ids } } : {},
-          search ? { OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { region: { contains: search, mode: 'insensitive' } },
-            { country: { contains: search, mode: 'insensitive' } },
-          ]} : {},
-          difficulty ? { difficulty } : {},
-          country ? { country } : {},
-        ],
-      },
-      orderBy: { name: 'asc' },
-      ...(slim ? {
-        select: {
-          id: true, slug: true, name: true, region: true, country: true,
-          lat: true, lng: true, difficulty: true, facingDirection: true,
-        },
-      } : {}),
-    })
+    spots = listSpots({ q: search, difficulty, country, ids: ids.length ? ids : undefined })
+
+    // Transitional cuid fallback: any ids the store couldn't resolve are looked
+    // up in Postgres (legacy saved-spot cuids). Disabled for slim/condition
+    // paths only insofar as those never pass ids=.
+    if (ids.length) {
+      const resolved = new Set(spots.map((s) => s.id))
+      const unresolved = ids.filter((id) => !resolved.has(id))
+      if (unresolved.length) {
+        // Telemetry: residual cuid traffic still hitting Postgres. Tracks how
+        // much the client-side slug migration has drained so the transitional
+        // cuid bridge (and the SurfSpot table) can be retired in a follow-up.
+        monitor('info', 'spots.ids.cuid_resolved', { count: unresolved.length })
+        const dbSpots = await prisma.surfSpot.findMany({
+          where: {
+            AND: [
+              { id: { in: unresolved } },
+              search ? { OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { region: { contains: search, mode: 'insensitive' } },
+                { country: { contains: search, mode: 'insensitive' } },
+              ]} : {},
+              difficulty ? { difficulty } : {},
+              country ? { country } : {},
+            ],
+          },
+          orderBy: { name: 'asc' },
+        })
+        const merged: SurfSpot[] = [
+          ...spots,
+          ...dbSpots.map((s): SurfSpot => ({
+            id: s.id,
+            slug: s.slug,
+            name: s.name,
+            region: s.region,
+            country: s.country,
+            lat: s.lat,
+            lng: s.lng,
+            description: s.description,
+            difficulty: s.difficulty as SurfSpot['difficulty'],
+            facingDirection: s.facingDirection,
+            noaaTideStationId: s.noaaTideStationId,
+            noaaBuoyId: s.noaaBuoyId,
+            webcamUrl: s.webcamUrl,
+            webcamType: s.webcamType,
+            parkingOptions: s.parkingOptions as SurfSpot['parkingOptions'],
+            bottomType: inferBottomType(s.description ?? null, s.name),
+          })),
+        ]
+        merged.sort((a, b) => a.name.localeCompare(b.name))
+        spots = merged
+      }
+    }
   } catch (err) {
-    console.error('[api/spots] findMany failed', err)
+    console.error('[api/spots] listSpots failed', err)
     return NextResponse.json({ error: 'Failed to load spots' }, { status: 500 })
   }
 
   if (!withConditions) {
     if (slim) {
-      return NextResponse.json(spots, {
+      // Match the previous Prisma slim projection field-for-field.
+      const slimSpots = spots.map((s) => ({
+        id: s.id, slug: s.slug, name: s.name, region: s.region, country: s.country,
+        lat: s.lat, lng: s.lng, difficulty: s.difficulty, facingDirection: s.facingDirection,
+      }))
+      return NextResponse.json(slimSpots, {
         headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=1800' },
       })
     }
-    return NextResponse.json(spots.map(s => ({
-      ...s,
-      bottomType: inferBottomType(s.description ?? null, s.name),
-    })), {
+    // Store spots already carry precomputed bottomType; DB-fallback spots get
+    // it set where they're merged above — so no re-map is needed here.
+    return NextResponse.json(spots, {
       headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=1800' },
     })
   }

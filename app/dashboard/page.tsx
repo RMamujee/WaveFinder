@@ -6,6 +6,7 @@ import { SpotCard } from '@/components/spots/SpotCard'
 import { Icon } from '@/components/ui/Icon'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { PortalButton } from '@/components/billing/PortalButton'
+import { migrateSavedSpots } from '@/lib/spots/saved-spots-migration'
 import type { SurfSpot } from '@/types/spot'
 
 const SAVED_KEY = 'wavefinder_saved'
@@ -29,6 +30,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   async function loadSpots() {
+    // One-time migration of legacy cuid saved-spot ids to slugs. Idempotent and
+    // failure-safe: once everything is a slug it's a no-op. It dispatches a
+    // 'storage' event only when it rewrites the list, which re-runs loadSpots
+    // with the migrated slugs.
+    await migrateSavedSpots()
     const ids = getSavedIds()
     if (!ids.length) { setSavedSpots([]); setLoading(false); return }
     try {

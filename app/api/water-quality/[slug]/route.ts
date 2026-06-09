@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { handleRouteError } from '@/lib/route-helpers'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 
 export const revalidate = 43200 // 12 hours — bacterial data updates daily at most
 
@@ -70,12 +69,7 @@ export async function GET(
   if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
-  let spot
-  try {
-    spot = await prisma.surfSpot.findUnique({ where: { slug }, select: { lat: true, lng: true, name: true } })
-  } catch (error) {
-    return handleRouteError(error, 'water_quality_error')
-  }
+  const spot = getSpotBySlug(slug)
 
   if (!spot) return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
 

@@ -1,39 +1,11 @@
-import { prisma } from '@/lib/prisma'
-import { SURF_SPOTS_SEED } from '@/lib/spots-data'
+import { getSpotBySlug, spotsInRegion, SLUGS } from '@/lib/spots/static-store'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
-import { cache } from 'react'
 import { SpotForecastView } from './SpotForecastView'
 import { SpotCard } from '@/components/spots/SpotCard'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import type { SurfSpot } from '@/types/spot'
-import { inferBottomType } from '@/lib/bottom-type'
-
-type PrismaSpot = Awaited<ReturnType<typeof prisma.surfSpot.findUniqueOrThrow>>
-
-function toSurfSpot(s: PrismaSpot): SurfSpot {
-  const VALID = new Set(['beginner', 'intermediate', 'advanced'])
-  return {
-    id: s.id,
-    slug: s.slug,
-    name: s.name,
-    region: s.region,
-    country: s.country,
-    lat: s.lat,
-    lng: s.lng,
-    description: s.description,
-    difficulty: VALID.has(s.difficulty) ? (s.difficulty as SurfSpot['difficulty']) : 'intermediate',
-    facingDirection: s.facingDirection,
-    noaaTideStationId: s.noaaTideStationId,
-    noaaBuoyId: s.noaaBuoyId,
-    webcamUrl: s.webcamUrl,
-    webcamType: s.webcamType,
-    parkingOptions: s.parkingOptions as SurfSpot['parkingOptions'] ?? null,
-    bottomType: inferBottomType(s.description, s.name),
-  }
-}
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -52,19 +24,14 @@ export const revalidate = 86400
 export const dynamicParams = false
 
 export function generateStaticParams() {
-  // Local builds without a database can't render the pages, so skip
-  // prerendering there; the Vercel build always has DATABASE_URL.
-  if (!process.env.DATABASE_URL) return []
-  return SURF_SPOTS_SEED.map((s) => ({ slug: s.slug }))
+  // Spots are served from the in-memory static store, so prerendering no longer
+  // depends on DATABASE_URL — every slug renders at build in all environments.
+  return SLUGS.map((slug) => ({ slug }))
 }
-
-const getSpot = cache(async (slug: string) =>
-  prisma.surfSpot.findUnique({ where: { slug } })
-)
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  const spot = await getSpot(slug)
+  const spot = getSpotBySlug(slug)
   // Throw notFound here, not just in the page body: metadata resolves before
   // the response starts streaming, so this is what guarantees unknown slugs
   // get a real 404 status instead of an ISR-cached 200 with not-found UI.
@@ -83,27 +50,22 @@ function broadRegion(region: string): string {
 
 export default async function SpotPage({ params }: Props) {
   const { slug } = await params
-  const spot = await getSpot(slug)
+  const spot = getSpotBySlug(slug)
 
   if (!spot) notFound()
 
   // Fetch nearby spots in the same broad region (exclude this spot)
   const regionKeyword = broadRegion(spot.region)
   const nearbySpots = regionKeyword
-    ? await prisma.surfSpot.findMany({
-        where: {
-          region: { contains: regionKeyword },
-          slug: { not: slug },
-        },
-        orderBy: { name: 'asc' },
-        take: 8,
-      })
+    ? spotsInRegion(regionKeyword)
+        .filter((s) => s.slug !== slug)
+        .slice(0, 8)
     : []
 
   return (
     <>
       <Suspense fallback={<WaveLoader label="Loading forecast…" />}>
-        <SpotForecastView spot={toSurfSpot(spot)} />
+        <SpotForecastView spot={spot} />
       </Suspense>
 
       {/* More spots in this region */}
@@ -127,7 +89,7 @@ export default async function SpotPage({ params }: Props) {
             </div>
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8">
               {nearbySpots.map((s) => (
-                <SpotCard key={s.slug} spot={toSurfSpot(s)} />
+                <SpotCard key={s.slug} spot={s} />
               ))}
             </div>
           </div>
