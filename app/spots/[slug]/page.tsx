@@ -44,6 +44,12 @@ interface Props {
 // client-side from /api/forecast.
 export const revalidate = 86400
 
+// No paths prerendered at build (the build has no DB access); each spot page
+// is generated on first visit, then served from the cache for `revalidate`.
+export function generateStaticParams() {
+  return []
+}
+
 const getSpot = cache(async (slug: string) =>
   prisma.surfSpot.findUnique({ where: { slug } })
 )
