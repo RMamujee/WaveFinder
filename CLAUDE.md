@@ -13,8 +13,17 @@ https://wave-finder.vercel.app.
   `npm run migrate:dev` for schema changes now, NOT `db push`), the two
   `proxy.ts` rate-limit HIGHs fixed (platform IP only + per-bucket keys),
   `/api/health` now pings Redis, CI gates `next build` + lint warnings.
-  Still open: set `SENTRY_DSN` in Vercel prod, external uptime monitoring,
-  email verification, Stripe go-live, session-cleanup cron, CSP nonce.
+  Third pass (same day): static-spots refactor landed — all spot reads come
+  from `lib/spots/static-store.ts` (in-memory; spot `id` === slug now);
+  `/api/spots?ids=` still resolves legacy cuids via DB (telemetry:
+  `spots.ids.cuid_resolved`; retire the bridge + SurfSpot table once it reads
+  ~0). Session/Verification cleanup cron live (`/api/cron/cleanup`, daily);
+  uptime monitor = GitHub Actions `uptime.yml`; `db:reset` refuses non-local
+  DBs. NOTE: `CRON_SECRET` in Vercel prod was regenerated 2026-06-09 (old one
+  had whitespace and failed every deploy after crons were added to
+  vercel.json).
+  Still open: set `SENTRY_DSN` in Vercel prod (blocked: needs a Sentry
+  project), email verification, Stripe go-live, CSP nonce.
 - Earlier audits: `docs/audit/00-AUDIT-SUMMARY.md` (2026-06-05) + per-area
   reports. Ops runbook: `docs/RUNBOOK.md`.
 
