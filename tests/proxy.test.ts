@@ -38,7 +38,6 @@ describe('proxy rate limiter — per-path limits', () => {
 
   it('applies the documented per-pattern limits', async () => {
     expect(await limitFor('/api/debug')).toBe(10)
-    expect(await limitFor('/api/webcams')).toBe(20)
     expect(await limitFor('/api/water-quality')).toBe(30)
     expect(await limitFor('/api/best-spots')).toBe(30)
     expect(await limitFor('/api/forecast')).toBe(45)
@@ -86,14 +85,14 @@ describe('proxy rate limiter — 429 behaviour', () => {
 
   it('exposes a decreasing remaining count below the limit', async () => {
     const ip = `203.0.113.${++ipCounter}`
-    const path = '/api/webcams' // limit = 20
+    const path = '/api/water-quality' // limit = 30
 
     const first = await proxy(makeRequest(path, ip))
     const second = await proxy(makeRequest(path, ip))
 
-    expect(first.headers.get('X-RateLimit-Limit')).toBe('20')
-    expect(Number(first.headers.get('X-RateLimit-Remaining'))).toBe(19)
-    expect(Number(second.headers.get('X-RateLimit-Remaining'))).toBe(18)
+    expect(first.headers.get('X-RateLimit-Limit')).toBe('30')
+    expect(Number(first.headers.get('X-RateLimit-Remaining'))).toBe(29)
+    expect(Number(second.headers.get('X-RateLimit-Remaining'))).toBe(28)
   })
 })
 
@@ -112,10 +111,10 @@ describe('proxy rate limiter — key derivation', () => {
     const ip = `192.0.2.${++ipCounter}-buckets`
 
     const forecast = await proxy(makeRequest('/api/forecast/malibu', ip))
-    const webcams = await proxy(makeRequest('/api/webcams/malibu', ip))
+    const waterQuality = await proxy(makeRequest('/api/water-quality/malibu', ip))
 
     expect(Number(forecast.headers.get('X-RateLimit-Remaining'))).toBe(44)
-    expect(Number(webcams.headers.get('X-RateLimit-Remaining'))).toBe(19)
+    expect(Number(waterQuality.headers.get('X-RateLimit-Remaining'))).toBe(29)
   })
 
   it('ignores spoofable x-forwarded-for: requests without a platform IP share the unknown bucket', async () => {

@@ -16,8 +16,6 @@ import { GearPanel } from '@/components/forecast/GearPanel'
 import { ForecastDayCard } from '@/components/forecast/ForecastDayCard'
 import { BuoyReadings } from '@/components/forecast/BuoyReadings'
 import { SwellPanel } from '@/components/forecast/SwellPanel'
-import { WebcamPanel } from '@/components/webcam/WebcamPanel'
-import { WindyWebcamsPanel } from '@/components/webcam/WindyWebcamsPanel'
 import { StormAlerts } from '@/components/forecast/StormAlerts'
 import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
 import { SwellAlertButton } from '@/components/forecast/SwellAlertButton'
@@ -430,30 +428,6 @@ export function SpotForecastView({ spot }: Props) {
             </div>
           </div>
         )}
-
-        {/* Curated live cam — only when spot has a manually set webcam URL */}
-        {spot.webcamType !== 'none' && !!spot.webcamUrl && (
-          <div>
-            <SectionTitle>Live Cam</SectionTitle>
-            <LazyMount minHeight={200}>
-              <WebcamPanel
-                webcamUrl={spot.webcamUrl}
-                webcamType={spot.webcamType}
-                spotName={spot.name}
-                lat={spot.lat}
-                lng={spot.lng}
-              />
-            </LazyMount>
-          </div>
-        )}
-
-        {/* Nearby live cams from Windy — auto-discovered within 10 km, YouTube fallback */}
-        <div>
-          <SectionTitle>Nearby Live Cams</SectionTitle>
-          <LazyMount minHeight={60}>
-            <WindyWebcamsPanel slug={spot.slug} spotName={spot.name} />
-          </LazyMount>
-        </div>
 
         {/* Row 3: Hourly table — full width */}
         {forecast?.forecast && activeDayData && (
