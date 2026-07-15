@@ -56,8 +56,7 @@ export default function PrivacyPage() {
         Forecast data comes from <a href="https://open-meteo.com/">Open-Meteo</a>,{' '}
         <a href="https://www.ndbc.noaa.gov/">NOAA NDBC buoys</a>,{' '}
         <a href="https://api.tidesandcurrents.noaa.gov/api/prod/">NOAA CO-OPS tides</a>,
-        USGS, and EPA. Webcam previews come from <a href="https://www.windy.com/">Windy.com</a> and
-        YouTube. None of those services receive your account identity from us.
+        USGS, and EPA. None of those services receive your account identity from us.
       </p>
 
       <h2>Your rights</h2>

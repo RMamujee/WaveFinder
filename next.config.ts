@@ -17,9 +17,9 @@ const securityHeaders = [
       // Fonts are self-hosted via next/font — no Google Fonts origins needed.
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self'",
-      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.wikimedia.org https://tile.openstreetmap.org https://server.arcgisonline.com https://*.arcgisonline.com https://*.arcgis.com https://*.basemaps.cartocdn.com https://cartodb-basemaps-*.global.ssl.fastly.net https://tiles.openseamap.org https://i.ytimg.com https://*.ytimg.com https://images.windy.com https://*.windy.com",
-      "connect-src 'self' https://*.open-meteo.com https://api.open-meteo.com https://www.ndbc.noaa.gov https://tidesandcurrents.noaa.gov https://www.waterqualitydata.us https://server.arcgisonline.com https://*.arcgisonline.com https://*.basemaps.cartocdn.com https://api.windy.com",
-      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://webcams.windy.com https://*.windy.com https://www.openstreetmap.org",
+      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.wikimedia.org https://tile.openstreetmap.org https://server.arcgisonline.com https://*.arcgisonline.com https://*.arcgis.com https://*.basemaps.cartocdn.com https://cartodb-basemaps-*.global.ssl.fastly.net https://tiles.openseamap.org",
+      "connect-src 'self' https://*.open-meteo.com https://api.open-meteo.com https://www.ndbc.noaa.gov https://tidesandcurrents.noaa.gov https://www.waterqualitydata.us https://server.arcgisonline.com https://*.arcgisonline.com https://*.basemaps.cartocdn.com",
+      "frame-src 'self'",
       "worker-src blob:",
       "media-src 'self'",
       "object-src 'none'",

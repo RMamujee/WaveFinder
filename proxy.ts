@@ -7,7 +7,6 @@ const WINDOW_MS = 60_000   // 1 minute
 const RATE_LIMITS: { bucket: string; pattern: RegExp; limit: number }[] = [
   { bucket: 'auth', pattern: /^\/api\/auth(?:\/|$)/, limit: 10 },
   { bucket: 'debug', pattern: /^\/api\/debug(?:\/|$)/, limit: 10 },
-  { bucket: 'webcams', pattern: /^\/api\/webcams(?:\/|$)/, limit: 20 },
   { bucket: 'water-quality', pattern: /^\/api\/water-quality(?:\/|$)/, limit: 30 },
   { bucket: 'best-spots', pattern: /^\/api\/best-spots(?:\/|$)/, limit: 30 },
   { bucket: 'forecast', pattern: /^\/api\/forecast(?:\/|$)/, limit: 45 },

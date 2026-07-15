@@ -60,16 +60,6 @@ export function Footer() {
                 (public domain, not endorsed)
               </li>
               <li>
-                Webcams via{' '}
-                <a href="https://www.windy.com/" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--text-2)' }}>
-                  Windy.com
-                </a>
-                {' & '}
-                <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--text-2)' }}>
-                  YouTube
-                </a>
-              </li>
-              <li>
                 Maps from{' '}
                 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--text-2)' }}>
                   OpenStreetMap

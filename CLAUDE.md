@@ -36,9 +36,12 @@ https://wave-finder.vercel.app.
   for unknown slugs; on-demand ISR cached soft-404 200s, see the 2026-06-09
   audit). Local builds without `DATABASE_URL` skip the prerender by design.
 - **`npm run db:reset` force-resets the database** — never run it against prod.
-- **Only `/api/best-spots` is Pro-gated — by design.** Forecast/webcams/
-  surf-reports/water-quality/alerts are intentionally free per the pricing page.
-  Do not "fix" this as a paywall hole.
+- **Only `/api/best-spots` is Pro-gated — by design.** Forecast/surf-reports/
+  water-quality/alerts are intentionally free per the pricing page.
+  Do not "fix" this as a paywall hole. (Webcams were removed entirely 2026-07-15
+  at the user's request — quality was poor. `webcamUrl`/`webcamType` still exist
+  in the spot dataset/DB as dead data; `WINDY_WEBCAM_API_KEY`/`YOUTUBE_API_KEY`
+  env vars are no longer read.)
 - Spot data is a static dataset (`lib/spots-data.ts` + `lib/spots/*`, ~1,490
   spots) seeded into Postgres; the DB cuid `id` keys saved-spots localStorage,
   so don't swap id sources.
