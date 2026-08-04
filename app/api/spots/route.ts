@@ -151,8 +151,10 @@ export async function GET(req: Request) {
   type EnrichedSpot = (typeof spots)[0] & {
     currentRating: string
     currentWaveHeight: number | null
+    currentFaceHeight: number | null
     currentPeriod: number | null
     currentWindSpeed: number | null
+    currentWindDirection: number | null
     wavePower: number | null
     _needsFallback: boolean
   }
@@ -162,23 +164,29 @@ export async function GET(req: Request) {
     const om = omMap.get(key)
 
     if (om && om.waveHeight > 0) {
-      const { rating } = rateSurfConditions({
+      // Real swell/windsea partition from the model — no more `waveHeight * 0.7`
+      // stand-in, which made every spot look like it had 70% clean groundswell.
+      const { rating, faceHeight } = rateSurfConditions({
         waveHeight:     om.waveHeight,
-        swellPeriod:    om.wavePeriod,
-        swellHeight:    om.waveHeight * 0.7,
+        swellHeight:    om.swellHeight,
+        swellPeriod:    om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod,
+        swellDirection: om.swellDirection,
+        windWaveHeight: om.windWaveHeight,
         windSpeed:      om.windSpeed,
         windDirection:  om.windDirection,
-        swellDirection: om.swellDirection,
         spotFacing:     spot.facingDirection,
+        bottomType:     spot.bottomType,
       })
       return {
         ...spot,
-        currentRating:     rating,
-        currentWaveHeight: om.waveHeight,
-        currentPeriod:     om.wavePeriod,
-        currentWindSpeed:  om.windSpeed,
-        wavePower:         computeWavePower(om.waveHeight, om.wavePeriod),
-        _needsFallback:    false,
+        currentRating:        rating,
+        currentWaveHeight:    om.waveHeight,
+        currentFaceHeight:    faceHeight,
+        currentPeriod:        om.wavePeriod,
+        currentWindSpeed:     om.windSpeed,
+        currentWindDirection: om.windDirection,
+        wavePower:            computeWavePower(om.waveHeight, om.wavePeriod),
+        _needsFallback:       false,
       }
     }
 
@@ -186,12 +194,14 @@ export async function GET(req: Request) {
     // om === null → API timeout/error → use nearest-neighbour below
     return {
       ...spot,
-      currentRating:     om ? 'poor' : 'unknown',
-      currentWaveHeight: om ? 0 : null,
-      currentPeriod:     null,
-      currentWindSpeed:  null,
-      wavePower:         om ? 0 : null,
-      _needsFallback:    om === null,
+      currentRating:        om ? 'poor' : 'unknown',
+      currentWaveHeight:    om ? 0 : null,
+      currentFaceHeight:    om ? 0 : null,
+      currentPeriod:        null,
+      currentWindSpeed:     null,
+      currentWindDirection: null,
+      wavePower:            om ? 0 : null,
+      _needsFallback:       om === null,
     }
   })
 
@@ -208,16 +218,30 @@ export async function GET(req: Request) {
     if (!closest) continue
     const wh = closest.currentWaveHeight ?? 0
     const period = closest.currentPeriod ?? 8
-    const { rating } = rateSurfConditions({
-      waveHeight: wh, swellPeriod: period, swellHeight: wh * 0.7,
-      windSpeed: closest.currentWindSpeed ?? 8, windDirection: 270,
-      swellDirection: null, spotFacing: spot.facingDirection,
+    // Borrow the neighbour's *observed* wind direction. This used to hardcode
+    // 270, so every fallback spot on Earth was scored against a due-west wind —
+    // which reads as perfectly offshore for an east-facing coast and dead
+    // onshore for a west-facing one, purely by accident of geography.
+    const windDirection = closest.currentWindDirection
+    const { rating, faceHeight } = rateSurfConditions({
+      waveHeight: wh,
+      swellHeight: wh,
+      swellPeriod: period,
+      // Direction is unknown for a borrowed reading: leave it null so the
+      // rating stays directionally neutral instead of inventing an exposure.
+      swellDirection: null,
+      windSpeed: closest.currentWindSpeed ?? 8,
+      windDirection,
+      spotFacing: spot.facingDirection,
+      bottomType: spot.bottomType,
     })
-    spot.currentRating     = rating
-    spot.currentWaveHeight = wh
-    spot.currentPeriod     = period
-    spot.currentWindSpeed  = closest.currentWindSpeed
-    spot.wavePower         = computeWavePower(wh, period)
+    spot.currentRating        = rating
+    spot.currentWaveHeight    = wh
+    spot.currentFaceHeight    = faceHeight
+    spot.currentPeriod        = period
+    spot.currentWindSpeed     = closest.currentWindSpeed
+    spot.currentWindDirection = windDirection
+    spot.wavePower            = computeWavePower(wh, period)
   }
 
   const response = enriched.map((spot) => {

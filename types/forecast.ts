@@ -16,7 +16,12 @@ export interface WindData {
 
 export interface ForecastHour {
   time: string
+  /** Significant height of the combined sea from the model (m). */
   waveHeight: number
+  /** Estimated breaking wave height at the spot (m) — the model swell shoaled
+   *  by period and reduced by how square-on it hits this beach. This is the
+   *  number that corresponds to the size a surfer would call it. */
+  faceHeight: number
   wavePeriod: number
   waveDirection: number
   swellHeight: number
@@ -42,6 +47,7 @@ export interface ForecastDay {
   date: string
   hours: ForecastHour[]
   maxWaveHeight: number
+  maxFaceHeight: number
   avgPeriod: number
   dominantRating: ConditionRating
   minTempC: number | null
