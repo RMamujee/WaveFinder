@@ -10,6 +10,9 @@ import type { ConditionRating } from '@/types/forecast'
 interface SpotWithRating extends SurfSpot {
   currentRating?: ConditionRating | 'unknown'
   currentWaveHeight?: number | null
+  /** Breaking face height — the size shown on map nodes, consistent with the
+   *  rating colour and with the spot's forecast page. */
+  currentFaceHeight?: number | null
   currentPeriod?: number | null
   currentWindSpeed?: number | null
   currentWindDir?: string | null
@@ -103,7 +106,7 @@ function bottomTypeMeta(bottomType?: string | null) {
 function tooltipHtml(spot: SpotWithRating): string {
   const rating = spot.currentRating ?? 'unknown'
   const colors = RATING_COLORS[rating]
-  const h = spot.currentWaveHeight
+  const h = spot.currentFaceHeight
   const hasWave = h !== null && h !== undefined && h > 0
   const heightFt = hasWave ? Math.round(h! * 3.281) : null
   const heightM  = hasWave ? h!.toFixed(1) : null
@@ -144,7 +147,7 @@ function tooltipHtml(spot: SpotWithRating): string {
 function popupHtml(spot: SpotWithRating): string {
   const rating = spot.currentRating ?? 'unknown'
   const colors = RATING_COLORS[rating]
-  const h = spot.currentWaveHeight
+  const h = spot.currentFaceHeight
   const hasWave = h !== null && h !== undefined && h > 0
   const heightFt = hasWave ? Math.round(h! * 3.281) : null
   const period   = spot.currentPeriod != null ? Math.round(spot.currentPeriod!) : null
@@ -318,7 +321,7 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
     for (const spot of allSpots) {
       const rating = spot.currentRating ?? 'unknown'
       const colors = RATING_COLORS[rating]
-      const h = spot.currentWaveHeight
+      const h = spot.currentFaceHeight
       const label = h == null ? '—' : h === 0 ? 'Flat' : `${Math.round(h * 3.281)}ft`
       const fontSize = label.length > 4 ? '7px' : label.length > 3 ? '8px' : '9px'
 

@@ -18,6 +18,7 @@ import {
 interface SpotWithRating extends SurfSpot {
   currentRating?: ConditionRating | 'unknown'
   currentWaveHeight?: number | null
+  currentFaceHeight?: number | null
   currentPeriod?: number | null
   currentWindSpeed?: number | null
   wavePower?: number | null
@@ -447,7 +448,7 @@ export default function SpotsPage() {
                     key={spot.id}
                     spot={spot}
                     rating={spot.currentRating && spot.currentRating !== 'unknown' ? spot.currentRating as ConditionRating : undefined}
-                    waveHeight={spot.currentWaveHeight ?? undefined}
+                    waveHeight={spot.currentFaceHeight ?? undefined}
                   />
                 ))}
               </div>

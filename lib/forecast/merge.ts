@@ -1,16 +1,38 @@
-import type { ForecastDay, ForecastHour } from '@/types/forecast'
+import type { ForecastDay, ForecastHour, TidePoint } from '@/types/forecast'
 import type { OpenMeteoMarineResponse, OpenMeteoWindResponse } from '@/lib/api/open-meteo'
 import { degreesToCompass, rateSurfConditions, computeWavePower } from './rating'
+import type { TideContext } from './rating'
 import { computeUVIndex } from './solar-uv'
+
+export interface MergeContext {
+  spotFacing: number
+  lat: number
+  /** Hourly tide predictions for the spot's NOAA station, if it has one.
+   *  Absent tide simply drops the tide factor from the rating. */
+  tides?: TidePoint[] | null
+  bottomType?: string | null
+}
 
 export function mergeForecastData(
   marine: OpenMeteoMarineResponse,
   wind: OpenMeteoWindResponse,
-  spotFacing: number,
-  lat: number
+  ctx: MergeContext
 ): ForecastHour[] {
+  const { spotFacing, lat } = ctx
   const { hourly: m } = marine
   const { hourly: w } = wind
+
+  // Tide index keyed by local "YYYY-MM-DDTHH:MM" — the same local-clock format
+  // Open-Meteo returns, so hours line up without timezone conversion.
+  const tideByTime = new Map<string, number>()
+  let tideMin = Infinity
+  let tideMax = -Infinity
+  for (const p of ctx.tides ?? []) {
+    tideByTime.set(p.time, p.height)
+    if (p.height < tideMin) tideMin = p.height
+    if (p.height > tideMax) tideMax = p.height
+  }
+  const hasTides = tideByTime.size > 0 && isFinite(tideMin) && isFinite(tideMax)
 
   // Build lookup maps by time for all wind/weather fields.
   // Using time-keyed maps (not raw index) ensures correct alignment even when
@@ -52,19 +74,28 @@ export function mergeForecastData(
       dir: hasRealWind ? rawWind.dir : windWaveDir,
     }
 
-    const { score, rating } = rateSurfConditions({
+    const tideHeight = tideByTime.get(time)
+    const tide: TideContext | null = hasTides && tideHeight != null
+      ? { height: tideHeight, min: tideMin, max: tideMax }
+      : null
+
+    const { score, rating, faceHeight } = rateSurfConditions({
       waveHeight,
       swellPeriod,
       swellHeight,
+      windWaveHeight: windWaveH,
       windSpeed: windData.speed,
       windDirection: windData.dir,
       swellDirection,
       spotFacing,
+      tide,
+      bottomType: ctx.bottomType,
     })
 
     return {
       time,
       waveHeight,
+      faceHeight,
       wavePeriod: m.wave_period[i] ?? 0,
       waveDirection: m.wave_direction[i] ?? 0,
       swellHeight,
@@ -101,17 +132,31 @@ export function groupHoursByDay(hours: ForecastHour[]): ForecastDay[] {
 
   return Array.from(dayMap.entries()).map(([date, dayHours]) => {
     const maxWaveHeight = Math.max(...dayHours.map((h) => h.waveHeight))
+    const maxFaceHeight = Math.max(...dayHours.map((h) => h.faceHeight))
     const avgPeriod =
       dayHours.reduce((sum, h) => sum + h.swellPeriod, 0) / dayHours.length
 
-    // Find dominant rating: prefer best rating that appears most in daytime hours (6am-6pm)
+    // Dominant rating over *surfable* hours only. This previously counted all 24
+    // hours despite the comment claiming otherwise, so a day that was good from
+    // dawn to dusk got outvoted by 12 hours of darkness nobody surfs.
+    const daylight = dayHours.filter((h) => {
+      const hour = Number(h.time.slice(11, 13))
+      return hour >= 6 && hour <= 18
+    })
+    const ratedHours = daylight.length ? daylight : dayHours
+
     const ratingCounts: Record<string, number> = {}
-    for (const h of dayHours) {
+    for (const h of ratedHours) {
       ratingCounts[h.rating] = (ratingCounts[h.rating] ?? 0) + 1
     }
-    const dominantRating = (Object.entries(ratingCounts).sort(
-      (a, b) => b[1] - a[1]
-    )[0]?.[0] ?? 'poor') as ForecastDay['dominantRating']
+    // Ties break toward the better rating — a day split evenly between "good"
+    // and "fair" is worth paddling out for.
+    const RATING_ORDER: ForecastDay['dominantRating'][] = ['poor', 'fair', 'good', 'epic']
+    const dominantRating = (Object.entries(ratingCounts).sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1]
+      return RATING_ORDER.indexOf(b[0] as ForecastDay['dominantRating'])
+        - RATING_ORDER.indexOf(a[0] as ForecastDay['dominantRating'])
+    })[0]?.[0] ?? 'poor') as ForecastDay['dominantRating']
 
     const tempsC = dayHours.map(h => h.airTempC).filter((t): t is number => t !== null)
     const minTempC = tempsC.length ? Math.round(Math.min(...tempsC)) : null
@@ -127,6 +172,7 @@ export function groupHoursByDay(hours: ForecastHour[]): ForecastDay[] {
       date,
       hours: dayHours,
       maxWaveHeight: Math.round(maxWaveHeight * 10) / 10,
+      maxFaceHeight: Math.round(maxFaceHeight * 10) / 10,
       avgPeriod: Math.round(avgPeriod * 10) / 10,
       dominantRating,
       minTempC,

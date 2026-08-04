@@ -11,6 +11,7 @@ import type { ConditionRating } from '@/types/forecast'
 interface SpotWithRating extends SurfSpot {
   currentRating?: ConditionRating | 'unknown'
   currentWaveHeight?: number | null
+  currentFaceHeight?: number | null
   currentPeriod?: number | null
   currentWindSpeed?: number | null
   wavePower?: number | null

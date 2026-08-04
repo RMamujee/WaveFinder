@@ -32,9 +32,12 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
   const avgWaterTempC = waterTemps.length > 0
     ? waterTemps.reduce((a, b) => a + b, 0) / waterTemps.length
     : null
-  const minWaveHeight = hours.length > 0 ? Math.min(...hours.map((h) => h.waveHeight)) : 0
-  const waveMax = fmtHeight(day.maxWaveHeight, unit)
-  const waveMin = fmtHeight(minWaveHeight, unit)
+  // Headline size is the breaking (face) height, not the raw model sea height —
+  // that is the number the rating badge beside it is derived from, and the size
+  // a surfer would actually call it. Raw sea/swell stay in the swell panel.
+  const minFaceHeight = hours.length > 0 ? Math.min(...hours.map((h) => h.faceHeight)) : 0
+  const waveMax = fmtHeight(day.maxFaceHeight, unit)
+  const waveMin = fmtHeight(minFaceHeight, unit)
   const waveRange = waveMin !== waveMax ? `${waveMin.replace(/ft|m$/, '')}–${waveMax}` : waveMax
 
   const avgWindKmh = hours.length > 0
