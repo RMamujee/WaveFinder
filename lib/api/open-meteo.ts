@@ -89,14 +89,17 @@ export interface OpenMeteoWindResponse {
 export interface CurrentMarineConditions {
   waveHeight: number
   wavePeriod: number
-  swellDirection: number
+  /** Null when the model omitted the field for this hour. Nulls are preserved
+   *  (not coerced to 0) because the rating engine treats null as "unknown,
+   *  score neutrally" — a 0 would be scored as a real due-north swell. */
+  swellDirection: number | null
   /** Groundswell partition — the map used to approximate this as
    *  `waveHeight * 0.7`, which rated onshore chop as if it were swell. */
   swellHeight: number
   swellPeriod: number
-  windWaveHeight: number
+  windWaveHeight: number | null
   windSpeed: number
-  windDirection: number
+  windDirection: number | null
 }
 
 export async function fetchCurrentConditions(
@@ -106,9 +109,9 @@ export async function fetchCurrentConditions(
   // Round to 2 decimal places (~1 km) for cache key — finer than the 1-decimal
   // bucket used in the route, so accuracy is preserved while still deduplicating
   // repeated calls from re-fetches or concurrent requests on a warm instance.
-  // v3: v2 entries lack the swell/wind-wave partition fields added when the map
-  // stopped approximating swell height from total sea height.
-  const cacheKey = `om:cond:v3:${lat.toFixed(2)},${lng.toFixed(2)}`
+  // v4: v3 entries carry 0-coerced values where the model returned null and an
+  // hour selected with the UTC-offset bug — both fixed in the 2026-08-05 pass.
+  const cacheKey = `om:cond:v4:${lat.toFixed(2)},${lng.toFixed(2)}`
 
   let cache: ReturnType<typeof getCache> | null = null
   try { cache = getCache() } catch { cache = null }
@@ -140,7 +143,10 @@ async function fetchCurrentConditionsUncached(
       latitude: lat.toString(),
       longitude: lng.toString(),
       hourly: 'wave_height,wave_period,swell_wave_height,swell_wave_period,swell_wave_direction,wind_wave_height,wind_wave_direction',
-      forecast_days: '1',
+      // 2 days, not 1: forecast_days spans the spot's LOCAL calendar day, so a
+      // west-of-UTC spot queried in its evening needs tomorrow's first hours in
+      // range or the current-hour lookup runs off the end and pins to 23:00.
+      forecast_days: '2',
       timezone: 'auto',
     })
 
@@ -179,21 +185,36 @@ async function fetchCurrentConditionsUncached(
     const hourly = marine?.hourly
     if (!hourly?.time?.length) return null
 
-    // Pick the nearest future hour — mirrors findNearestFutureHour from lib/forecast/merge.ts
-    const now = new Date()
-    let idx = (hourly.time as string[]).findIndex((t: string) => new Date(t) >= now)
-    if (idx === -1) idx = (hourly.time as string[]).length - 1
+    // Pick the current hour, in the SPOT's local clock. Open-Meteo returns
+    // offset-less local-time strings; `new Date(t)` would parse them in the
+    // runtime's zone (UTC on Vercel), selecting an hour offset by the spot's
+    // entire UTC offset — a Californian checking at 5pm saw 11pm conditions.
+    // Mirror findNearestFutureHour: shift now by utc_offset_seconds and compare
+    // local-clock strings lexicographically, truncated to the hour so the
+    // in-progress hour wins (not the next one).
+    const offsetSeconds = (marine?.utc_offset_seconds as number) ?? 0
+    const nowLocalHour = new Date(Date.now() + offsetSeconds * 1000)
+      .toISOString()
+      .slice(0, 13)
+    const times = hourly.time as string[]
+    let idx = times.findIndex((t) => t.slice(0, 13) >= nowLocalHour)
+    if (idx === -1) idx = times.length - 1
 
-    const waveHeight     = (hourly.wave_height as number[])[idx] ?? 0
-    const wavePeriod     = (hourly.wave_period as number[])[idx] ?? 0
-    const swellHeight    = (hourly.swell_wave_height as number[])?.[idx] ?? 0
-    const swellPeriod    = (hourly.swell_wave_period as number[])?.[idx] ?? 0
-    const swellDirection = (hourly.swell_wave_direction as number[])[idx] ?? 0
-    const windWaveH      = (hourly.wind_wave_height as number[])[idx] ?? 0
-    const windWaveDir    = (hourly.wind_wave_direction as number[])[idx] ?? 0
+    const waveHeight = (hourly.wave_height as (number | null)[])[idx]
+    // Null here means a land/invalid marine cell or a missing hour — NOT flat.
+    // Returning null lets the route's nearest-neighbour fallback fire instead
+    // of rendering a fabricated "flat/poor" reading that never self-corrects.
+    if (waveHeight == null) return null
+
+    const wavePeriod     = (hourly.wave_period as (number | null)[])[idx] ?? 0
+    const swellHeight    = (hourly.swell_wave_height as (number | null)[])?.[idx] ?? 0
+    const swellPeriod    = (hourly.swell_wave_period as (number | null)[])?.[idx] ?? 0
+    const swellDirection = (hourly.swell_wave_direction as (number | null)[])[idx] ?? null
+    const windWaveH      = (hourly.wind_wave_height as (number | null)[])[idx] ?? null
+    const windWaveDir    = (hourly.wind_wave_direction as (number | null)[])[idx] ?? null
 
     // Estimate wind speed from wind-wave height when weather API is unavailable
-    const estimatedWindSpeed = windWaveH > 0
+    const estimatedWindSpeed = windWaveH != null && windWaveH > 0
       ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
       : 0
 

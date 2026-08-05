@@ -130,18 +130,26 @@ function scoreWind(
   const offshoreDirection = (spotFacing + 180) % 360
   const diff = angleDiff(windDirection, offshoreDirection)
 
-  let dirScore: number
-  if (diff <= 45) dirScore = 100
-  else if (diff <= 90) dirScore = 75
-  else if (diff <= 135) dirScore = 40
-  else dirScore = 10
+  // Continuous direction score. The old 4-step buckets meant 2° of model noise
+  // (224° vs 226° at 12 km/h) moved the final rating two bands.
+  const dirScore = 10 + 90 * Math.pow((1 + Math.cos((diff * Math.PI) / 180)) / 2, 1.5)
+
+  // Speed-gate the direction penalty: wind damage scales with SPEED — direction
+  // only sets its character. The old shape applied direction at full strength
+  // from 5 km/h up, so a near-glassy 6 km/h onshore drift vetoed a spot exactly
+  // like a 30 km/h gale (a 0.1 km/h change at the threshold moved three rating
+  // bands). Below ~8-10 km/h neither direction materially textures the face;
+  // the gate fades direction in over 5→20 km/h.
+  const gate = Math.min(1, Math.max(0, (windSpeed - 5) / 15))
+  const directed = 100 - (100 - dirScore) * gate
 
   let speedPenalty = 0
-  if (windSpeed > 30) speedPenalty = 40
+  if (windSpeed > 45) speedPenalty = 70   // unpaddleable regardless of direction
+  else if (windSpeed > 30) speedPenalty = 40
   else if (windSpeed > 20) speedPenalty = 20
   else if (windSpeed > 15) speedPenalty = 10
 
-  return Math.max(0, dirScore - speedPenalty)
+  return Math.max(0, Math.round(directed - speedPenalty))
 }
 
 // How much of the sea state is disorganised local windsea versus clean
