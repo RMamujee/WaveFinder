@@ -330,4 +330,47 @@ describe('rateSurfConditions', () => {
     })
     expect(['poor', 'fair', 'good', 'epic']).toContain(rating)
   })
+
+  // ── Wind shape regressions (2026-08-05 audit) ──────────────────────────────
+  it('treats light onshore drift as near-glassy, not a gale', () => {
+    // A 6 km/h breeze is glassy from the sand whatever its direction. The old
+    // shape applied the direction buckets at full strength from 5 km/h, so this
+    // exact case vetoed a clean head-high day to "poor" — and a once-a-year
+    // 15 ft/18 s day scored 29 under the same breeze.
+    const light = rateSurfConditions({
+      ...CLEAN,
+      waveHeight: 1.5,
+      swellHeight: 1.4,
+      swellPeriod: 15,
+      windSpeed: 6,
+      windDirection: 270,  // straight onshore
+    })
+    expect(light.factors.wind).toBeGreaterThan(85)
+    expect(light.rating).not.toBe('poor')
+  })
+
+  it('does not cliff at the 5 km/h glassy threshold', () => {
+    // 4.9 → 5.0 km/h used to move the score three rating bands.
+    const under = rateSurfConditions({ ...CLEAN, windSpeed: 4.9, windDirection: 270 })
+    const over = rateSurfConditions({ ...CLEAN, windSpeed: 5.1, windDirection: 270 })
+    expect(Math.abs(under.score - over.score)).toBeLessThanOrEqual(3)
+  })
+
+  it('still penalises onshore wind at speeds where it matters', () => {
+    // The speed gate must not make the engine blind to real onshore wind.
+    const light = rateSurfConditions({ ...CLEAN, windSpeed: 6, windDirection: 270 })
+    const moderate = rateSurfConditions({ ...CLEAN, windSpeed: 15, windDirection: 270 })
+    const strong = rateSurfConditions({ ...CLEAN, windSpeed: 25, windDirection: 270 })
+    expect(light.factors.wind).toBeGreaterThan(moderate.factors.wind)
+    expect(moderate.factors.wind).toBeGreaterThan(strong.factors.wind)
+    expect(strong.rating).toBe('poor')
+  })
+
+  it('caps a gale even when it blows straight offshore', () => {
+    // 90 km/h dead offshore used to keep windScore 60 and rate "epic";
+    // it is unpaddleable regardless of direction.
+    const gale = rateSurfConditions({ ...CLEAN, windSpeed: 90, windDirection: 90 })
+    expect(gale.factors.wind).toBeLessThanOrEqual(40)
+    expect(gale.rating).not.toBe('epic')
+  })
 })

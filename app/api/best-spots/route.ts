@@ -153,11 +153,15 @@ export async function GET(req: Request) {
     facingDirection: spot.facingDirection,
     hours: hourIndices.map((i) => {
       const time         = marine.hourly.time[i]
-      const w            = windMap.get(time) ?? { speed: 0, dir: 270 }
+      const wReal        = windMap.get(time)
+      const w            = wReal ?? { speed: 0, dir: 270 }
       const waveHeight   = marine.hourly.wave_height[i]          ?? 0
+      const wavePeriod   = marine.hourly.wave_period[i]          ?? 0
       const swellHeight  = marine.hourly.swell_wave_height[i]    ?? 0
       const swellPeriod  = marine.hourly.swell_wave_period[i]    ?? 0
-      const windWaveH    = marine.hourly.wind_wave_height[i]     ?? 0
+      // Null rather than 0: a 0 makes the cleanliness factor read "perfectly
+      // clean" instead of dropping out of the weighting.
+      const windWaveH    = marine.hourly.wind_wave_height[i]     ?? null
       // Null rather than a 270 stand-in: an invented swell direction would be
       // scored as real exposure against each spot's facing.
       const swellDir     = marine.hourly.swell_wave_direction[i] ?? null
@@ -165,11 +169,15 @@ export async function GET(req: Request) {
       const { score, rating, faceHeight } = rateSurfConditions({
         waveHeight,
         swellHeight,
-        swellPeriod,
+        // Mirror the engine's total-sea fallback for period, or a missing
+        // partition computes a 0 m face while wave_period sits unused.
+        swellPeriod: swellPeriod > 0 ? swellPeriod : wavePeriod,
         swellDirection: swellDir,
         windWaveHeight: windWaveH,
         windSpeed:     w.speed,
-        windDirection: w.dir,
+        // Direction unknown when the wind fetch had no entry for this hour —
+        // score on speed alone rather than against a fabricated due-west wind.
+        windDirection: wReal ? wReal.dir : null,
         spotFacing:    spot.facingDirection,
         bottomType:    spot.bottomType,
       })

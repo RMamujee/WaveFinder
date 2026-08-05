@@ -42,10 +42,15 @@ export function LiveMapHero({ spotCount }: Props) {
     staleTime: 30 * 60 * 1000,
   })
 
-  const { data: enrichedSpots, isLoading: conditionsLoading } = useQuery<SpotWithRating[]>({
+  const { data: enrichedSpots, isLoading: conditionsLoading, dataUpdatedAt } = useQuery<SpotWithRating[]>({
     queryKey: ['spots-home-conditions'],
     queryFn: () => fetch('/api/spots?withConditions=true').then((r) => r.json()),
-    staleTime: 30 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    // Keep an open tab live: nothing else in the app refetches (focus-refetch
+    // is globally off), so without this a 6am map showed 6am ratings at noon
+    // under the "Live conditions" badge. 5 min matches the om:cond cache TTL.
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
     enabled: baseSpots.length > 0,
   })
 
@@ -165,7 +170,14 @@ export function LiveMapHero({ spotCount }: Props) {
           ) : (
             <>
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>Live conditions</span>
+              <span className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>
+                Live conditions
+                {dataUpdatedAt > 0 && (
+                  <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>
+                    {' '}· updated {new Date(dataUpdatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                )}
+              </span>
             </>
           )}
           <Link

@@ -37,41 +37,66 @@ export function mergeForecastData(
   // Build lookup maps by time for all wind/weather fields.
   // Using time-keyed maps (not raw index) ensures correct alignment even when
   // the marine and weather API caches were last refreshed at different hours.
-  const windMap = new Map<string, { speed: number; gust: number; dir: number }>()
+  // An entry exists only when the API reported a speed for that hour — a
+  // genuine 0 km/h (dead glassy, the best possible wind) gets an entry, while
+  // a missing hour does not. `speed > 0` used to stand in for "has data",
+  // which replaced real calms with an invented onshore wind estimate.
+  const windMap = new Map<string, { speed: number; gust: number; dir: number | null }>()
   const tempMap = new Map<string, number>()
   const weatherCodeMap = new Map<string, number>()
   const precipProbMap = new Map<string, number>()
 
   w.time.forEach((t, i) => {
-    windMap.set(t, {
-      speed: w.wind_speed_10m[i] ?? 0,
-      gust: w.wind_gusts_10m[i] ?? 0,
-      dir: w.wind_direction_10m[i] ?? 0,
-    })
+    if (w.wind_speed_10m[i] != null) {
+      windMap.set(t, {
+        speed: w.wind_speed_10m[i],
+        gust: w.wind_gusts_10m[i] ?? 0,
+        dir: w.wind_direction_10m[i] ?? null,
+      })
+    }
     if (w.temperature_2m?.[i] != null) tempMap.set(t, w.temperature_2m[i])
     if (w.weather_code?.[i] != null) weatherCodeMap.set(t, w.weather_code[i])
     if (w.precipitation_probability?.[i] != null) precipProbMap.set(t, w.precipitation_probability[i])
   })
 
-  return m.time.map((time, i) => {
-    const rawWind = windMap.get(time) ?? { speed: 0, gust: 0, dir: 0 }
-    const waveHeight = m.wave_height[i] ?? 0
-    const swellHeight = m.swell_wave_height[i] ?? 0
-    const swellPeriod = m.swell_wave_period[i] ?? 0
-    const swellDirection = m.swell_wave_direction[i] ?? 0
+  const hours: ForecastHour[] = []
+  m.time.forEach((time, i) => {
+    const rawWaveHeight = m.wave_height[i] as number | null
+    const rawSwellHeight = m.swell_wave_height[i] as number | null
+    // No sea state from the primary model OR the long-range fill: drop the
+    // hour instead of fabricating a fully-formed 0 m / 0 s reading rated
+    // "poor". Live example: day 15 with 19 of 24 hours at zero dragged the
+    // day's average period to 2.9 s while displaying as a real calm.
+    if (rawWaveHeight == null && rawSwellHeight == null) return
 
-    // When the weather API is unavailable (all zeros), estimate wind speed from
+    const rawWind = windMap.get(time)
+    const waveHeight = rawWaveHeight ?? 0
+    const swellHeight = rawSwellHeight ?? 0
+    const swellPeriod = m.swell_wave_period[i] ?? 0
+    const wavePeriod = m.wave_period[i] ?? 0
+    // Preserve null for the rating input: the engine scores an unknown swell
+    // direction neutrally (exposure 1), but a `?? 0` here scored missing data
+    // as a real due-north swell and collapsed exposure to the wrap floor.
+    const ratingSwellDirection = m.swell_wave_direction[i] ?? null
+
+    // When the weather API had no entry for this hour, estimate wind speed from
     // wind-wave height using empirical relationship: Hs_wind ≈ 0.0248 × U² (m/s)
-    const windWaveH = m.wind_wave_height[i] ?? 0
+    const windWaveH = m.wind_wave_height[i] as number | null
     const windWaveDir = m.wind_wave_direction[i] ?? 0
-    const hasRealWind = rawWind.speed > 0
-    const estimatedSpeed = hasRealWind
+    const estimatedSpeed = rawWind
       ? rawWind.speed
-      : windWaveH > 0 ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6) : 0
+      : windWaveH != null && windWaveH > 0 ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6) : 0
     const windData = {
       speed: estimatedSpeed,
-      gust: rawWind.gust > 0 ? rawWind.gust : Math.round(estimatedSpeed * 1.25),
-      dir: hasRealWind ? rawWind.dir : windWaveDir,
+      gust: rawWind && rawWind.gust > 0 ? rawWind.gust : Math.round(estimatedSpeed * 1.25),
+      // Rating direction: null unless the weather API reported one. An
+      // estimated speed paired with wind_wave_direction used to convert a
+      // glassy-calm hour into a rated onshore blow; the engine's speed-only
+      // branch exists precisely for this case.
+      ratingDir: rawWind ? rawWind.dir : null,
+      // Display direction keeps the wind-wave stand-in so compasses/labels
+      // still render something plausible.
+      displayDir: (rawWind ? rawWind.dir : null) ?? windWaveDir,
     }
 
     const tideHeight = tideByTime.get(time)
@@ -81,32 +106,36 @@ export function mergeForecastData(
 
     const { score, rating, faceHeight } = rateSurfConditions({
       waveHeight,
-      swellPeriod,
+      // The engine falls back to total sea height when the swell partition is
+      // missing — mirror that for period or the fallback computes a 0 m face.
+      swellPeriod: swellPeriod > 0 ? swellPeriod : wavePeriod,
       swellHeight,
+      // Null (not 0) when the model omitted the partition, so the cleanliness
+      // factor renormalises away instead of scoring "perfectly clean".
       windWaveHeight: windWaveH,
       windSpeed: windData.speed,
-      windDirection: windData.dir,
-      swellDirection,
+      windDirection: windData.ratingDir,
+      swellDirection: ratingSwellDirection,
       spotFacing,
       tide,
       bottomType: ctx.bottomType,
     })
 
-    return {
+    hours.push({
       time,
       waveHeight,
       faceHeight,
-      wavePeriod: m.wave_period[i] ?? 0,
+      wavePeriod,
       waveDirection: m.wave_direction[i] ?? 0,
       swellHeight,
       swellPeriod,
-      swellDirection,
-      windWaveHeight: windWaveH,
+      swellDirection: ratingSwellDirection ?? 0,
+      windWaveHeight: windWaveH ?? 0,
       wind: {
         speed: windData.speed,
         gust: windData.gust,
-        direction: windData.dir,
-        directionLabel: degreesToCompass(windData.dir),
+        direction: windData.displayDir,
+        directionLabel: degreesToCompass(windData.displayDir),
       },
       rating,
       ratingScore: score,
@@ -117,8 +146,9 @@ export function mergeForecastData(
       weatherCode: weatherCodeMap.get(time) ?? null,
       precipProb: precipProbMap.get(time) ?? null,
       isLongRange: m.is_long_range?.[i] ?? false,
-    }
+    })
   })
+  return hours
 }
 
 export function groupHoursByDay(hours: ForecastHour[]): ForecastDay[] {
@@ -133,8 +163,12 @@ export function groupHoursByDay(hours: ForecastHour[]): ForecastDay[] {
   return Array.from(dayMap.entries()).map(([date, dayHours]) => {
     const maxWaveHeight = Math.max(...dayHours.map((h) => h.waveHeight))
     const maxFaceHeight = Math.max(...dayHours.map((h) => h.faceHeight))
-    const avgPeriod =
-      dayHours.reduce((sum, h) => sum + h.swellPeriod, 0) / dayHours.length
+    // Hours with no swell decomposition carry swellPeriod 0 — averaging those
+    // in reported a 15 s day as 8 s. Average over the hours that have one.
+    const periods = dayHours.map((h) => h.swellPeriod).filter((p) => p > 0)
+    const avgPeriod = periods.length
+      ? periods.reduce((sum, p) => sum + p, 0) / periods.length
+      : 0
 
     // Dominant rating over *surfable* hours only. This previously counted all 24
     // hours despite the comment claiming otherwise, so a day that was good from
@@ -195,8 +229,11 @@ export function findNearestFutureHour(
 ): ForecastHour | null {
   const nowAtSpot = new Date(Date.now() + utcOffsetSeconds * 1000)
   // Strip Z to compare as local-clock against spot-local time strings.
-  const nowIso = nowAtSpot.toISOString().slice(0, 16)
+  // Truncated to the HOUR: comparing with minutes included excluded the
+  // in-progress hour for 59 of every 60 minutes, so "current conditions" were
+  // systematically the NEXT hour (~30 min ahead on average).
+  const nowIso = nowAtSpot.toISOString().slice(0, 13)
   return (
-    hours.find((h) => h.time >= nowIso) ?? hours[hours.length - 1] ?? null
+    hours.find((h) => h.time.slice(0, 13) >= nowIso) ?? hours[hours.length - 1] ?? null
   )
 }

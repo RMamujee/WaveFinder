@@ -85,6 +85,10 @@ export interface CoastalWindReading {
 export interface SpotForecast {
   spotId: string
   fetchedAt: string
+  /** Spot's UTC offset from Open-Meteo — lets the client pick the current hour
+   *  from forecast[] instead of trusting the CDN-frozen currentCondition.
+   *  Optional: absent on payloads cached before 2026-08-05. */
+  utcOffsetSeconds?: number
   forecast: ForecastDay[]
   tides: TidePoint[]
   buoy: BuoyReading | null
