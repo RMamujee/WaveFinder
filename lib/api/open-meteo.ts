@@ -90,6 +90,11 @@ export interface CurrentMarineConditions {
   waveHeight: number
   wavePeriod: number
   swellDirection: number
+  /** Groundswell partition — the map used to approximate this as
+   *  `waveHeight * 0.7`, which rated onshore chop as if it were swell. */
+  swellHeight: number
+  swellPeriod: number
+  windWaveHeight: number
   windSpeed: number
   windDirection: number
 }
@@ -101,9 +106,9 @@ export async function fetchCurrentConditions(
   // Round to 2 decimal places (~1 km) for cache key — finer than the 1-decimal
   // bucket used in the route, so accuracy is preserved while still deduplicating
   // repeated calls from re-fetches or concurrent requests on a warm instance.
-  // v2: bypass v1 entries that were poisoned with stored-null values before
-  // the fix that distinguishes "missing key" from "stored null".
-  const cacheKey = `om:cond:v2:${lat.toFixed(2)},${lng.toFixed(2)}`
+  // v3: v2 entries lack the swell/wind-wave partition fields added when the map
+  // stopped approximating swell height from total sea height.
+  const cacheKey = `om:cond:v3:${lat.toFixed(2)},${lng.toFixed(2)}`
 
   let cache: ReturnType<typeof getCache> | null = null
   try { cache = getCache() } catch { cache = null }
@@ -134,7 +139,7 @@ async function fetchCurrentConditionsUncached(
     const marineParams = new URLSearchParams({
       latitude: lat.toString(),
       longitude: lng.toString(),
-      hourly: 'wave_height,wave_period,swell_wave_direction,wind_wave_height,wind_wave_direction',
+      hourly: 'wave_height,wave_period,swell_wave_height,swell_wave_period,swell_wave_direction,wind_wave_height,wind_wave_direction',
       forecast_days: '1',
       timezone: 'auto',
     })
@@ -181,6 +186,8 @@ async function fetchCurrentConditionsUncached(
 
     const waveHeight     = (hourly.wave_height as number[])[idx] ?? 0
     const wavePeriod     = (hourly.wave_period as number[])[idx] ?? 0
+    const swellHeight    = (hourly.swell_wave_height as number[])?.[idx] ?? 0
+    const swellPeriod    = (hourly.swell_wave_period as number[])?.[idx] ?? 0
     const swellDirection = (hourly.swell_wave_direction as number[])[idx] ?? 0
     const windWaveH      = (hourly.wind_wave_height as number[])[idx] ?? 0
     const windWaveDir    = (hourly.wind_wave_direction as number[])[idx] ?? 0
@@ -193,7 +200,10 @@ async function fetchCurrentConditionsUncached(
     const result: CurrentMarineConditions = {
       waveHeight,
       wavePeriod,
+      swellHeight,
+      swellPeriod,
       swellDirection,
+      windWaveHeight: windWaveH,
       windSpeed:     wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
       windDirection: wind?.current?.wind_direction_10m ?? windWaveDir,
     }
