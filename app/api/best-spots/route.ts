@@ -109,14 +109,18 @@ export async function GET(req: Request) {
     if (t.startsWith(date)) hourIndices.push(i)
   })
 
-  // Build wind lookup by time
-  const windMap = new Map<string, { speed: number; dir: number }>()
+  // Build wind lookup by time. An entry exists only when the API reported a
+  // speed for that hour (mirrors merge.ts): `?? 0` here scored a missing hour
+  // as 0 km/h — the best possible wind — and a null direction as due north.
+  const windMap = new Map<string, { speed: number; dir: number | null }>()
   if (wind) {
     wind.hourly.time.forEach((t, i) => {
-      windMap.set(t, {
-        speed: wind.hourly.wind_speed_10m[i] ?? 0,
-        dir:   wind.hourly.wind_direction_10m[i] ?? 0,
-      })
+      if (wind.hourly.wind_speed_10m[i] != null) {
+        windMap.set(t, {
+          speed: wind.hourly.wind_speed_10m[i],
+          dir:   wind.hourly.wind_direction_10m[i] ?? null,
+        })
+      }
     })
   }
 
@@ -124,6 +128,9 @@ export async function GET(req: Request) {
   const regionalSwell: BestSpotsSwellHour[] = hourIndices.map((i) => {
     const time        = marine.hourly.time[i]
     const w           = windMap.get(time) ?? { speed: 0, dir: 270 }
+    // Display-only stand-ins below (the rating path in spotsData passes
+    // honest nulls); wDir keeps the compass label renderable.
+    const wDir        = w.dir ?? 270
     const swellDir    = marine.hourly.swell_wave_direction[i] ?? 270
     const windWaveDir = marine.hourly.wind_wave_direction[i]  ?? 270
     return {
@@ -139,8 +146,8 @@ export async function GET(req: Request) {
       waveHeight:           marine.hourly.wave_height[i]          ?? 0,
       wavePeriod:           marine.hourly.wave_period[i]          ?? 0,
       windSpeed:            w.speed,
-      windDirection:        w.dir,
-      windDirectionLabel:   degreesToCompass(w.dir),
+      windDirection:        wDir,
+      windDirectionLabel:   degreesToCompass(wDir),
       seaSurfaceTemperature: marine.hourly.sea_surface_temperature?.[i] ?? null,
     }
   })
@@ -153,23 +160,40 @@ export async function GET(req: Request) {
     facingDirection: spot.facingDirection,
     hours: hourIndices.map((i) => {
       const time         = marine.hourly.time[i]
-      const w            = windMap.get(time) ?? { speed: 0, dir: 270 }
+      const wReal        = windMap.get(time)
+      const w            = wReal ?? { speed: 0, dir: 270 }
       const waveHeight   = marine.hourly.wave_height[i]          ?? 0
+      const wavePeriod   = marine.hourly.wave_period[i]          ?? 0
       const swellHeight  = marine.hourly.swell_wave_height[i]    ?? 0
       const swellPeriod  = marine.hourly.swell_wave_period[i]    ?? 0
-      const windWaveH    = marine.hourly.wind_wave_height[i]     ?? 0
+      // Null rather than 0: a 0 makes the cleanliness factor read "perfectly
+      // clean" instead of dropping out of the weighting.
+      const windWaveH    = marine.hourly.wind_wave_height[i]     ?? null
       // Null rather than a 270 stand-in: an invented swell direction would be
       // scored as real exposure against each spot's facing.
       const swellDir     = marine.hourly.swell_wave_direction[i] ?? null
 
+      // No wind entry for this hour (per-hour null, or the whole wind fetch
+      // failed): estimate speed from the windsea like merge.ts does. Feeding a
+      // literal 0 scored a weather-API outage as a perfectly glassy coast.
+      const windSpeed = wReal
+        ? wReal.speed
+        : windWaveH != null && windWaveH > 0
+          ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
+          : 0
+
       const { score, rating, faceHeight } = rateSurfConditions({
         waveHeight,
         swellHeight,
-        swellPeriod,
+        // Mirror the engine's total-sea fallback for period, or a missing
+        // partition computes a 0 m face while wave_period sits unused.
+        swellPeriod: swellPeriod > 0 ? swellPeriod : wavePeriod,
         swellDirection: swellDir,
         windWaveHeight: windWaveH,
-        windSpeed:     w.speed,
-        windDirection: w.dir,
+        windSpeed,
+        // Direction unknown when the wind fetch had no entry for this hour —
+        // score on speed alone rather than against a fabricated due-west wind.
+        windDirection: wReal ? wReal.dir : null,
         spotFacing:    spot.facingDirection,
         bottomType:    spot.bottomType,
       })
@@ -180,8 +204,8 @@ export async function GET(req: Request) {
         ratingScore:        score,
         waveHeight,
         faceHeight,
-        windSpeed:          w.speed,
-        windDirectionLabel: degreesToCompass(w.dir),
+        windSpeed,
+        windDirectionLabel: degreesToCompass(w.dir ?? 270),
       }
     }),
   }))

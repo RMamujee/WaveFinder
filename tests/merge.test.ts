@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { mergeForecastData, groupHoursByDay } from '@/lib/forecast/merge'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
 import type { ForecastHour, TidePoint } from '@/types/forecast'
 import type { OpenMeteoMarineResponse, OpenMeteoWindResponse } from '@/lib/api/open-meteo'
 
@@ -193,5 +193,141 @@ describe('mergeForecastData', () => {
     const hours = mergeForecastData(marineFixture(times), wind, { spotFacing: 270, lat: 33.8 })
     expect(hours[1].time).toBe(hh(9))
     expect(hours[1].wind.speed).toBe(40)
+  })
+
+  // ── Null preservation (2026-08-05 audit) ───────────────────────────────────
+
+  it('drops hours where neither model produced a sea state', () => {
+    // Days 11-16 with a failed long-range fill used to emit fully-formed
+    // 0 m / 0 s hours rated "poor" — one live day showed 19 of 24 hours at
+    // zero and an average period of 2.9 s.
+    const marine = marineFixture(times, {
+      wave_height: [1.5, null, null] as unknown as number[],
+      swell_wave_height: [1.4, null, null] as unknown as number[],
+    })
+    const hours = mergeForecastData(marine, windFixture(times), { spotFacing: 270, lat: 33.8 })
+    expect(hours).toHaveLength(1)
+    expect(hours[0].time).toBe(times[0])
+  })
+
+  it('scores an unknown swell direction neutrally instead of as due north', () => {
+    // `?? 0` scored a missing direction as a real 0° swell, collapsing the
+    // exposure multiplier to the wrap floor: epic 92 → poor 29.
+    const aligned = mergeForecastData(marineFixture(times), windFixture(times), {
+      spotFacing: 270, lat: 33.8,
+    })
+    const unknown = mergeForecastData(
+      marineFixture(times, {
+        swell_wave_direction: [null, null, null] as unknown as number[],
+      }),
+      windFixture(times),
+      { spotFacing: 270, lat: 33.8 }
+    )
+    expect(unknown[0].ratingScore).toBe(aligned[0].ratingScore)
+  })
+
+  it('keeps a genuine 0 km/h calm instead of inventing an onshore wind', () => {
+    // `speed > 0` used to stand in for "has wind data", so a dead-glassy hour
+    // fell into the wind-wave estimator and adopted an onshore bearing:
+    // the single best condition scored 29 "poor" instead of ~92.
+    const wind = windFixture(times)
+    wind.hourly.wind_speed_10m = [0, 0, 0]
+    wind.hourly.wind_direction_10m = [90, 90, 90]
+
+    const hours = mergeForecastData(marineFixture(times), wind, { spotFacing: 270, lat: 33.8 })
+    expect(hours[0].wind.speed).toBe(0)
+    expect(hours[0].ratingScore).toBeGreaterThanOrEqual(80)
+  })
+
+  it('rates a missing wind hour on estimated speed alone, not an invented direction', () => {
+    // No weather data at all: speed is estimated from the wind-wave partition,
+    // but direction is unknown — the hour must not be vetoed as onshore.
+    const emptyWind = { hourly: { time: [], wind_speed_10m: [], wind_direction_10m: [], wind_gusts_10m: [], temperature_2m: [], weather_code: [], precipitation_probability: [] } }
+    const hours = mergeForecastData(marineFixture(times), emptyWind, { spotFacing: 270, lat: 33.8 })
+    expect(hours[0].wind.speed).toBeGreaterThan(0)   // estimate still displayed
+    expect(hours[0].ratingScore).toBeGreaterThan(45) // not slammed by fake onshore
+  })
+
+  it('falls back to wave period when the swell partition has no period', () => {
+    // The engine falls back to total sea HEIGHT when the partition is missing,
+    // but a `?? 0` period defeated it: breakingWaveHeight(h, 0) = 0 m face.
+    const marine = marineFixture(times, {
+      swell_wave_height: [0, 0, 0],
+      swell_wave_period: [null, null, null] as unknown as number[],
+    })
+    const hours = mergeForecastData(marine, windFixture(times), { spotFacing: 270, lat: 33.8 })
+    expect(hours[0].faceHeight).toBeGreaterThan(0)
+    expect(hours[0].ratingScore).toBeGreaterThan(50)
+  })
+
+  it('drops the cleanliness factor when the wind-wave partition is missing, rather than scoring it perfectly clean', () => {
+    const noChopData = mergeForecastData(
+      marineFixture(times, { wind_wave_height: [null, null, null] as unknown as number[] }),
+      windFixture(times),
+      { spotFacing: 270, lat: 33.8 }
+    )
+    const trulyClean = mergeForecastData(
+      marineFixture(times, { wind_wave_height: [0, 0, 0] }),
+      windFixture(times),
+      { spotFacing: 270, lat: 33.8 }
+    )
+    // Missing data must never score better than a genuinely clean reading —
+    // strictly less: with the fix the cleanliness factor DROPS (renormalised
+    // weights) while a real 0-chop reading adds a 100-scored factor. A `?? 0`
+    // revert makes the two identical, which `<=` could not catch.
+    expect(noChopData[0].ratingScore).toBeLessThan(trulyClean[0].ratingScore)
+  })
+})
+
+describe('findNearestFutureHour', () => {
+  // Fixed clock: 20:30 UTC. Real Date.now() would let the old slice(0,16)
+  // logic pass during minute :00 of any hour — the test could then miss the
+  // exact regression it names.
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-05T20:30:00Z'))
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('returns the in-progress hour, not the next one', () => {
+    // Comparing with minutes included excluded the current hour for 59 of
+    // every 60 minutes, so "Now" was systematically ~30 min in the future.
+    const hours = [
+      makeHour('2026-08-05T19:00', 'fair'),
+      makeHour('2026-08-05T20:00', 'good'),
+      makeHour('2026-08-05T21:00', 'fair'),
+    ]
+    expect(findNearestFutureHour(hours, 0)?.time).toBe('2026-08-05T20:00')
+  })
+
+  it('applies the spot UTC offset to pick the spot-local hour', () => {
+    // 20:30 UTC at a UTC-8 spot is 12:30 spot-local. Parsing the local-clock
+    // strings in the runtime zone (the audited bug) would pick 21:00 — nine
+    // hours of surf conditions away from the truth.
+    const hours = [
+      makeHour('2026-08-05T11:00', 'fair'),
+      makeHour('2026-08-05T12:00', 'good'),
+      makeHour('2026-08-05T13:00', 'fair'),
+      makeHour('2026-08-05T21:00', 'poor'),
+    ]
+    expect(findNearestFutureHour(hours, -28800)?.time).toBe('2026-08-05T12:00')
+  })
+
+  it('falls back to the last hour when all hours are past', () => {
+    const hours = [makeHour('2026-08-05T17:00', 'fair'), makeHour('2026-08-05T18:00', 'good')]
+    expect(findNearestFutureHour(hours, 0)?.time).toBe('2026-08-05T18:00')
+  })
+})
+
+describe('groupHoursByDay — aggregates', () => {
+  it('ignores zero-period hours in the day average period', () => {
+    // Hours with no swell decomposition carry period 0; averaging them in
+    // reported a 15 s day as ~8 s.
+    const hours = [makeHour(hh(8), 'good'), makeHour(hh(9), 'good'), makeHour(hh(10), 'good')]
+    hours[0].swellPeriod = 15
+    hours[1].swellPeriod = 15
+    hours[2].swellPeriod = 0
+    const [day] = groupHoursByDay(hours)
+    expect(day.avgPeriod).toBe(15)
   })
 })

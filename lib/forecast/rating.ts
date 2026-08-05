@@ -109,6 +109,27 @@ function scorePeriod(period: number): number {
   return 15
 }
 
+// The expectation of dirScore over a uniformly unknown direction:
+// mean of ((1+cosθ)/2)^1.5 over θ∈[0,180°] is 4/(3π), so 10 + 90·4/(3π) ≈ 48.
+// Used for the unknown-direction branch so it sits between the best and worst
+// KNOWN directions at every speed instead of below the worst.
+const MEAN_DIR_SCORE = 10 + 90 * (4 / (3 * Math.PI))
+
+// Continuous speed penalty (piecewise-linear between the old tier anchors).
+// Stepped tiers put a 30-point cliff at 45 km/h that landed on a veto
+// boundary — 0.2 km/h of model noise moved "epic" to "good".
+function windSpeedPenalty(windSpeed: number): number {
+  if (windSpeed <= 15) return 0
+  if (windSpeed <= 20) return (windSpeed - 15) * 2             // 0 → 10
+  if (windSpeed <= 30) return 10 + (windSpeed - 20)            // 10 → 20
+  // 20 → 60 by 45 km/h: a perfect offshore (dirScore 100) lands exactly on the
+  // windScore <= 40 veto at 45 km/h, so the documented ">45 km/h is capped
+  // regardless of direction" holds without reintroducing a cliff. (A gentler
+  // ramp here once let a 50 km/h offshore gale rate "epic".)
+  if (windSpeed <= 45) return 20 + ((windSpeed - 30) * 8) / 3
+  return Math.min(70, 60 + (windSpeed - 45) * 2)               // 60 → 70 by 50; unpaddleable
+}
+
 function scoreWind(
   windSpeed: number,
   windDirection: number | null,
@@ -116,32 +137,33 @@ function scoreWind(
 ): number {
   if (windSpeed < 5) return 100
 
-  // Direction unknown (e.g. a borrowed nearest-neighbour reading): score on
-  // speed alone. We know it is windy; we do not know whether that wind is
-  // grooming the faces or destroying them, so neither reward nor condemn it.
+  // Speed-gate the direction penalty: wind damage scales with SPEED — direction
+  // only sets its character. The old shape applied direction at full strength
+  // from 5 km/h up, so a near-glassy 6 km/h onshore drift vetoed a spot exactly
+  // like a 30 km/h gale (a 0.1 km/h change at the threshold moved three rating
+  // bands). Below ~8-10 km/h neither direction materially textures the face;
+  // the gate fades direction in over 5→20 km/h.
+  const gate = Math.min(1, Math.max(0, (windSpeed - 5) / 15))
+  const speedPenalty = windSpeedPenalty(windSpeed)
+
+  // Direction unknown (e.g. a borrowed nearest-neighbour reading): score the
+  // MEAN direction, gated exactly like a known one. We know it is windy; we do
+  // not know whether that wind is grooming the faces or destroying them, so
+  // neither reward nor condemn it — and never below the worst known direction.
   if (windDirection == null) {
-    if (windSpeed < 10) return 70
-    if (windSpeed < 15) return 55
-    if (windSpeed < 20) return 40
-    if (windSpeed < 30) return 25
-    return 10
+    const directed = 100 - (100 - MEAN_DIR_SCORE) * gate
+    return Math.max(0, Math.round(directed - speedPenalty))
   }
 
   const offshoreDirection = (spotFacing + 180) % 360
   const diff = angleDiff(windDirection, offshoreDirection)
 
-  let dirScore: number
-  if (diff <= 45) dirScore = 100
-  else if (diff <= 90) dirScore = 75
-  else if (diff <= 135) dirScore = 40
-  else dirScore = 10
+  // Continuous direction score. The old 4-step buckets meant 2° of model noise
+  // (224° vs 226° at 12 km/h) moved the final rating two bands.
+  const dirScore = 10 + 90 * Math.pow((1 + Math.cos((diff * Math.PI) / 180)) / 2, 1.5)
+  const directed = 100 - (100 - dirScore) * gate
 
-  let speedPenalty = 0
-  if (windSpeed > 30) speedPenalty = 40
-  else if (windSpeed > 20) speedPenalty = 20
-  else if (windSpeed > 15) speedPenalty = 10
-
-  return Math.max(0, dirScore - speedPenalty)
+  return Math.max(0, Math.round(directed - speedPenalty))
 }
 
 // How much of the sea state is disorganised local windsea versus clean

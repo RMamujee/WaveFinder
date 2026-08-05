@@ -330,4 +330,76 @@ describe('rateSurfConditions', () => {
     })
     expect(['poor', 'fair', 'good', 'epic']).toContain(rating)
   })
+
+  // ── Wind shape regressions (2026-08-05 audit) ──────────────────────────────
+  it('treats light onshore drift as near-glassy, not a gale', () => {
+    // A 6 km/h breeze is glassy from the sand whatever its direction. The old
+    // shape applied the direction buckets at full strength from 5 km/h, so this
+    // exact case vetoed a clean head-high day to "poor" — and a once-a-year
+    // 15 ft/18 s day scored 29 under the same breeze.
+    const light = rateSurfConditions({
+      ...CLEAN,
+      waveHeight: 1.5,
+      swellHeight: 1.4,
+      swellPeriod: 15,
+      windSpeed: 6,
+      windDirection: 270,  // straight onshore
+    })
+    expect(light.factors.wind).toBeGreaterThan(85)
+    expect(light.rating).not.toBe('poor')
+  })
+
+  it('does not cliff at the 5 km/h glassy threshold', () => {
+    // 4.9 → 5.0 km/h used to move the score three rating bands.
+    const under = rateSurfConditions({ ...CLEAN, windSpeed: 4.9, windDirection: 270 })
+    const over = rateSurfConditions({ ...CLEAN, windSpeed: 5.1, windDirection: 270 })
+    expect(Math.abs(under.score - over.score)).toBeLessThanOrEqual(3)
+  })
+
+  it('still penalises onshore wind at speeds where it matters', () => {
+    // The speed gate must not make the engine blind to real onshore wind.
+    const light = rateSurfConditions({ ...CLEAN, windSpeed: 6, windDirection: 270 })
+    const moderate = rateSurfConditions({ ...CLEAN, windSpeed: 15, windDirection: 270 })
+    const strong = rateSurfConditions({ ...CLEAN, windSpeed: 25, windDirection: 270 })
+    expect(light.factors.wind).toBeGreaterThan(moderate.factors.wind)
+    expect(moderate.factors.wind).toBeGreaterThan(strong.factors.wind)
+    expect(strong.rating).toBe('poor')
+  })
+
+  it('never scores an unknown wind direction below the worst known direction', () => {
+    // Regression: the speed gate was first applied only to the known-direction
+    // path, so at light winds an UNKNOWN direction scored worse than a known
+    // straight-onshore blow — punishing exactly the honest-null inputs the
+    // 2026-08-05 fixes introduce. The mean-direction branch must sit between
+    // the best and worst known directions at every speed.
+    for (const speed of [6, 8, 12, 18, 25]) {
+      const unknown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: null })
+      const worstKnown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: 270 })
+      const bestKnown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: 90 })
+      expect(unknown.factors.wind).toBeGreaterThanOrEqual(worstKnown.factors.wind)
+      expect(unknown.factors.wind).toBeLessThanOrEqual(bestKnown.factors.wind)
+    }
+  })
+
+  it('caps a gale even when it blows straight offshore', () => {
+    // 90 km/h dead offshore used to keep windScore 60 and rate "epic";
+    // it is unpaddleable regardless of direction.
+    const gale = rateSurfConditions({ ...CLEAN, windSpeed: 90, windDirection: 90 })
+    expect(gale.factors.wind).toBeLessThanOrEqual(40)
+    expect(gale.rating).not.toBe('epic')
+  })
+
+  it('holds the gale cap through the 45-55 km/h offshore window', () => {
+    // Regression: smoothing the 45 km/h penalty cliff once shifted the ramp so
+    // 45-54 km/h offshore cleared every veto — a 50 km/h (~27 kt) offshore
+    // gale rated "epic". From 45 km/h up, windScore must stay at or below the
+    // <=40 veto threshold for EVERY direction.
+    for (const speed of [45, 46, 50, 55]) {
+      for (const dir of [90, 270, null]) {
+        const r = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: dir })
+        expect(r.factors.wind, `speed ${speed}, dir ${dir}`).toBeLessThanOrEqual(40)
+        expect(r.rating, `speed ${speed}, dir ${dir}`).not.toBe('epic')
+      }
+    }
+  })
 })
