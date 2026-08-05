@@ -109,14 +109,18 @@ export async function GET(req: Request) {
     if (t.startsWith(date)) hourIndices.push(i)
   })
 
-  // Build wind lookup by time
-  const windMap = new Map<string, { speed: number; dir: number }>()
+  // Build wind lookup by time. An entry exists only when the API reported a
+  // speed for that hour (mirrors merge.ts): `?? 0` here scored a missing hour
+  // as 0 km/h — the best possible wind — and a null direction as due north.
+  const windMap = new Map<string, { speed: number; dir: number | null }>()
   if (wind) {
     wind.hourly.time.forEach((t, i) => {
-      windMap.set(t, {
-        speed: wind.hourly.wind_speed_10m[i] ?? 0,
-        dir:   wind.hourly.wind_direction_10m[i] ?? 0,
-      })
+      if (wind.hourly.wind_speed_10m[i] != null) {
+        windMap.set(t, {
+          speed: wind.hourly.wind_speed_10m[i],
+          dir:   wind.hourly.wind_direction_10m[i] ?? null,
+        })
+      }
     })
   }
 
@@ -124,6 +128,9 @@ export async function GET(req: Request) {
   const regionalSwell: BestSpotsSwellHour[] = hourIndices.map((i) => {
     const time        = marine.hourly.time[i]
     const w           = windMap.get(time) ?? { speed: 0, dir: 270 }
+    // Display-only stand-ins below (the rating path in spotsData passes
+    // honest nulls); wDir keeps the compass label renderable.
+    const wDir        = w.dir ?? 270
     const swellDir    = marine.hourly.swell_wave_direction[i] ?? 270
     const windWaveDir = marine.hourly.wind_wave_direction[i]  ?? 270
     return {
@@ -139,8 +146,8 @@ export async function GET(req: Request) {
       waveHeight:           marine.hourly.wave_height[i]          ?? 0,
       wavePeriod:           marine.hourly.wave_period[i]          ?? 0,
       windSpeed:            w.speed,
-      windDirection:        w.dir,
-      windDirectionLabel:   degreesToCompass(w.dir),
+      windDirection:        wDir,
+      windDirectionLabel:   degreesToCompass(wDir),
       seaSurfaceTemperature: marine.hourly.sea_surface_temperature?.[i] ?? null,
     }
   })
@@ -189,7 +196,7 @@ export async function GET(req: Request) {
         waveHeight,
         faceHeight,
         windSpeed:          w.speed,
-        windDirectionLabel: degreesToCompass(w.dir),
+        windDirectionLabel: degreesToCompass(w.dir ?? 270),
       }
     }),
   }))

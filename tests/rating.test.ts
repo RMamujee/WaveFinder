@@ -366,6 +366,21 @@ describe('rateSurfConditions', () => {
     expect(strong.rating).toBe('poor')
   })
 
+  it('never scores an unknown wind direction below the worst known direction', () => {
+    // Regression: the speed gate was first applied only to the known-direction
+    // path, so at light winds an UNKNOWN direction scored worse than a known
+    // straight-onshore blow — punishing exactly the honest-null inputs the
+    // 2026-08-05 fixes introduce. The mean-direction branch must sit between
+    // the best and worst known directions at every speed.
+    for (const speed of [6, 8, 12, 18, 25]) {
+      const unknown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: null })
+      const worstKnown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: 270 })
+      const bestKnown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: 90 })
+      expect(unknown.factors.wind).toBeGreaterThanOrEqual(worstKnown.factors.wind)
+      expect(unknown.factors.wind).toBeLessThanOrEqual(bestKnown.factors.wind)
+    }
+  })
+
   it('caps a gale even when it blows straight offshore', () => {
     // 90 km/h dead offshore used to keep windScore 60 and rate "epic";
     // it is unpaddleable regardless of direction.

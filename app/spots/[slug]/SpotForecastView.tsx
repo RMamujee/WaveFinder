@@ -128,7 +128,7 @@ export function SpotForecastView({ spot }: Props) {
     const nowHour = new Date(nowTick + forecast.utcOffsetSeconds * 1000)
       .toISOString()
       .slice(0, 13)
-    for (const d of forecast.forecast) {
+    for (const d of forecast.forecast ?? []) {
       const hit = d.hours.find((h) => h.time.slice(0, 13) >= nowHour)
       if (hit) return hit
     }
@@ -252,9 +252,14 @@ export function SpotForecastView({ spot }: Props) {
               ) : error ? (
                 <p className="text-sm" style={{ color: '#ef4444' }}>Failed to load forecast data.</p>
               ) : null}
-              {!isPending && current && dataUpdatedAt > 0 && (
+              {!isPending && current && (forecast?.fetchedAt || dataUpdatedAt > 0) && (
                 <p className="text-xs mt-3" style={{ color: 'var(--text-3)' }}>
-                  Updated {format(dataUpdatedAt, 'h:mm a')}
+                  {/* fetchedAt is when the ORIGIN generated this payload — a CDN
+                      hit can serve data older than the fetch, so the fetch time
+                      would manufacture the appearance of freshness. */}
+                  Updated {forecast?.fetchedAt
+                    ? format(parseISO(forecast.fetchedAt), 'h:mm a')
+                    : format(dataUpdatedAt, 'h:mm a')}
                   {isFetching ? ' · refreshing…' : ''}
                 </p>
               )}
