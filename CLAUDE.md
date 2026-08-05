@@ -50,6 +50,24 @@ deliberate and the tests pin the intended behaviour.
 - **Veto caps exist because a weighted mean hides catastrophes.** A 4.5 m swell
   under 40 km/h onshore averaged out to "good" before them. Wind and chop can
   each cap the final score regardless of size and period.
+- **Wind direction is speed-gated and continuous** (2026-08-05): the direction
+  penalty fades in over 5→20 km/h (`gate`) because wind damage scales with
+  speed — a 6 km/h onshore drift is near-glassy, and the old buckets vetoed it
+  exactly like a 30 km/h gale. >45 km/h is capped regardless of direction.
+  Do not reintroduce stepped direction buckets; 2° of model noise used to move
+  the rating two bands.
+- **Preserve nulls end-to-end.** The engine scores unknown swell direction,
+  unknown wind direction, and missing wind-wave/tide data neutrally — but only
+  if callers pass `null`, never `?? 0`. A 0 is scored as a real due-north
+  swell / perfectly clean sea. `fetchCurrentConditions` returns null for
+  land/invalid cells so the map's nearest-neighbour fallback fires; hours where
+  both wave and swell height are null are dropped in `mergeForecastData`, not
+  emitted as fake flat.
+- **Open-Meteo time strings are the spot's LOCAL clock with no offset.** Never
+  `new Date(t)` them (Vercel runs UTC — the map's current hour was off by each
+  spot's entire UTC offset, invisible in local dev). Shift `Date.now()` by
+  `utc_offset_seconds` and compare strings, truncated to the hour so the
+  in-progress hour wins. See `findNearestFutureHour` + `fetchCurrentConditions`.
 - `scoreFaceHeight` interpolates a curve rather than stepping buckets — step
   buckets erased the off-axis penalty whenever both sizes fell in one bucket.
 - Sanity-check tuning changes with `npx tsx scripts/rating-sanity.ts`, which

@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -87,14 +87,19 @@ export function SpotForecastView({ spot }: Props) {
     router.replace(`/spots/${spot.slug}?date=${date}`, { scroll: false })
   }
 
-  const { data: forecast, isPending, isFetching, error } = useQuery<SpotForecast>({
+  const { data: forecast, isPending, isFetching, error, dataUpdatedAt } = useQuery<SpotForecast>({
     queryKey: ['forecast', spot.slug],
     queryFn: async () => {
       const r = await fetch(`/api/forecast/${spot.slug}`)
       if (!r.ok) throw new Error(`forecast-${r.status}`)
       return r.json() as Promise<SpotForecast>
     },
-    staleTime: 60 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    // A tab left open must not show dawn conditions at noon: nothing else in
+    // the app triggers a refetch (focus-refetch is globally off), so this
+    // interval is the only thing keeping a long-lived page current.
+    refetchInterval: 30 * 60 * 1000,
+    refetchOnWindowFocus: true,
     retry: 2,
     retryDelay: (n) => Math.min(1000 * 2 ** n, 4000),
   })
@@ -108,7 +113,27 @@ export function SpotForecastView({ spot }: Props) {
   const activeDayData: ForecastDay | undefined =
     forecast?.forecast?.find((d) => d.date === selectedDay) ?? forecast?.forecast?.[0]
 
-  const current = forecast?.currentCondition
+  // Re-derive "current" client-side: the server-computed currentCondition is
+  // frozen into CDN-cached JSON (s-maxage=3600+swr=600) at generation time and
+  // can be ~2 h stale by the time it renders. The payload's utcOffsetSeconds
+  // lets us pick the spot's in-progress hour from forecast[] on our own clock;
+  // payloads cached before that field existed fall back to the server's pick.
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+  const current = useMemo(() => {
+    if (forecast?.utcOffsetSeconds == null) return forecast?.currentCondition ?? null
+    const nowHour = new Date(nowTick + forecast.utcOffsetSeconds * 1000)
+      .toISOString()
+      .slice(0, 13)
+    for (const d of forecast.forecast ?? []) {
+      const hit = d.hours.find((h) => h.time.slice(0, 13) >= nowHour)
+      if (hit) return hit
+    }
+    return forecast.currentCondition ?? null
+  }, [forecast, nowTick])
   const ratingStyle = current ? RATING_STYLES[current.rating] : RATING_STYLES.poor
 
   const bestTimes = useMemo(() => {
@@ -227,6 +252,17 @@ export function SpotForecastView({ spot }: Props) {
               ) : error ? (
                 <p className="text-sm" style={{ color: '#ef4444' }}>Failed to load forecast data.</p>
               ) : null}
+              {!isPending && current && (forecast?.fetchedAt || dataUpdatedAt > 0) && (
+                <p className="text-xs mt-3" style={{ color: 'var(--text-3)' }}>
+                  {/* fetchedAt is when the ORIGIN generated this payload — a CDN
+                      hit can serve data older than the fetch, so the fetch time
+                      would manufacture the appearance of freshness. */}
+                  Updated {forecast?.fetchedAt
+                    ? format(parseISO(forecast.fetchedAt), 'h:mm a')
+                    : format(dataUpdatedAt, 'h:mm a')}
+                  {isFetching ? ' · refreshing…' : ''}
+                </p>
+              )}
             </div>
 
             {/* Right: wind rose + rating badge + actions */}

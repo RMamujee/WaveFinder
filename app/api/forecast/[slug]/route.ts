@@ -71,6 +71,14 @@ export async function GET(
     {
       spotId: spot.id,
       fetchedAt: new Date().toISOString(),
+      // Lets the client re-derive the current hour from forecast[] on its own
+      // clock — the server-computed currentCondition freezes into CDN-cached
+      // JSON for up to s-maxage+swr and silently drifts stale. Omitted (not 0)
+      // when the upstream lacks it, so the client's == null guard falls back to
+      // currentCondition instead of silently deriving with a fake UTC offset.
+      ...(marineResult.value.utc_offset_seconds != null
+        ? { utcOffsetSeconds: marineResult.value.utc_offset_seconds }
+        : {}),
       forecast,
       tides,
       buoy,
