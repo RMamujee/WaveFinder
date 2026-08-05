@@ -173,6 +173,15 @@ export async function GET(req: Request) {
       // scored as real exposure against each spot's facing.
       const swellDir     = marine.hourly.swell_wave_direction[i] ?? null
 
+      // No wind entry for this hour (per-hour null, or the whole wind fetch
+      // failed): estimate speed from the windsea like merge.ts does. Feeding a
+      // literal 0 scored a weather-API outage as a perfectly glassy coast.
+      const windSpeed = wReal
+        ? wReal.speed
+        : windWaveH != null && windWaveH > 0
+          ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
+          : 0
+
       const { score, rating, faceHeight } = rateSurfConditions({
         waveHeight,
         swellHeight,
@@ -181,7 +190,7 @@ export async function GET(req: Request) {
         swellPeriod: swellPeriod > 0 ? swellPeriod : wavePeriod,
         swellDirection: swellDir,
         windWaveHeight: windWaveH,
-        windSpeed:     w.speed,
+        windSpeed,
         // Direction unknown when the wind fetch had no entry for this hour —
         // score on speed alone rather than against a fabricated due-west wind.
         windDirection: wReal ? wReal.dir : null,
@@ -195,7 +204,7 @@ export async function GET(req: Request) {
         ratingScore:        score,
         waveHeight,
         faceHeight,
-        windSpeed:          w.speed,
+        windSpeed,
         windDirectionLabel: degreesToCompass(w.dir ?? 270),
       }
     }),
