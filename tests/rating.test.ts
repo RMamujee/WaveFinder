@@ -2,8 +2,25 @@ import { describe, it, expect } from 'vitest'
 import {
   degreesToCompass,
   computeWavePower,
+  breakingWaveHeight,
+  directionalExposure,
+  scoreCleanliness,
+  scoreTide,
   rateSurfConditions,
 } from '@/lib/forecast/rating'
+
+// Baseline inputs for a clean, well-aligned, glassy day. Individual tests
+// override just the field under test so the cause of a score change is obvious.
+const CLEAN = {
+  waveHeight: 2.2,
+  swellHeight: 2.2,
+  swellPeriod: 16,
+  swellDirection: 270,
+  windWaveHeight: 0,
+  windSpeed: 2,
+  windDirection: 0,
+  spotFacing: 270,
+} as const
 
 describe('degreesToCompass', () => {
   it('maps the cardinal directions', () => {
@@ -21,19 +38,15 @@ describe('degreesToCompass', () => {
   })
 
   it('rounds to the nearest 22.5 degree sector and wraps at 360', () => {
-    // 350 / 22.5 = 15.56 -> rounds to 16 -> 16 % 16 = 0 -> 'N'
     expect(degreesToCompass(350)).toBe('N')
     expect(degreesToCompass(360)).toBe('N')
-    // 22 -> sector 1 -> 'NNE'
     expect(degreesToCompass(22)).toBe('NNE')
   })
 })
 
 describe('computeWavePower', () => {
   it('uses P = 0.5 * Hs^2 * T rounded to one decimal', () => {
-    // 0.5 * 2^2 * 10 = 20
     expect(computeWavePower(2, 10)).toBe(20)
-    // 0.5 * 1.5^2 * 12 = 13.5
     expect(computeWavePower(1.5, 12)).toBe(13.5)
   })
 
@@ -44,102 +57,275 @@ describe('computeWavePower', () => {
   })
 })
 
+describe('breakingWaveHeight', () => {
+  it('breaks long-period swell substantially bigger than short-period at equal height', () => {
+    const groundswell = breakingWaveHeight(1.0, 16)
+    const windswell = breakingWaveHeight(1.0, 7)
+    expect(groundswell).toBeGreaterThan(windswell)
+    // The whole point of the transform: the difference is large, not marginal.
+    expect(groundswell / windswell).toBeGreaterThan(1.3)
+  })
+
+  it('amplifies a 1 m / 14 s groundswell to roughly head-high faces', () => {
+    // Calibrated so this lands near 1.5 m (~5 ft) rather than the textbook
+    // formula's more generous ~1.8 m. See SHOALING_CALIBRATION.
+    const hb = breakingWaveHeight(1.0, 14)
+    expect(hb).toBeGreaterThan(1.3)
+    expect(hb).toBeLessThan(1.7)
+  })
+
+  it('grows monotonically with both height and period', () => {
+    expect(breakingWaveHeight(2, 12)).toBeGreaterThan(breakingWaveHeight(1, 12))
+    expect(breakingWaveHeight(1, 18)).toBeGreaterThan(breakingWaveHeight(1, 12))
+  })
+
+  it('returns 0 for non-positive inputs', () => {
+    expect(breakingWaveHeight(0, 12)).toBe(0)
+    expect(breakingWaveHeight(1, 0)).toBe(0)
+    expect(breakingWaveHeight(-1, 12)).toBe(0)
+  })
+})
+
+describe('directionalExposure', () => {
+  it('gives full exposure to swell arriving square on the beach', () => {
+    expect(directionalExposure(270, 270)).toBe(1)
+  })
+
+  it('falls off as the swell moves off-axis', () => {
+    const square = directionalExposure(270, 270)
+    const oblique = directionalExposure(315, 270)  // 45 degrees off
+    const glancing = directionalExposure(340, 270) // 70 degrees off
+    expect(square).toBeGreaterThan(oblique)
+    expect(oblique).toBeGreaterThan(glancing)
+  })
+
+  it('drops to the wrap floor once the swell is blocked by the coastline', () => {
+    // A north-facing spot gets essentially nothing from a due-south swell.
+    expect(directionalExposure(180, 0)).toBeCloseTo(0.12, 5)
+    expect(directionalExposure(90, 0)).toBeCloseTo(0.12, 5)
+  })
+
+  it('stays neutral when the swell direction is unknown', () => {
+    // A dead buoy sensor must not be scored as though the spot were blocked.
+    expect(directionalExposure(null, 270)).toBe(1)
+  })
+})
+
+describe('scoreCleanliness', () => {
+  it('rewards a groundswell-dominated sea', () => {
+    expect(scoreCleanliness(2.0, 0.1)).toBe(100)
+  })
+
+  it('punishes a windsea-dominated sea', () => {
+    expect(scoreCleanliness(0.3, 1.5)).toBe(10)
+  })
+
+  it('decreases monotonically as chop takes over', () => {
+    const scores = [0.1, 0.5, 1.0, 2.0, 4.0].map((chop) => scoreCleanliness(1.0, chop))
+    for (let i = 1; i < scores.length; i++) {
+      expect(scores[i]).toBeLessThanOrEqual(scores[i - 1])
+    }
+  })
+
+  it('returns neutral for a flat sea rather than dividing by zero', () => {
+    expect(scoreCleanliness(0, 0)).toBe(50)
+  })
+})
+
+describe('scoreTide', () => {
+  it('prefers more water over a reef than over a sandbar', () => {
+    const high = { height: 1.7, min: 0, max: 2 }
+    expect(scoreTide(high, 'reef')).toBeGreaterThan(scoreTide(high, 'sand'))
+  })
+
+  it('penalises the bottom of the range on a reef', () => {
+    const range = { min: 0, max: 2 }
+    const dryReef = scoreTide({ height: 0.05, ...range }, 'reef')
+    const midReef = scoreTide({ height: 1.24, ...range }, 'reef')
+    expect(midReef).toBeGreaterThan(dryReef)
+  })
+
+  it('stays neutral where there is no meaningful tidal range', () => {
+    // Mediterranean / Gulf stations: a 5 cm range tells us nothing.
+    expect(scoreTide({ height: 0.3, min: 0.28, max: 0.33 }, 'reef')).toBe(50)
+  })
+
+  it('never returns a score outside 15-100', () => {
+    for (const h of [0, 0.5, 1, 1.5, 2]) {
+      for (const bottom of ['reef', 'sand', 'rock', 'coral', 'mixed', null]) {
+        const s = scoreTide({ height: h, min: 0, max: 2 }, bottom)
+        expect(s).toBeGreaterThanOrEqual(15)
+        expect(s).toBeLessThanOrEqual(100)
+      }
+    }
+  })
+})
+
 describe('rateSurfConditions', () => {
   it('rates big, clean, well-aligned long-period surf as epic', () => {
-    const { score, rating } = rateSurfConditions({
-      waveHeight: 2.2,
-      swellPeriod: 16,
-      swellHeight: 2.2,
-      windSpeed: 2, // < 5 -> perfect wind score
-      windDirection: 0,
-      swellDirection: 270, // aligned with spotFacing
-      spotFacing: 270,
-    })
+    const { score, rating } = rateSurfConditions({ ...CLEAN })
     expect(rating).toBe('epic')
     expect(score).toBeGreaterThanOrEqual(80)
   })
 
   it('rates tiny knee-high waves as poor regardless of other factors', () => {
-    const { score, rating } = rateSurfConditions({
-      waveHeight: 0.2, // < 0.4 -> capped at 29
-      swellPeriod: 18,
+    const { rating, score } = rateSurfConditions({
+      ...CLEAN,
+      waveHeight: 0.2,
       swellHeight: 0.2,
-      windSpeed: 0,
-      windDirection: 0,
-      swellDirection: 270,
-      spotFacing: 270,
+      swellPeriod: 18,
     })
     expect(rating).toBe('poor')
     expect(score).toBeLessThanOrEqual(29)
   })
 
-  it('caps chest-to-head surf at "good" via the hard height cap', () => {
-    const { score, rating } = rateSurfConditions({
-      waveHeight: 1.0, // 0.7..1.5 -> capped at 72
-      swellPeriod: 16,
-      swellHeight: 1.0,
-      windSpeed: 0,
-      windDirection: 0,
+  // ── The headline fix ───────────────────────────────────────────────────────
+  // The old engine scored the combined sea height and ignored the wind-wave
+  // partition entirely, so these two hours were indistinguishable.
+  it('separates clean groundswell from an identical height of wind chop', () => {
+    const groundswell = rateSurfConditions({
+      waveHeight: 1.5,
+      swellHeight: 1.4,      // nearly all of it is organised swell
+      swellPeriod: 15,
       swellDirection: 270,
+      windWaveHeight: 0.1,
+      windSpeed: 4,
+      windDirection: 90,     // offshore
       spotFacing: 270,
     })
-    expect(score).toBeLessThanOrEqual(72)
-    expect(rating).not.toBe('epic')
+    const blownOut = rateSurfConditions({
+      waveHeight: 1.5,       // same total sea height
+      swellHeight: 0.3,      // almost no groundswell
+      swellPeriod: 6,
+      swellDirection: 270,
+      windWaveHeight: 1.2,   // it is nearly all chop
+      windSpeed: 32,
+      windDirection: 270,    // straight onshore
+      spotFacing: 270,
+    })
+    expect(groundswell.rating).toBe('epic')
+    expect(blownOut.rating).toBe('poor')
+    expect(groundswell.score - blownOut.score).toBeGreaterThan(40)
   })
 
-  it('uses a neutral direction score (50) when swellDirection is null', () => {
-    const withNull = rateSurfConditions({
-      waveHeight: 2.2,
-      swellPeriod: 14,
-      swellHeight: 2.2,
-      windSpeed: 0,
-      windDirection: 0,
-      swellDirection: null,
-      spotFacing: 270,
+  it('treats an off-axis swell as smaller than the same swell arriving square on', () => {
+    const square = rateSurfConditions({ ...CLEAN, swellDirection: 270 })
+    const oblique = rateSurfConditions({ ...CLEAN, swellDirection: 200 })
+    expect(square.faceHeight).toBeGreaterThan(oblique.faceHeight)
+    expect(square.score).toBeGreaterThan(oblique.score)
+  })
+
+  it('gives a spot facing away from the swell almost nothing', () => {
+    // A 2.2 m NW swell at a spot facing due south.
+    const blocked = rateSurfConditions({ ...CLEAN, swellDirection: 315, spotFacing: 180 })
+    expect(blocked.factors.exposure).toBeCloseTo(0.12, 2)
+    expect(blocked.rating).toBe('poor')
+  })
+
+  it('reports face height, not raw model height, as the surfable size', () => {
+    const { faceHeight } = rateSurfConditions({
+      ...CLEAN,
+      waveHeight: 1.0,
+      swellHeight: 1.0,
+      swellPeriod: 16,
     })
-    const withAligned = rateSurfConditions({
-      waveHeight: 2.2,
-      swellPeriod: 14,
-      swellHeight: 2.2,
-      windSpeed: 0,
-      windDirection: 0,
-      swellDirection: 270, // perfect alignment -> 100
-      spotFacing: 270,
-    })
-    // Aligned (100) must score at least as high as the neutral (50) fallback.
-    expect(withAligned.score).toBeGreaterThanOrEqual(withNull.score)
+    // 1 m of 16 s groundswell stands up well overhead of its offshore height.
+    expect(faceHeight).toBeGreaterThan(1.5)
+  })
+
+  it('uses a neutral exposure when swellDirection is null', () => {
+    const withNull = rateSurfConditions({ ...CLEAN, swellDirection: null })
+    const withAligned = rateSurfConditions({ ...CLEAN, swellDirection: 270 })
+    // Unknown direction must not be punished — it scores like a square hit.
+    expect(withNull.score).toBe(withAligned.score)
   })
 
   it('penalises strong onshore wind', () => {
-    const offshore = rateSurfConditions({
-      waveHeight: 2.0,
-      swellPeriod: 14,
-      swellHeight: 2.0,
-      windSpeed: 25,
-      windDirection: 90, // offshore for a 270-facing spot ((270+180)%360 = 90)
-      swellDirection: 270,
-      spotFacing: 270,
-    })
-    const onshore = rateSurfConditions({
-      waveHeight: 2.0,
-      swellPeriod: 14,
-      swellHeight: 2.0,
-      windSpeed: 25,
-      windDirection: 270, // straight onshore
-      swellDirection: 270,
-      spotFacing: 270,
-    })
+    const offshore = rateSurfConditions({ ...CLEAN, windSpeed: 25, windDirection: 90 })
+    const onshore = rateSurfConditions({ ...CLEAN, windSpeed: 25, windDirection: 270 })
     expect(offshore.score).toBeGreaterThan(onshore.score)
+  })
+
+  it('does not award a free perfect wind score when wind direction is unknown', () => {
+    // Regression: the nearest-neighbour fallback used to pass a hardcoded 270,
+    // and passing windSpeed 0 instead would score a perfect 100 for "calm".
+    const unknown = rateSurfConditions({ ...CLEAN, windSpeed: 25, windDirection: null })
+    const glassy = rateSurfConditions({ ...CLEAN, windSpeed: 0, windDirection: null })
+    expect(unknown.factors.wind).toBeLessThan(glassy.factors.wind)
+    expect(unknown.factors.wind).toBeLessThan(60)
+  })
+
+  it('vetoes a big swell that is being destroyed by onshore wind', () => {
+    // Regression: the weighted mean rated this "good" because 4.5 m at 13 s
+    // scored highly on size and period, averaging away a zero wind score. A
+    // 40 km/h onshore is disqualifying no matter how big the swell is.
+    const stormy = rateSurfConditions({
+      waveHeight: 4.8,
+      swellHeight: 4.5,
+      swellPeriod: 13,
+      swellDirection: 270,
+      windWaveHeight: 1.4,
+      windSpeed: 40,
+      windDirection: 270,  // straight onshore
+      spotFacing: 270,
+    })
+    expect(stormy.factors.height).toBeGreaterThan(70)  // it really is big
+    expect(stormy.rating).toBe('poor')                 // and still unsurfable
+  })
+
+  it('vetoes a sea state that is almost entirely wind chop', () => {
+    const mush = rateSurfConditions({
+      ...CLEAN,
+      swellHeight: 0.4,
+      windWaveHeight: 2.0,
+      windSpeed: 4,        // light wind, so the veto must come from the chop
+      windDirection: 90,
+    })
+    expect(mush.factors.cleanliness).toBeLessThanOrEqual(10)
+    expect(mush.score).toBeLessThanOrEqual(29)
+  })
+
+  it('folds tide into the score when a station is available', () => {
+    const range = { min: 0, max: 2 }
+    const goodTide = rateSurfConditions({
+      ...CLEAN, tide: { height: 1.24, ...range }, bottomType: 'reef',
+    })
+    const badTide = rateSurfConditions({
+      ...CLEAN, tide: { height: 0.02, ...range }, bottomType: 'reef',
+    })
+    expect(goodTide.score).toBeGreaterThan(badTide.score)
+    expect(goodTide.factors.tide).not.toBeNull()
+  })
+
+  it('does not penalise a spot that has no tide station', () => {
+    // Weights renormalise over present factors, so a missing tide reading must
+    // not drag the score down the way a zero-scored factor would.
+    const noTide = rateSurfConditions({ ...CLEAN })
+    const perfectTide = rateSurfConditions({
+      ...CLEAN, tide: { height: 1.0, min: 0, max: 2 }, bottomType: 'sand',
+    })
+    expect(noTide.factors.tide).toBeNull()
+    expect(noTide.score).toBeGreaterThanOrEqual(perfectTide.score - 2)
+  })
+
+  it('falls back to total sea height when the swell partition is missing', () => {
+    // Long-range model hours past day ~10 carry no swell decomposition.
+    const { faceHeight, score } = rateSurfConditions({
+      ...CLEAN, swellHeight: 0, waveHeight: 2.0,
+    })
+    expect(faceHeight).toBeGreaterThan(0)
+    expect(score).toBeGreaterThan(0)
   })
 
   it('returns one of the four valid rating labels', () => {
     const { rating } = rateSurfConditions({
       waveHeight: 0.9,
+      swellHeight: 0.8,
       swellPeriod: 10,
-      swellHeight: 0.9,
+      swellDirection: 240,
+      windWaveHeight: 0.1,
       windSpeed: 12,
       windDirection: 200,
-      swellDirection: 240,
       spotFacing: 270,
     })
     expect(['poor', 'fair', 'good', 'epic']).toContain(rating)

@@ -1,8 +1,8 @@
 # WaveFinder — Claude Code project notes
 
-Free Surfline-style surf forecast app. Next.js 16 App Router, Prisma 5 + Neon
-Postgres, better-auth, Stripe (TEST mode), Upstash Redis, deployed on Vercel at
-https://wave-finder.vercel.app.
+Free Surfline-style surf forecast app. Next.js 16 App Router, Prisma 5 +
+Supabase Postgres (`wavefinder` schema), better-auth, Stripe (TEST mode),
+Upstash Redis, deployed on Vercel at https://wave-finder.vercel.app.
 
 ## Current state & open work
 
@@ -26,6 +26,37 @@ https://wave-finder.vercel.app.
   project), email verification, Stripe go-live, CSP nonce.
 - Earlier audits: `docs/audit/00-AUDIT-SUMMARY.md` (2026-06-05) + per-area
   reports. Ops runbook: `docs/RUNBOOK.md`.
+
+## The surf rating engine (`lib/forecast/rating.ts`)
+
+Rewritten 2026-08-04. Read this before tuning scores — the constants are
+deliberate and the tests pin the intended behaviour.
+
+- **Score the swell partition, not the combined sea.** Open-Meteo's
+  `wave_height` folds groundswell and local wind chop into one number. The old
+  engine scored it (and accepted a `swellHeight` argument it never read), so
+  0.4 m of clean swell under 1.1 m of onshore slop rated the same as a 1.5 m
+  groundswell day.
+- **`faceHeight` is the surfable size**, not `waveHeight`. It is the swell
+  partition shoaled by period via Komar & Gaughan (1972) and reduced by
+  directional exposure. `SHOALING_CALIBRATION` (0.85) pulls the textbook formula
+  back in line with how surfers call size — tune there, not in the curve.
+- **Direction is a multiplier on height, not a small additive score.** A spot
+  facing 90°+ away from the swell drops to `WRAP_FLOOR` (0.12) rather than
+  scoring "good" on size alone.
+- **Weights renormalise over the factors present.** Tide and cleanliness drop
+  out when unavailable (no NOAA station, no wind-wave partition), so missing
+  data is never scored as bad data. Do not "fix" this by defaulting them to 0.
+- **Veto caps exist because a weighted mean hides catastrophes.** A 4.5 m swell
+  under 40 km/h onshore averaged out to "good" before them. Wind and chop can
+  each cap the final score regardless of size and period.
+- `scoreFaceHeight` interpolates a curve rather than stepping buckets — step
+  buckets erased the off-axis penalty whenever both sizes fell in one bucket.
+- Sanity-check tuning changes with `npx tsx scripts/rating-sanity.ts`, which
+  prints the verdict on ten hand-described sea states.
+- Ratings feed `/api/forecast/[slug]`, `/api/spots?withConditions=true` and
+  `/api/best-spots`. Only the forecast route has tide data; the other two pass
+  no tide and let the weights renormalise.
 
 ## Things that will bite you
 

@@ -66,6 +66,7 @@ export interface BestSpotsSpotEntry {
     rating: string
     ratingScore: number
     waveHeight: number
+    faceHeight: number
     windSpeed: number
     windDirectionLabel: string
   }[]
@@ -156,16 +157,21 @@ export async function GET(req: Request) {
       const waveHeight   = marine.hourly.wave_height[i]          ?? 0
       const swellHeight  = marine.hourly.swell_wave_height[i]    ?? 0
       const swellPeriod  = marine.hourly.swell_wave_period[i]    ?? 0
-      const swellDir     = marine.hourly.swell_wave_direction[i] ?? 270
+      const windWaveH    = marine.hourly.wind_wave_height[i]     ?? 0
+      // Null rather than a 270 stand-in: an invented swell direction would be
+      // scored as real exposure against each spot's facing.
+      const swellDir     = marine.hourly.swell_wave_direction[i] ?? null
 
-      const { score, rating } = rateSurfConditions({
+      const { score, rating, faceHeight } = rateSurfConditions({
         waveHeight,
-        swellPeriod,
         swellHeight,
+        swellPeriod,
+        swellDirection: swellDir,
+        windWaveHeight: windWaveH,
         windSpeed:     w.speed,
         windDirection: w.dir,
-        swellDirection: swellDir,
         spotFacing:    spot.facingDirection,
+        bottomType:    spot.bottomType,
       })
 
       return {
@@ -173,6 +179,7 @@ export async function GET(req: Request) {
         rating,
         ratingScore:        score,
         waveHeight,
+        faceHeight,
         windSpeed:          w.speed,
         windDirectionLabel: degreesToCompass(w.dir),
       }
