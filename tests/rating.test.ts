@@ -388,4 +388,18 @@ describe('rateSurfConditions', () => {
     expect(gale.factors.wind).toBeLessThanOrEqual(40)
     expect(gale.rating).not.toBe('epic')
   })
+
+  it('holds the gale cap through the 45-55 km/h offshore window', () => {
+    // Regression: smoothing the 45 km/h penalty cliff once shifted the ramp so
+    // 45-54 km/h offshore cleared every veto — a 50 km/h (~27 kt) offshore
+    // gale rated "epic". From 45 km/h up, windScore must stay at or below the
+    // <=40 veto threshold for EVERY direction.
+    for (const speed of [45, 46, 50, 55]) {
+      for (const dir of [90, 270, null]) {
+        const r = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: dir })
+        expect(r.factors.wind, `speed ${speed}, dir ${dir}`).toBeLessThanOrEqual(40)
+        expect(r.rating, `speed ${speed}, dir ${dir}`).not.toBe('epic')
+      }
+    }
+  })
 })

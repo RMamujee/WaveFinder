@@ -122,8 +122,12 @@ function windSpeedPenalty(windSpeed: number): number {
   if (windSpeed <= 15) return 0
   if (windSpeed <= 20) return (windSpeed - 15) * 2             // 0 → 10
   if (windSpeed <= 30) return 10 + (windSpeed - 20)            // 10 → 20
-  if (windSpeed <= 45) return 20 + ((windSpeed - 30) * 4) / 3  // 20 → 40
-  return Math.min(70, 40 + (windSpeed - 45) * 2)               // 40 → 70 by 60; unpaddleable
+  // 20 → 60 by 45 km/h: a perfect offshore (dirScore 100) lands exactly on the
+  // windScore <= 40 veto at 45 km/h, so the documented ">45 km/h is capped
+  // regardless of direction" holds without reintroducing a cliff. (A gentler
+  // ramp here once let a 50 km/h offshore gale rate "epic".)
+  if (windSpeed <= 45) return 20 + ((windSpeed - 30) * 8) / 3
+  return Math.min(70, 60 + (windSpeed - 45) * 2)               // 60 → 70 by 50; unpaddleable
 }
 
 function scoreWind(
