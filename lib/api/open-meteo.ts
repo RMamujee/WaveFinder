@@ -117,16 +117,24 @@ export async function fetchCurrentConditions(
   try { cache = getCache() } catch { cache = null }
   if (cache) {
     try {
-      const hit = await cache.get(cacheKey) as CurrentMarineConditions | null | undefined
+      const hit = await cache.get(cacheKey) as CurrentMarineConditions | NoDataSentinel | null | undefined
       // Vercel Runtime Cache returns null for missing keys, so we cannot
-      // distinguish a stored null from an absent entry — treat null as a miss
-      // and skip caching null results below.
-      if (hit !== null && hit !== undefined) return hit
+      // distinguish a stored null from an absent entry — a definitive "this
+      // cell has no marine data" is cached as a sentinel object instead, so
+      // land cells don't re-hit Open-Meteo on every origin run.
+      if (hit !== null && hit !== undefined) {
+        return 'noData' in hit ? null : hit
+      }
     } catch { /* fall through */ }
   }
 
   return dedupe(cacheKey, () => fetchCurrentConditionsUncached(lat, lng, cacheKey, cache))
 }
+
+// Cached in place of a result when Open-Meteo definitively returned null for
+// the cell (land/invalid grid point) — NOT for transient errors, which stay
+// uncached so they retry.
+interface NoDataSentinel { noData: true }
 
 async function fetchCurrentConditionsUncached(
   lat: number,
@@ -204,14 +212,18 @@ async function fetchCurrentConditionsUncached(
     // Null here means a land/invalid marine cell or a missing hour — NOT flat.
     // Returning null lets the route's nearest-neighbour fallback fire instead
     // of rendering a fabricated "flat/poor" reading that never self-corrects.
-    if (waveHeight == null) return null
+    // Cache the no-data verdict (sentinel) so the cell doesn't re-hit
+    // Open-Meteo on every uncached origin run.
+    if (waveHeight == null) {
+      try { await cache?.set(cacheKey, { noData: true }, { ttl: 5 * 60, tags: ['open-meteo'] }) } catch {}
+      return null
+    }
 
     const wavePeriod     = (hourly.wave_period as (number | null)[])[idx] ?? 0
     const swellHeight    = (hourly.swell_wave_height as (number | null)[])?.[idx] ?? 0
     const swellPeriod    = (hourly.swell_wave_period as (number | null)[])?.[idx] ?? 0
     const swellDirection = (hourly.swell_wave_direction as (number | null)[])[idx] ?? null
     const windWaveH      = (hourly.wind_wave_height as (number | null)[])[idx] ?? null
-    const windWaveDir    = (hourly.wind_wave_direction as (number | null)[])[idx] ?? null
 
     // Estimate wind speed from wind-wave height when weather API is unavailable
     const estimatedWindSpeed = windWaveH != null && windWaveH > 0
@@ -226,7 +238,11 @@ async function fetchCurrentConditionsUncached(
       swellDirection,
       windWaveHeight: windWaveH,
       windSpeed:     wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
-      windDirection: wind?.current?.wind_direction_10m ?? windWaveDir,
+      // Null when the weather API gave no direction — the engine's mean-
+      // direction branch handles it. The old wind_wave_direction stand-in
+      // rated an estimated breeze as if it blew from the chop's bearing,
+      // which the forecast route's merge explicitly stopped doing.
+      windDirection: wind?.current?.wind_direction_10m ?? null,
     }
     try { await cache?.set(cacheKey, result, { ttl: 5 * 60, tags: ['open-meteo'] }) } catch {}
     return result

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
 import type { ForecastHour, TidePoint } from '@/types/forecast'
 import type { OpenMeteoMarineResponse, OpenMeteoWindResponse } from '@/lib/api/open-meteo'
@@ -271,25 +271,51 @@ describe('mergeForecastData', () => {
       windFixture(times),
       { spotFacing: 270, lat: 33.8 }
     )
-    // Missing data must never score better than a genuinely clean reading.
-    expect(noChopData[0].ratingScore).toBeLessThanOrEqual(trulyClean[0].ratingScore)
+    // Missing data must never score better than a genuinely clean reading —
+    // strictly less: with the fix the cleanliness factor DROPS (renormalised
+    // weights) while a real 0-chop reading adds a 100-scored factor. A `?? 0`
+    // revert makes the two identical, which `<=` could not catch.
+    expect(noChopData[0].ratingScore).toBeLessThan(trulyClean[0].ratingScore)
   })
 })
 
 describe('findNearestFutureHour', () => {
-  const hourStr = (deltaHours: number) =>
-    new Date(Date.now() + deltaHours * 3600_000).toISOString().slice(0, 13) + ':00'
+  // Fixed clock: 20:30 UTC. Real Date.now() would let the old slice(0,16)
+  // logic pass during minute :00 of any hour — the test could then miss the
+  // exact regression it names.
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-05T20:30:00Z'))
+  })
+  afterEach(() => vi.useRealTimers())
 
   it('returns the in-progress hour, not the next one', () => {
     // Comparing with minutes included excluded the current hour for 59 of
     // every 60 minutes, so "Now" was systematically ~30 min in the future.
-    const hours = [makeHour(hourStr(-1), 'fair'), makeHour(hourStr(0), 'good'), makeHour(hourStr(1), 'fair')]
-    expect(findNearestFutureHour(hours, 0)?.time).toBe(hourStr(0))
+    const hours = [
+      makeHour('2026-08-05T19:00', 'fair'),
+      makeHour('2026-08-05T20:00', 'good'),
+      makeHour('2026-08-05T21:00', 'fair'),
+    ]
+    expect(findNearestFutureHour(hours, 0)?.time).toBe('2026-08-05T20:00')
+  })
+
+  it('applies the spot UTC offset to pick the spot-local hour', () => {
+    // 20:30 UTC at a UTC-8 spot is 12:30 spot-local. Parsing the local-clock
+    // strings in the runtime zone (the audited bug) would pick 21:00 — nine
+    // hours of surf conditions away from the truth.
+    const hours = [
+      makeHour('2026-08-05T11:00', 'fair'),
+      makeHour('2026-08-05T12:00', 'good'),
+      makeHour('2026-08-05T13:00', 'fair'),
+      makeHour('2026-08-05T21:00', 'poor'),
+    ]
+    expect(findNearestFutureHour(hours, -28800)?.time).toBe('2026-08-05T12:00')
   })
 
   it('falls back to the last hour when all hours are past', () => {
-    const hours = [makeHour(hourStr(-3), 'fair'), makeHour(hourStr(-2), 'good')]
-    expect(findNearestFutureHour(hours, 0)?.time).toBe(hourStr(-2))
+    const hours = [makeHour('2026-08-05T17:00', 'fair'), makeHour('2026-08-05T18:00', 'good')]
+    expect(findNearestFutureHour(hours, 0)?.time).toBe('2026-08-05T18:00')
   })
 })
 

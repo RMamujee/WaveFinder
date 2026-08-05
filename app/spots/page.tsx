@@ -174,7 +174,8 @@ export default function SpotsPage() {
     gcTime: 10 * 60 * 1000,
     retry: 1,
     // A browse tab left open must keep its ratings current — nothing else in
-    // the app triggers a refetch. 5 min matches the om:cond cache TTL.
+    // the app triggers a refetch. 5 min ≈ the om:cond runtime-cache TTL (the
+    // route's edge cache is shorter, s-maxage=180).
     refetchInterval: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     enabled: baseSpots.length > 0,
