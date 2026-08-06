@@ -67,7 +67,7 @@ deliberate and the tests pin the intended behaviour.
   `new Date(t)` them (Vercel runs UTC — the map's current hour was off by each
   spot's entire UTC offset, invisible in local dev). Shift `Date.now()` by
   `utc_offset_seconds` and compare strings, truncated to the hour so the
-  in-progress hour wins. See `findNearestFutureHour` + `fetchCurrentConditions`.
+  in-progress hour wins. See `findNearestFutureHour` + `pickHourIndex`.
 - `scoreFaceHeight` interpolates a curve rather than stepping buckets — step
   buckets erased the off-axis penalty whenever both sizes fell in one bucket.
 - Sanity-check tuning changes with `npx tsx scripts/rating-sanity.ts`, which
@@ -75,6 +75,30 @@ deliberate and the tests pin the intended behaviour.
 - Ratings feed `/api/forecast/[slug]`, `/api/spots?withConditions=true` and
   `/api/best-spots`. Only the forecast route has tide data; the other two pass
   no tide and let the weights renormalise.
+
+## Open-Meteo current conditions (`lib/api/open-meteo.ts`)
+
+- **Fetch coordinates in batches, not one at a time.** Open-Meteo takes
+  comma-separated `latitude`/`longitude` lists (and a matching `timezone` list)
+  and answers with a JSON array in request order.
+  `fetchCurrentConditionsBatch` groups cache misses into chunks of
+  `BATCH_COORDS` (50), so the map's ~130 coordinate buckets cost 3 round trips
+  rather than ~130. `fetchCurrentConditions` is a one-point wrapper over it.
+- **A short or reordered response is discarded, not zipped.** If the entry
+  count doesn't match the request, every spot in that chunk returns null and
+  falls back — handing a spot its neighbour's surf is worse than showing none.
+- **Only definitive outcomes are cached.** A no-data cell (model returned null
+  wave height — land/invalid grid point) caches the `{noData:true}` sentinel so
+  it stops being re-requested; a transient chunk failure caches nothing so it
+  retries. Don't collapse the two.
+- Parsing lives in `parseCurrentConditions`, which is pure and unit-tested —
+  Open-Meteo is unreachable from some networks, so keep the network layer thin
+  and the logic testable with fixtures.
+- **`?withConditions=true` returns a marker projection, not full spot records.**
+  It carries only what the map and its popups read. `/spots` merges it onto the
+  full list it already has; the home map renders from it directly, so anything
+  a popup needs must be added there too. Dropping `description` and the
+  webcam/NOAA-station ids cut the US payload 384 KB → 226 KB.
 
 ## Things that will bite you
 
