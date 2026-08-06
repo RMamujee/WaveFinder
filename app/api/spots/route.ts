@@ -3,8 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { listSpots } from '@/lib/spots/static-store'
 import { monitor } from '@/lib/monitoring'
 import type { SurfSpot } from '@/types/spot'
-import { fetchCurrentConditions } from '@/lib/api/open-meteo'
-import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
+import { fetchCurrentConditionsBatch } from '@/lib/api/open-meteo'
+import type { CurrentMarineConditions } from '@/lib/api/open-meteo'
+import { rateSurfConditions, computeWavePower, degreesToCompass } from '@/lib/forecast/rating'
 import { buildSpatialIndex, findNearestInIndex } from '@/lib/forecast/nearest-fallback'
 import { inferBottomType } from '@/lib/bottom-type'
 
@@ -122,9 +123,10 @@ export async function GET(req: Request) {
   // forecast you see after clicking through. Offshore buoys with attenuation
   // factors were producing values that diverged from the per-spot forecast.
   //
-  // Spots within ~11 km of each other share one API call (1-decimal lat/lng bucket).
-  // 212 spots → ~100–130 unique buckets.  The in-memory cache in fetchCurrentConditions
-  // turns subsequent requests (within 5 min on the same warm instance) into instant hits.
+  // Spots within ~11 km of each other share one reading (1-decimal lat/lng
+  // bucket). 212 spots → ~100–130 unique buckets, which fetchCurrentConditionsBatch
+  // sends as ~3 multi-location requests rather than ~130 single-location ones.
+  // Its runtime cache turns repeat requests within 5 min into instant hits.
   const buckets = new Map<string, { lat: number; lng: number }>()
   for (const spot of spots) {
     const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
@@ -132,21 +134,12 @@ export async function GET(req: Request) {
   }
   const bucketKeys = [...buckets.keys()]
 
-  // Process in batches of 40.  Each call times out at 5 s, so worst-case a
-  // batch of 40 takes 5 s.  ~120 unique buckets → 3 batches → ≤15 s total.
-  const BATCH = 40
-  const omResults: (Awaited<ReturnType<typeof fetchCurrentConditions>>)[] = []
-  for (let i = 0; i < bucketKeys.length; i += BATCH) {
-    const slice = bucketKeys.slice(i, i + BATCH)
-    const batch = await Promise.all(
-      slice.map((k) => fetchCurrentConditions(buckets.get(k)!.lat, buckets.get(k)!.lng)
-        .catch(() => null))
-    )
-    omResults.push(...batch)
-  }
+  const omResults = await fetchCurrentConditionsBatch(
+    bucketKeys.map((k) => buckets.get(k)!)
+  ).catch(() => bucketKeys.map(() => null))
 
-  const omMap = new Map<string, Awaited<ReturnType<typeof fetchCurrentConditions>>>()
-  bucketKeys.forEach((k, i) => omMap.set(k, omResults[i]))
+  const omMap = new Map<string, CurrentMarineConditions | null>()
+  bucketKeys.forEach((k, i) => omMap.set(k, omResults[i] ?? null))
 
   type EnrichedSpot = (typeof spots)[0] & {
     currentRating: string
@@ -244,11 +237,37 @@ export async function GET(req: Request) {
     spot.wavePower            = computeWavePower(wh, period)
   }
 
-  const response = enriched.map((spot) => {
-    const { _needsFallback, ...rest } = spot
-    void _needsFallback
-    return { ...rest, bottomType: inferBottomType(rest.description, rest.name) }
-  })
+  // A marker projection, not a full spot record. /spots merges this onto the
+  // full list it already fetched; the home map renders from it directly, so it
+  // carries every field the map and its popups read and drops the rest.
+  // Measured against prod (582 US spots, 394 KB): `description` alone was 27%
+  // of the payload, and the webcam/NOAA-station ids another 13% — none of which
+  // any map surface reads. Adding a field to the map means adding it here.
+  const response = enriched.map((spot) => ({
+    id:              spot.id,
+    slug:            spot.slug,
+    name:            spot.name,
+    region:          spot.region,
+    country:         spot.country,
+    lat:             spot.lat,
+    lng:             spot.lng,
+    difficulty:      spot.difficulty,
+    facingDirection: spot.facingDirection,
+    bottomType:      inferBottomType(spot.description, spot.name),
+    parkingOptions:  spot.parkingOptions,
+    currentRating:      spot.currentRating,
+    currentWaveHeight:  spot.currentWaveHeight,
+    currentFaceHeight:  spot.currentFaceHeight,
+    currentPeriod:      spot.currentPeriod,
+    currentWindSpeed:   spot.currentWindSpeed,
+    // Compass label rather than degrees: the map popup reads `currentWindDir`
+    // and has been rendering an empty string, because the route only ever sent
+    // the numeric `currentWindDirection` under a different name.
+    currentWindDir:     spot.currentWindDirection != null
+      ? degreesToCompass(spot.currentWindDirection)
+      : null,
+    wavePower:          spot.wavePower,
+  }))
   return NextResponse.json(response, {
     headers: { 'Cache-Control': 's-maxage=180, stale-while-revalidate=60' },
   })
