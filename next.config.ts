@@ -18,10 +18,14 @@ const securityHeaders = [
       // Fonts are self-hosted via next/font — no Google Fonts origins needed.
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self'",
-      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.wikimedia.org https://tile.openstreetmap.org https://server.arcgisonline.com https://*.arcgisonline.com https://*.arcgis.com https://*.basemaps.cartocdn.com https://cartodb-basemaps-*.global.ssl.fastly.net https://tiles.openseamap.org",
+      "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://maps.wikimedia.org https://tile.openstreetmap.org https://server.arcgisonline.com https://*.arcgisonline.com https://*.arcgis.com https://*.basemaps.cartocdn.com https://tiles.openseamap.org",
       "connect-src 'self' https://*.open-meteo.com https://api.open-meteo.com https://www.ndbc.noaa.gov https://tidesandcurrents.noaa.gov https://www.waterqualitydata.us https://server.arcgisonline.com https://*.arcgisonline.com https://*.basemaps.cartocdn.com",
       "frame-src 'self'",
-      "worker-src blob:",
+      // 'self' is required for /sw.js. Without it the service worker was
+      // blocked from ever registering — and PWAInit swallows the failure with
+      // .catch(() => {}), so the precache and cache-first static handling in
+      // public/sw.js had simply never run.
+      "worker-src 'self' blob:",
       "media-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",

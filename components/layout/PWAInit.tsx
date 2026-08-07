@@ -17,7 +17,13 @@ export function PWAInit() {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {})
+      // Log the failure rather than swallowing it. A `.catch(() => {})` here is
+      // why a CSP `worker-src blob:` directive silently blocked registration
+      // outright — the precache and cache-first static handling in
+      // public/sw.js never ran, and nothing anywhere said so.
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('[pwa] service worker registration failed', err)
+      })
     }
 
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches
