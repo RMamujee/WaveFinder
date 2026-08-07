@@ -124,6 +124,9 @@ const DIFFICULTY_SCALE = {
   beginner: 0.55,
   intermediate: 1,
   advanced: 1.5,
+  // Nazaré, Mullaghmore, Dungeons, Jaws. These breaks do not wake up until the
+  // size that closes everything else out, so head-high there is a non-event.
+  expert: 2.2,
 } as const
 
 export type SpotDifficulty = keyof typeof DIFFICULTY_SCALE

@@ -239,7 +239,22 @@ unbounded. The unbounded column is finding 1.5.
 ## Status
 
 - **Phase 1 — shipped** (PR #10, 2026-08-05): 1.1-1.5 in full.
-- **Phase 2 — not started.** Spot-metadata work (tier 3) is still entirely open.
+- **Phase 2 — shipped** (2026-08-07): tide stations re-derived from coordinates
+  by `scripts/map-tide-stations.ts` (nearest CO-OPS *reference* station ≤75 km,
+  null beyond) · Pipeline-cluster and Tavarua facings · 8 duplicate records
+  merged behind `lib/spots/spot-aliases.ts` · `expert` added to the difficulty
+  enum end-to-end · `bottomType` promoted to a stored seed field with the three
+  rule-ordering bugs fixed · `tests/spots-seed.test.ts` seed assertions ·
+  `scripts/check-spot-coordinates.ts` verifies every spot resolves to a live
+  marine cell.
+  **Correction to this audit:** it recommends station 1612668 (Haleiwa) for the
+  Oahu cluster. That is a *subordinate* station — two thirds of CO-OPS's
+  published list is — and subordinate stations cannot answer the hourly MLLW
+  query `fetchTidePredictions` sends. Verified live: 1612668 returns nothing,
+  1612340 (Honolulu, type R) returns 72 hourly points. "Nearest station" must
+  read "nearest reference station" or it recreates the Yakutat failure at scale.
+  Still open from tier 3: the 21 coarse coordinates (frozen as a backlog in the
+  seed test) and the 21 spots floored on their own described ideal swell.
 - **Phase 3 — shipped** (2026-08-07): 2.1 secondary partition · 2.2 mean→peak
   period recalibration + interpolation · 2.3 buoy blending · 2.4 absolute-depth
   tide + rising/falling · 2.5 quadrature cleanliness on `effectiveSwell` · 2.6
