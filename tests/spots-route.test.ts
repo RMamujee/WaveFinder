@@ -20,6 +20,7 @@ const CONDITIONS: CurrentMarineConditions = {
   secondarySwellPeriod: null,
   secondarySwellDirection: null,
   windWaveHeight: 0.3,
+  windWavePeriod: 4,
   windSpeed: 9,
   windDirection: 45,
 }

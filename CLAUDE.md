@@ -67,6 +67,27 @@ deliberate and the tests pin the intended behaviour.
   values at the sizes where it changed, so every boundary judgement is preserved
   and only the cliffs are gone (8 cm of face across 1.6 m used to be 20 points).
   `npx tsx scripts/rating-sanity.ts` verdicts are unchanged by this.
+- **Gusts are scored, not just displayed** (2026-08-07). A measured gust above
+  the mean speed is blended into the speed the engine scores (`GUST_WEIGHT`
+  0.4) — 12 km/h gusting 35 no longer rates like 12 km/h steady. Only a
+  *measured* gust counts: `merge.ts` passes null when the weather API had no
+  entry, because the displayed gust is then a `speed × 1.25` stand-in and
+  feeding it back would invent a penalty from a missing reading.
+- **`computeWavePower` takes PARTITIONS, not a height and a period.** Energy is
+  additive across partitions but period is not; charging the whole sea at the
+  groundswell's period overstated mixed seas by 1.79-2.0×. This number drives
+  the gear recommendations and the "high energy" label, so it is not cosmetic.
+  A buoy report is legitimately a single partition (its own WVHT/DPD pair).
+- **UV is `12.5 · sin(elevation)^2.42`, attenuated by cloud.** The old
+  `11 · sin(noonElev)^0.25 · sin(elev)^0.6` had far too shallow an exponent and
+  only agreed with reality near where it was eyeballed — LA winter noon read
+  6.5 against an actual 2.7. Cloud uses `1 − 0.56·C^3.4`: UV is much less
+  cloud-sensitive than visible light, so broken cloud barely matters and full
+  overcast removes just over half. Needs `cloud_cover` from the wind fetch.
+- **Day aggregates are taken over surfable hours** (06:00–18:00), falling back
+  to all hours when a partial day has no daylight. `dominantRating` already
+  did; `maxFaceHeight`, `maxWaveHeight` and `avgPeriod` did not, so a day's
+  headline size could be reported from 03:00.
 - **NDBC observations feed the rating** (`MergeContext.buoy`), not just the
   display: the model's swell period/direction is blended toward the buoy for the
   hours the observation describes (max weight 0.6, fading to 0 over 6 h, ignored
