@@ -46,12 +46,12 @@ async function getSpots(query: string) {
 }
 
 describe('GET /api/spots — CDN caching', () => {
-  // A plain Cache-Control does not survive to Vercel's edge as a
-  // stale-while-revalidate directive. Measured in production, an expired entry
-  // went straight from X-Vercel-Cache HIT (0.27 s) to MISS (4.67 s) — never
-  // STALE — so every expiry made one visitor wait out the whole Open-Meteo
-  // fan-out staring at grey "No data" pins. Vercel-CDN-Cache-Control is the
-  // header the edge honours; losing it again would silently restore the stall.
+  // The stale window is what keeps a visitor off the cold path. It only covers
+  // the period after s-maxage lapses, so 180 s fresh + 60 s stale meant any
+  // 4-minute gap in traffic evicted the entry and made the next visitor wait
+  // out the whole Open-Meteo fan-out — 4.7 s of grey "No data" pins, measured
+  // in production. These assertions exist because the defect was invisible for
+  // months: the directive looked right in source.
   for (const query of ['country=USA', 'slim=true', 'withConditions=true&q=Malibu']) {
     it(`serves stale while revalidating for ?${query}`, async () => {
       const res = await GET(new Request(`http://localhost/api/spots?${query}`))
