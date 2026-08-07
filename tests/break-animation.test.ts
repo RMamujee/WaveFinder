@@ -4,6 +4,9 @@ import {
   deriveBreakHand,
   isBreakAnimationRegion,
   periodToSetInterval,
+  crestCountForPeriod,
+  MIN_CRESTS,
+  MAX_CRESTS,
   relativeSwellAngle,
 } from '@/lib/forecast/break-animation'
 
@@ -129,8 +132,8 @@ describe('periodToSetInterval', () => {
   })
 
   it('clamps rather than producing unwatchably fast or frozen-looking motion', () => {
-    expect(periodToSetInterval(1)).toBeGreaterThanOrEqual(2.6)
-    expect(periodToSetInterval(40)).toBeLessThanOrEqual(10.5)
+    expect(periodToSetInterval(1)).toBeGreaterThanOrEqual(1.2)
+    expect(periodToSetInterval(40)).toBeLessThanOrEqual(3.6)
   })
 
   it('treats missing/invalid swell data the same as the slowest real cadence, not a crash', () => {
@@ -165,5 +168,40 @@ describe('relativeSwellAngle', () => {
         expect(diff).toBeLessThanOrEqual(180)
       }
     }
+  })
+})
+
+// ── Crest spacing (2026-08-07 redesign) ─────────────────────────────────────
+// Period is encoded twice in the diagram: as cadence, and as how many crests
+// occupy the same stretch of water. The second channel is what makes period
+// legible in a still frame — which matters because that still frame is exactly
+// what prefers-reduced-motion users and swell-less forecasts get.
+describe('crestCountForPeriod', () => {
+  it('puts fewer crests on screen for a longer period', () => {
+    expect(crestCountForPeriod(16)).toBeLessThan(crestCountForPeriod(7))
+  })
+
+  it('never falls outside the drawable range', () => {
+    for (const p of [0, -3, 0.5, 2, 7, 12, 16, 25, 200, NaN, Infinity]) {
+      const n = crestCountForPeriod(p)
+      expect(n, `period ${p}`).toBeGreaterThanOrEqual(MIN_CRESTS)
+      expect(n, `period ${p}`).toBeLessThanOrEqual(MAX_CRESTS)
+      expect(Number.isInteger(n), `period ${p}`).toBe(true)
+    }
+  })
+
+  it('is monotonic — a longer period never adds crests', () => {
+    let previous = crestCountForPeriod(4)
+    for (let p = 4; p <= 24; p += 0.5) {
+      const n = crestCountForPeriod(p)
+      expect(n, `period ${p}`).toBeLessThanOrEqual(previous)
+      previous = n
+    }
+  })
+
+  it('degrades to the sparsest frame when there is no swell', () => {
+    // Shares the no-swell path with the static frame, so a dead forecast reads
+    // as calm rather than as busy short-period chop.
+    expect(crestCountForPeriod(0)).toBe(MIN_CRESTS)
   })
 })
