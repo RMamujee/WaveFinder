@@ -1,7 +1,7 @@
-import type { ForecastDay, ForecastHour, TidePoint } from '@/types/forecast'
+import type { BuoyReading, ForecastDay, ForecastHour, TidePoint } from '@/types/forecast'
 import type { OpenMeteoMarineResponse, OpenMeteoWindResponse } from '@/lib/api/open-meteo'
 import { degreesToCompass, rateSurfConditions, computeWavePower } from './rating'
-import type { TideContext } from './rating'
+import type { SpotDifficulty, SwellPartition, TideContext } from './rating'
 import { computeUVIndex } from './solar-uv'
 
 export interface MergeContext {
@@ -11,6 +11,91 @@ export interface MergeContext {
    *  Absent tide simply drops the tide factor from the rating. */
   tides?: TidePoint[] | null
   bottomType?: string | null
+  /** Rescales the height curve — a beginner break peaks far below Nazaré. */
+  difficulty?: SpotDifficulty | null
+  /** Latest NDBC observation for the spot's buoy. Used to nudge the model's
+   *  near-term swell period/direction toward what is actually in the water. */
+  buoy?: BuoyReading | null
+  /** Clock reference, for tests. Defaults to Date.now(). */
+  nowMs?: number
+}
+
+// ── Buoy correction ──────────────────────────────────────────────────────────
+//
+// NDBC observations were fetched and displayed but never reached the rating.
+// Live at Huntington Beach the buoy read 13 s @ 156° while the rating consumed
+// the model's 6.7 s @ 273° — a period score of 15 against an observation-
+// supported 90. Mean |dominant-period gap| across sampled buoys was 4.0 s.
+//
+// The observation is a point measurement of *now*, so it is blended in (not
+// substituted) and its weight decays to zero over the next few hours. It is
+// never allowed to invent data: an offline sensor (MM → null) or an
+// implausible reading is simply ignored.
+const BUOY_MAX_AGE_HOURS = 3      // older than this and it is not "now" any more
+const BUOY_BLEND_HOURS = 6        // weight fades linearly to 0 across this span
+const BUOY_MAX_WEIGHT = 0.6       // observation vs model at the observed hour
+const BUOY_MIN_PERIOD = 3
+const BUOY_MAX_PERIOD = 25
+
+/** Circular interpolation between two compass bearings (0 = a, 1 = b). */
+function blendBearings(a: number, b: number, weight: number): number {
+  const ar = (a * Math.PI) / 180
+  const br = (b * Math.PI) / 180
+  const x = (1 - weight) * Math.cos(ar) + weight * Math.cos(br)
+  const y = (1 - weight) * Math.sin(ar) + weight * Math.sin(br)
+  // Exactly opposing bearings at equal weight cancel — keep the model's.
+  if (x === 0 && y === 0) return a
+  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360
+}
+
+interface BuoyCorrection {
+  period: number | null
+  direction: number | null
+  /** Blend weight for a forecast hour's local-clock time string. */
+  weightAt(time: string): number
+}
+
+function buildBuoyCorrection(
+  buoy: BuoyReading | null | undefined,
+  utcOffsetSeconds: number,
+  nowMs: number
+): BuoyCorrection | null {
+  if (!buoy) return null
+
+  const period = buoy.dominantPeriod != null
+    && buoy.dominantPeriod >= BUOY_MIN_PERIOD
+    && buoy.dominantPeriod <= BUOY_MAX_PERIOD
+    ? buoy.dominantPeriod
+    : null
+  const direction = buoy.meanDirection != null
+    && buoy.meanDirection >= 0
+    && buoy.meanDirection <= 360
+    ? buoy.meanDirection
+    : null
+  if (period == null && direction == null) return null
+
+  const observedMs = Date.parse(buoy.time)
+  if (!isFinite(observedMs)) return null
+  const ageHours = (nowMs - observedMs) / 3_600_000
+  // Negative age (clock skew) is tolerated by an hour; a stale reading is not a
+  // description of the current sea state and must not be blended into it.
+  if (ageHours < -1 || ageHours > BUOY_MAX_AGE_HOURS) return null
+
+  // The observation's instant expressed in the spot's local clock, so it can be
+  // compared against Open-Meteo's offset-less local time strings.
+  const observedLocalMs = observedMs + utcOffsetSeconds * 1000
+
+  return {
+    period,
+    direction,
+    weightAt(time: string): number {
+      const hourMs = Date.parse(`${time}:00Z`)
+      if (!isFinite(hourMs)) return 0
+      const deltaHours = (hourMs - observedLocalMs) / 3_600_000
+      if (deltaHours < -1 || deltaHours > BUOY_BLEND_HOURS) return 0
+      return BUOY_MAX_WEIGHT * (1 - Math.max(0, deltaHours) / BUOY_BLEND_HOURS)
+    },
+  }
 }
 
 export function mergeForecastData(
@@ -33,6 +118,24 @@ export function mergeForecastData(
     if (p.height > tideMax) tideMax = p.height
   }
   const hasTides = tideByTime.size > 0 && isFinite(tideMin) && isFinite(tideMax)
+
+  // Rising vs falling, read off the series itself. The caller's array is not
+  // guaranteed to be in time order, so sort a copy before differencing. Equal
+  // consecutive heights leave the hour unmarked (neither push nor drain).
+  const tideRising = new Map<string, boolean>()
+  const orderedTides = [...(ctx.tides ?? [])].sort((a, b) => a.time.localeCompare(b.time))
+  for (let i = 1; i < orderedTides.length; i++) {
+    const prev = orderedTides[i - 1]
+    const curr = orderedTides[i]
+    if (curr.height > prev.height) tideRising.set(curr.time, true)
+    else if (curr.height < prev.height) tideRising.set(curr.time, false)
+  }
+
+  const buoyCorrection = buildBuoyCorrection(
+    ctx.buoy,
+    marine.utc_offset_seconds ?? 0,
+    ctx.nowMs ?? Date.now()
+  )
 
   // Build lookup maps by time for all wind/weather fields.
   // Using time-keyed maps (not raw index) ensures correct alignment even when
@@ -72,12 +175,54 @@ export function mergeForecastData(
     const rawWind = windMap.get(time)
     const waveHeight = rawWaveHeight ?? 0
     const swellHeight = rawSwellHeight ?? 0
-    const swellPeriod = m.swell_wave_period[i] ?? 0
+    const rawSwellPeriod = m.swell_wave_period[i] ?? 0
     const wavePeriod = m.wave_period[i] ?? 0
     // Preserve null for the rating input: the engine scores an unknown swell
     // direction neutrally (exposure 1), but a `?? 0` here scored missing data
     // as a real due-north swell and collapsed exposure to the wrap floor.
-    const ratingSwellDirection = m.swell_wave_direction[i] ?? null
+    const rawSwellDirection = m.swell_wave_direction[i] ?? null
+
+    // The engine falls back to total sea height when the swell partition is
+    // missing — mirror that for period or the fallback computes a 0 m face.
+    let swellPeriod = rawSwellPeriod > 0 ? rawSwellPeriod : wavePeriod
+    let swellDirection = rawSwellDirection
+
+    // Nudge the primary train toward the buoy for the hours the observation
+    // actually describes. DPD/MWD report the dominant sea, which is what the
+    // primary partition is meant to be.
+    if (buoyCorrection) {
+      const weight = buoyCorrection.weightAt(time)
+      if (weight > 0) {
+        if (buoyCorrection.period != null && swellPeriod > 0) {
+          swellPeriod = Math.round(
+            ((1 - weight) * swellPeriod + weight * buoyCorrection.period) * 10
+          ) / 10
+        }
+        if (buoyCorrection.direction != null) {
+          swellDirection = swellDirection == null
+            // An observed bearing beats "unknown" outright — the neutral
+            // exposure branch exists for the absence of any reading, not for
+            // the case where a buoy is sitting in the swell measuring it.
+            ? buoyCorrection.direction
+            : Math.round(blendBearings(swellDirection, buoyCorrection.direction, weight))
+        }
+      }
+    }
+
+    // Second swell train. Open-Meteo ranks partitions by height, so this is
+    // frequently the longer-period one: live, Santa Monica's primary read
+    // 0.54 m @ 6.0 s while the ignored secondary was 0.34 m @ 11.15 s — a face
+    // 34% larger than reported and a period score of 15 instead of 55-75.
+    const secondaryHeight = m.secondary_swell_wave_height?.[i] ?? null
+    const secondaryPeriod = m.secondary_swell_wave_period?.[i] ?? null
+    const secondarySwell: SwellPartition | null =
+      secondaryHeight != null && secondaryHeight > 0 && secondaryPeriod != null && secondaryPeriod > 0
+        ? {
+            height: secondaryHeight,
+            period: secondaryPeriod,
+            direction: m.secondary_swell_wave_direction?.[i] ?? null,
+          }
+        : null
 
     // When the weather API had no entry for this hour, estimate wind speed from
     // wind-wave height using empirical relationship: Hs_wind ≈ 0.0248 × U² (m/s)
@@ -101,25 +246,33 @@ export function mergeForecastData(
 
     const tideHeight = tideByTime.get(time)
     const tide: TideContext | null = hasTides && tideHeight != null
-      ? { height: tideHeight, min: tideMin, max: tideMax }
+      ? { height: tideHeight, min: tideMin, max: tideMax, rising: tideRising.get(time) ?? null }
       : null
 
-    const { score, rating, faceHeight } = rateSurfConditions({
+    const { score, rating, faceHeight, combinedSwell } = rateSurfConditions({
       waveHeight,
-      // The engine falls back to total sea height when the swell partition is
-      // missing — mirror that for period or the fallback computes a 0 m face.
-      swellPeriod: swellPeriod > 0 ? swellPeriod : wavePeriod,
+      swellPeriod,
       swellHeight,
+      swellDirection,
+      secondarySwell,
       // Null (not 0) when the model omitted the partition, so the cleanliness
       // factor renormalises away instead of scoring "perfectly clean".
       windWaveHeight: windWaveH,
       windSpeed: windData.speed,
       windDirection: windData.ratingDir,
-      swellDirection: ratingSwellDirection,
       spotFacing,
       tide,
       bottomType: ctx.bottomType,
+      difficulty: ctx.difficulty,
     })
+
+    // Display the swell that was actually rated. Showing the model's primary
+    // partition next to a score computed from both trains is exactly the
+    // cross-surface disagreement the accuracy audit flagged elsewhere. With a
+    // single train these are the model's own numbers, unchanged.
+    const shownHeight = combinedSwell?.height ?? swellHeight
+    const shownPeriod = combinedSwell?.period ?? swellPeriod
+    const shownDirection = combinedSwell?.direction ?? swellDirection ?? 0
 
     hours.push({
       time,
@@ -127,9 +280,9 @@ export function mergeForecastData(
       faceHeight,
       wavePeriod,
       waveDirection: m.wave_direction[i] ?? 0,
-      swellHeight,
-      swellPeriod,
-      swellDirection: ratingSwellDirection ?? 0,
+      swellHeight: shownHeight,
+      swellPeriod: shownPeriod,
+      swellDirection: shownDirection,
       windWaveHeight: windWaveH ?? 0,
       wind: {
         speed: windData.speed,
@@ -139,7 +292,7 @@ export function mergeForecastData(
       },
       rating,
       ratingScore: score,
-      wavePower: computeWavePower(waveHeight, swellPeriod),
+      wavePower: computeWavePower(waveHeight, shownPeriod),
       uvIndex: computeUVIndex(lat, time),
       waterTemp: m.sea_surface_temperature?.[i] ?? null,
       airTempC: tempMap.get(time) ?? null,

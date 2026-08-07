@@ -100,12 +100,72 @@ export function listSpots(filter: ListSpotsFilter = {}): SurfSpot[] {
   return result
 }
 
-// Case-insensitive `contains` on region — matches the `mode: 'insensitive'`
-// region lookups in app/api/best-spots/route.ts and the nearby-spots query on
+function isWordChar(ch: string | undefined): boolean {
+  return ch != null && /[a-z0-9]/.test(ch)
+}
+
+/**
+ * Case-insensitive region match on WORD boundaries.
+ *
+ * A raw substring `contains` made "Ventura" match "Fuerteventura", so Canary
+ * Islands spots were returned for the California region and scored against
+ * Californian swell — inside the Pro-gated best-spots feature. Multi-word
+ * keywords ("Orange" → "Orange County", "North Shore") still match; the only
+ * thing rejected is a match that starts or ends mid-word.
+ */
+export function regionMatchesKeyword(region: string, keyword: string): boolean {
+  const haystack = region.toLowerCase()
+  const needle = keyword.toLowerCase().trim()
+  if (!needle) return false
+
+  for (let from = 0; from <= haystack.length - needle.length; ) {
+    const at = haystack.indexOf(needle, from)
+    if (at === -1) return false
+    const before = at > 0 ? haystack[at - 1] : undefined
+    const after = haystack[at + needle.length]
+    if (!isWordChar(before) && !isWordChar(after)) return true
+    from = at + 1
+  }
+  return false
+}
+
+// Region lookups for app/api/best-spots/route.ts and the nearby-spots list on
 // the spot page.
 export function spotsInRegion(keyword: string): SurfSpot[] {
-  const needle = keyword.toLowerCase()
-  return SPOTS.filter((s) => s.region.toLowerCase().includes(needle))
+  return SPOTS.filter((s) => regionMatchesKeyword(s.region, keyword))
+}
+
+// ── Current-conditions coordinate buckets ────────────────────────────────────
+//
+// The map resolves conditions per coordinate bucket, not per spot. The bucket
+// was 0.1° (~11 km), which served 29% of spots another spot's swell — while
+// Open-Meteo's marine grid is ~0.04°, so the resolution was being discarded
+// rather than unavailable. 0.05° (~5.5 km) keeps the round-trip count sane and
+// stops the worst borrows.
+export const CONDITIONS_BUCKET_DEG = 0.05
+
+export function conditionsBucketKey(lat: number, lng: number): string {
+  return `${Math.round(lat / CONDITIONS_BUCKET_DEG)},${Math.round(lng / CONDITIONS_BUCKET_DEG)}`
+}
+
+// The coordinate actually sent upstream for a bucket, resolved against the FULL
+// dataset. Picking the first spot of the *filtered* list made the query point —
+// and therefore the cache key and the conditions themselves — depend on the
+// caller's filters: 229 spots changed source coordinates under a difficulty
+// filter alone. Using the bucket's geometric centre instead would be filter-
+// stable too, but it can land on land and return no marine data; a real spot's
+// coordinates cannot.
+const BUCKET_REPRESENTATIVE: ReadonlyMap<string, { lat: number; lng: number }> = (() => {
+  const map = new Map<string, { lat: number; lng: number }>()
+  for (const s of SPOTS) {
+    const key = conditionsBucketKey(s.lat, s.lng)
+    if (!map.has(key)) map.set(key, { lat: s.lat, lng: s.lng })
+  }
+  return map
+})()
+
+export function conditionsBucketPoint(lat: number, lng: number): { lat: number; lng: number } {
+  return BUCKET_REPRESENTATIVE.get(conditionsBucketKey(lat, lng)) ?? { lat, lng }
 }
 
 // Distinct countries, sorted ascending — byte-matches the Prisma

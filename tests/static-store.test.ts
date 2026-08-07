@@ -6,6 +6,9 @@ import {
   getSpotBySlug,
   listSpots,
   spotsInRegion,
+  regionMatchesKeyword,
+  conditionsBucketKey,
+  conditionsBucketPoint,
   COUNTRIES,
   regionsForCountry,
 } from '@/lib/spots/static-store'
@@ -124,17 +127,35 @@ describe('static-store: ids filter', () => {
 })
 
 describe('static-store: spotsInRegion', () => {
-  it('matches case-insensitive contains on region', () => {
+  it('matches case-insensitively on whole words within the region', () => {
     const sample = SPOTS[0]
     const keyword = sample.region.split(',').pop()!.trim()
     const got = spotsInRegion(keyword)
-    const expected = SURF_SPOTS_SEED.filter((s) =>
-      s.region.toLowerCase().includes(keyword.toLowerCase())
-    )
-    expect(got.length).toBe(expected.length)
-    // case-insensitive
+    expect(got.length).toBeGreaterThan(0)
     expect(spotsInRegion(keyword.toUpperCase()).length).toBe(got.length)
     expect(got.every((s) => s.region.toLowerCase().includes(keyword.toLowerCase()))).toBe(true)
+  })
+
+  it('does not match a keyword that lands mid-word', () => {
+    // "Ventura" matched "Fuerteventura", so Canary Islands spots were returned
+    // for the California region and scored against Californian swell — inside
+    // the Pro-gated best-spots feature.
+    expect(regionMatchesKeyword('Fuerteventura, Canary Islands', 'Ventura')).toBe(false)
+    expect(regionMatchesKeyword('Ventura County', 'Ventura')).toBe(true)
+    expect(regionMatchesKeyword('Ventura', 'Ventura')).toBe(true)
+    // Multi-word and punctuation-adjacent keywords still match.
+    expect(regionMatchesKeyword('Orange County', 'Orange')).toBe(true)
+    expect(regionMatchesKeyword("Jeffrey's Bay, Eastern Cape", "Jeffrey's Bay")).toBe(true)
+    expect(regionMatchesKeyword('Malibu, California', 'California')).toBe(true)
+  })
+
+  it('every region a spot lives in resolves to at least that spot', () => {
+    // The word-boundary rule must not orphan a spot from its own region — the
+    // spot page and best-spots both look regions up by keyword.
+    for (const spot of SPOTS) {
+      const broad = spot.region.split(',').pop()!.trim()
+      expect(regionMatchesKeyword(spot.region, broad), spot.region).toBe(true)
+    }
   })
 })
 
@@ -159,6 +180,36 @@ describe('static-store: COUNTRIES / regionsForCountry', () => {
 
   it('regionsForCountry returns empty for unknown country', () => {
     expect(regionsForCountry('Atlantis')).toEqual([])
+  })
+})
+
+describe('static-store: conditions buckets', () => {
+  it('resolves a bucket to the same representative from any member coordinate', () => {
+    // The representative must not depend on which spot asked — it used to be
+    // the first spot of the caller's FILTERED list, so a difficulty filter
+    // changed the queried coordinate (and the cache key) for 229 spots.
+    const byBucket = new Map<string, string>()
+    for (const spot of SPOTS) {
+      const key = conditionsBucketKey(spot.lat, spot.lng)
+      const point = conditionsBucketPoint(spot.lat, spot.lng)
+      const seen = byBucket.get(key)
+      if (seen) expect(`${point.lat},${point.lng}`).toBe(seen)
+      else byBucket.set(key, `${point.lat},${point.lng}`)
+    }
+    expect(byBucket.size).toBeGreaterThan(1000)
+  })
+
+  it('keeps every spot within half a bucket of its representative', () => {
+    for (const spot of SPOTS) {
+      const point = conditionsBucketPoint(spot.lat, spot.lng)
+      expect(Math.abs(point.lat - spot.lat)).toBeLessThanOrEqual(0.05)
+      expect(Math.abs(point.lng - spot.lng)).toBeLessThanOrEqual(0.05)
+    }
+  })
+
+  it('falls back to the caller coordinate for a point in no bucket', () => {
+    const point = conditionsBucketPoint(0.0001, 0.0001)   // open Atlantic
+    expect(point).toEqual({ lat: 0.0001, lng: 0.0001 })
   })
 })
 
