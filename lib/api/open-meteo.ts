@@ -64,6 +64,12 @@ export interface OpenMeteoMarineResponse {
     swell_wave_height: number[]
     swell_wave_direction: number[]
     swell_wave_period: number[]
+    // Open-Meteo ranks swell partitions by HEIGHT, so the longer-period train
+    // is often the second one. Absent past day ~10 (no decomposition) and on
+    // payloads cached before the partition was requested — hence optional.
+    secondary_swell_wave_height?: (number | null)[]
+    secondary_swell_wave_direction?: (number | null)[]
+    secondary_swell_wave_period?: (number | null)[]
     wind_wave_height: number[]
     wind_wave_direction: number[]
     wind_wave_period: number[]
@@ -97,6 +103,11 @@ export interface CurrentMarineConditions {
    *  `waveHeight * 0.7`, which rated onshore chop as if it were swell. */
   swellHeight: number
   swellPeriod: number
+  /** Second swell train. Partitions rank by height, so this is frequently the
+   *  longer-period (more surfable) one. Null when the model reports none. */
+  secondarySwellHeight: number | null
+  secondarySwellPeriod: number | null
+  secondarySwellDirection: number | null
   windWaveHeight: number | null
   windSpeed: number
   windDirection: number | null
@@ -117,6 +128,9 @@ export interface MarineCurrentEntry {
     swell_wave_height?: (number | null)[]
     swell_wave_period?: (number | null)[]
     swell_wave_direction?: (number | null)[]
+    secondary_swell_wave_height?: (number | null)[]
+    secondary_swell_wave_period?: (number | null)[]
+    secondary_swell_wave_direction?: (number | null)[]
     wind_wave_height?: (number | null)[]
     wind_wave_direction?: (number | null)[]
   }
@@ -147,9 +161,9 @@ function condCacheKey(lat: number, lng: number): string {
   // Round to 2 decimal places (~1 km) for the cache key — finer than the
   // 1-decimal bucket used in the route, so accuracy is preserved while
   // repeated calls still deduplicate.
-  // v4: v3 entries carry 0-coerced values where the model returned null and an
-  // hour selected with the UTC-offset bug — both fixed in the 2026-08-05 pass.
-  return `om:cond:v4:${lat.toFixed(2)},${lng.toFixed(2)}`
+  // v5: v4 entries predate the secondary swell partition, so a hit would rate
+  // the map from the primary train alone while the spot page used both.
+  return `om:cond:v5:${lat.toFixed(2)},${lng.toFixed(2)}`
 }
 
 function tryGetCache(): ReturnType<typeof getCache> | null {
@@ -213,6 +227,11 @@ export function parseCurrentConditions(
     swellHeight:    hourly.swell_wave_height?.[idx] ?? 0,
     swellPeriod:    hourly.swell_wave_period?.[idx] ?? 0,
     swellDirection: hourly.swell_wave_direction?.[idx] ?? null,
+    // Null (not 0) throughout: the rating engine only scores the second train
+    // when it has both a real height and a real period.
+    secondarySwellHeight:    hourly.secondary_swell_wave_height?.[idx] ?? null,
+    secondarySwellPeriod:    hourly.secondary_swell_wave_period?.[idx] ?? null,
+    secondarySwellDirection: hourly.secondary_swell_wave_direction?.[idx] ?? null,
     windWaveHeight: windWaveH,
     windSpeed:      wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
     // Null when the weather API gave no direction — the engine's mean-
@@ -261,7 +280,7 @@ async function fetchConditionsChunk(
   const marineParams = new URLSearchParams({
     latitude,
     longitude,
-    hourly: 'wave_height,wave_period,swell_wave_height,swell_wave_period,swell_wave_direction,wind_wave_height,wind_wave_direction',
+    hourly: 'wave_height,wave_period,swell_wave_height,swell_wave_period,swell_wave_direction,secondary_swell_wave_height,secondary_swell_wave_period,secondary_swell_wave_direction,wind_wave_height,wind_wave_direction',
     // 2 days, not 1: forecast_days spans the spot's LOCAL calendar day, so a
     // west-of-UTC spot queried in its evening needs tomorrow's first hours in
     // range or the current-hour lookup runs off the end and pins to 23:00.
@@ -398,7 +417,8 @@ export async function fetchMarineForecast(
   lng: number
 ): Promise<OpenMeteoMarineResponse> {
   // 2-decimal bucket (~1 km) — colocated spots share one upstream fetch.
-  const cacheKey = `om:marine:v2:${lat.toFixed(2)},${lng.toFixed(2)}`
+  // v3: v2 entries have no secondary swell partition.
+  const cacheKey = `om:marine:v3:${lat.toFixed(2)},${lng.toFixed(2)}`
   return withCache(cacheKey, 3600, ['open-meteo', 'marine'], async () => {
     // Two parallel models: best_match has full swell decomposition but only
     // covers ~10 days reliably (nulls thereafter); ecmwf_wam025 reaches the
@@ -408,6 +428,10 @@ export async function fetchMarineForecast(
     const fields = [
       'wave_height', 'wave_direction', 'wave_period',
       'swell_wave_height', 'swell_wave_direction', 'swell_wave_period',
+      // Second swell train: ranked by height, so this is frequently the
+      // longer-period one. Fetched but never long-range-filled — ECMWF WAM
+      // exposes no decomposition, so days 11-16 have a primary train only.
+      'secondary_swell_wave_height', 'secondary_swell_wave_direction', 'secondary_swell_wave_period',
       'wind_wave_height', 'wind_wave_direction', 'wind_wave_period',
       'sea_surface_temperature',
     ]

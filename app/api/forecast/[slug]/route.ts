@@ -56,6 +56,10 @@ export async function GET(
       lat: spot.lat,
       tides,
       bottomType: spot.bottomType,
+      difficulty: spot.difficulty,
+      // The buoy was already fetched for display; the rating now uses it too,
+      // for the handful of hours a point observation actually describes.
+      buoy,
     })
     forecast = groupHoursByDay(hours)
   } catch (mergeErr) {
