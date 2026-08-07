@@ -1,4 +1,5 @@
 import { getCache } from '@vercel/functions'
+import { monitor } from '@/lib/monitoring'
 
 const MARINE_BASE = 'https://marine-api.open-meteo.com/v1/marine'
 const WEATHER_BASE = 'https://api.open-meteo.com/v1/forecast'
@@ -23,8 +24,33 @@ function dedupe<T>(key: string, fn: () => Promise<T>): Promise<T> {
   return p
 }
 
+// How long a last-known-good copy is kept purely to survive an upstream
+// failure. This is NOT a freshness window — the fresh entry above always wins
+// while it lives. It only decides how long an outage can last before a spot
+// page has nothing at all to show.
+const STALE_IF_ERROR_TTL = 24 * 3600
+
+// Pause between the two marine attempts — see fetchOne.
+const RETRY_BACKOFF_MS = 600
+
+function staleKey(key: string): string {
+  return `${key}:last-good`
+}
+
 // Cross-region runtime cache wrapper. Falls back to fetching directly if the
 // runtime cache is unavailable (e.g. local `npm start` without Vercel runtime).
+//
+// STALE-IF-ERROR. The fresh entry expires after `ttlSeconds`, and the moment it
+// does, this function's only remaining move used to be "fetch or throw" — so a
+// single upstream hiccup in that window blanked the entire spot page with a
+// 502. Open-Meteo rate-limits by the minute, so a busy period is exactly when
+// that lands, and the caller has no way to recover: `fetchMarineForecast` is
+// the one fetch the forecast route treats as fatal.
+//
+// Every successful value is therefore ALSO written under a long-lived
+// last-known-good key. If a refresh fails and that copy exists, it is served
+// instead of throwing. Slightly-old surf beats no surf, and the next successful
+// refresh replaces it.
 async function withCache<T>(key: string, ttlSeconds: number, tags: string[], fn: () => Promise<T>): Promise<T> {
   let cache: ReturnType<typeof getCache> | null = null
   try {
@@ -41,10 +67,25 @@ async function withCache<T>(key: string, ttlSeconds: number, tags: string[], fn:
     }
   }
   return dedupe(key, async () => {
-    const value = await fn()
+    let value: T
+    try {
+      value = await fn()
+    } catch (err) {
+      if (cache) {
+        try {
+          const lastGood = await cache.get(staleKey(key)) as T | null | undefined
+          if (lastGood !== null && lastGood !== undefined) {
+            monitor('warn', 'open_meteo.served_stale', { key, error: err })
+            return lastGood
+          }
+        } catch { /* no usable fallback — report the original failure */ }
+      }
+      throw err
+    }
     if (cache && value !== null && value !== undefined) {
       try {
         await cache.set(key, value, { ttl: ttlSeconds, tags })
+        await cache.set(staleKey(key), value, { ttl: STALE_IF_ERROR_TTL, tags })
       } catch {
         // Cache write failed — return value anyway
       }
@@ -474,6 +515,10 @@ export async function fetchMarineForecast(
           return data
         } catch (err) {
           lastErr = err
+          // Back off before the second attempt. Open-Meteo rate-limits per
+          // minute and answers instantly when it does, so two back-to-back
+          // tries are one try: the retry lands inside the same rejected window.
+          if (attempt === 0) await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS))
         }
       }
       throw lastErr instanceof Error ? lastErr : new Error('Open-Meteo marine API failed')
