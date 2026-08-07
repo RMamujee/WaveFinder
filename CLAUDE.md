@@ -144,6 +144,46 @@ deliberate and the tests pin the intended behaviour.
   a popup needs must be added there too. Dropping `description` and the
   webcam/NOAA-station ids cut the US payload 384 KB → 226 KB.
 
+## Spot data is generated, not hand-authored (2026-08-07)
+
+Three fields are now derived by script and pinned by `tests/spots-seed.test.ts`.
+Hand-editing them puts the seed and the script out of sync and the test fails.
+
+- **Tide stations: `npx tsx scripts/map-tide-stations.ts`.** Nearest CO-OPS
+  **reference (type R)** station within 75 km, null beyond. The type filter is
+  the whole point: two thirds of CO-OPS's published tide-prediction stations are
+  *subordinate*, they are frequently the closest one to a spot, and they cannot
+  answer the hourly MLLW query `fetchTidePredictions` sends — they return
+  `{"error":"No Predictions data was found"}`, which the fetch turns into an
+  empty array. That is a silent, permanent blank tide chart, and it is exactly
+  how `yakutat-surf-ak` pointed at a non-existent station 9453380 unnoticed.
+  `--verify` probes every assigned station against the live API. The station
+  snapshot in `scripts/data/noaa-tide-stations.json` is refreshed with
+  `--refresh`; it is script/test-only and must not be imported by app code.
+- **`bottomType`: `npx tsx scripts/backfill-bottom-type.ts`.** A stored seed
+  field now, not a regex run against the description on every request (which
+  meant editing marketing copy silently re-rated the spot). The store reads
+  `s.bottomType` directly. `inferBottomType` survives only to classify newly
+  added spots and the transitional Postgres-cuid rows.
+- **Coordinates: `npx tsx scripts/check-spot-coordinates.ts`.** Confirms every
+  spot resolves to a live Open-Meteo marine cell — a land cell renders
+  permanently flat. Paced: Open-Meteo bills a multi-location request **per
+  location**, so the full sweep is ~1,500 calls against a ~600/minute budget,
+  and the rate limiter answers HTTP 200 with an error body that looks exactly
+  like a land cell if you don't check for it.
+
+Duplicate spots were merged; the retired slugs live in `lib/spots/spot-aliases.ts`
+and resolve through `getSpotBySlug`, the `ids=` filter, and a next.config
+redirect. Deleting a slug outright would hard-404 (`dynamicParams=false`) and
+silently drop the spot from saved-spots localStorage.
+
+`difficulty` includes **`expert`** (44 spots — Nazaré, Mullaghmore, Dungeons).
+It was missing from the enum and coerced to `intermediate`, which is a safety
+label, not a cosmetic one. Adding a difficulty means touching the enum in
+`types/spot.ts`, both `VALID_DIFFICULTIES` sets, `DIFFICULTY_SCALE` in
+`rating.ts`, the two `DIFFICULTY_STYLES` maps, `DIFFICULTY_COLOR`, `IDEAL`, and
+the `/spots` filter dropdown.
+
 ## Things that will bite you
 
 - **Deploy via `git push` to main** (Vercel auto-deploys). Do NOT use

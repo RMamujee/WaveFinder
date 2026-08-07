@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   // Sanitize: strip SQL wildcard chars that could widen LIKE matches
   const search     = (searchParams.get('q') ?? '').slice(0, 200).replace(/[%_\\]/g, '')
-  const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced'])
+  const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced', 'expert'])
   const rawDiff    = searchParams.get('difficulty') ?? ''
   const difficulty = VALID_DIFFICULTIES.has(rawDiff) ? rawDiff : ''
   const country    = (searchParams.get('country') ?? '').slice(0, 100).replace(/[%_\\]/g, '')
@@ -296,7 +296,7 @@ export async function GET(req: Request) {
     lng:             spot.lng,
     difficulty:      spot.difficulty,
     facingDirection: spot.facingDirection,
-    bottomType:      inferBottomType(spot.description, spot.name),
+    bottomType:      spot.bottomType,
     parkingOptions:  spot.parkingOptions,
     currentRating:      spot.currentRating,
     currentWaveHeight:  spot.currentWaveHeight,
