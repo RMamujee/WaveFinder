@@ -142,6 +142,46 @@ describe('spot seed — rating inputs', () => {
   })
 })
 
+describe('spot seed — Postgres compatibility', () => {
+  // prisma/seed.ts spreads each seed record into `surfSpot.upsert`. A field the
+  // table has no column for throws "Unknown argument" at runtime, and
+  // TypeScript does NOT catch it: excess-property checking applies to object
+  // literals passed directly to a typed parameter, not to a variable. Adding
+  // `bottomType` broke `npm run db:seed` in exactly this way.
+  const SEED_ONLY_FIELDS = new Set(['bottomType'])
+
+  function surfSpotColumns(): Set<string> {
+    const schema = readFileSync(new URL('../prisma/schema.prisma', import.meta.url), 'utf8')
+    const model = /model SurfSpot \{([\s\S]*?)\n\}/.exec(schema)
+    if (!model) throw new Error('SurfSpot model not found in schema.prisma')
+    const columns = new Set<string>()
+    for (const line of model[1].split('\n')) {
+      const field = /^\s*(\w+)\s+\w/.exec(line)
+      if (field) columns.add(field[1])
+    }
+    return columns
+  }
+
+  it('carries no field that is neither a SurfSpot column nor a declared seed-only field', () => {
+    const columns = surfSpotColumns()
+    expect(columns.size).toBeGreaterThan(5)   // guard against a parse regression
+    const unknown = new Set<string>()
+    for (const spot of SPOTS as unknown as Array<Record<string, unknown>>) {
+      for (const key of Object.keys(spot)) {
+        if (!columns.has(key) && !SEED_ONLY_FIELDS.has(key)) unknown.add(key)
+      }
+    }
+    expect([...unknown]).toEqual([])
+  })
+
+  it('keeps the seed-only list minimal', () => {
+    // A field listed as seed-only that IS a column would be silently dropped
+    // from Postgres by prisma/seed.ts.
+    const columns = surfSpotColumns()
+    expect([...SEED_ONLY_FIELDS].filter((f) => columns.has(f))).toEqual([])
+  })
+})
+
 describe('spot seed — NOAA references', () => {
   it('references only tide stations NOAA actually publishes', () => {
     // yakutat-surf-ak pointed at 9453380, which does not exist. CO-OPS answers
