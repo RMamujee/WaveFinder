@@ -264,7 +264,20 @@ unbounded. The unbounded column is finding 1.5.
   scoping (word-boundary match, up to 4 swell cells per region).
   Still open from tier 2/4: WRAP_FLOOR generosity (2.6 row 2), map wind/marine
   time skew, map-vs-page tide disagreement.
-- **Phase 4 — not started.**
+- **Phase 4 — shipped** (2026-08-07): wave power summed per partition · UV
+  formula replaced with the standard clear-sky relation + cloud attenuation ·
+  gust penalty · day aggregates taken over surfable hours · DST fall-back tide
+  hour de-duplicated.
+  Remaining known simplifications, all noted in code: UV assumes 300 DU ozone
+  and local civil noon ≈ solar noon; `utc_offset_seconds` is still cached up to
+  an hour through a DST transition (two hours a year, as this audit says, not
+  worth prioritising).
+
+**Everything in this audit is now either shipped or explicitly deferred.** Still
+open across all four phases: `WRAP_FLOOR` generosity (2.6), the map's
+instantaneous-wind vs hourly-marine time skew (tier 4), the by-design
+map-vs-page tide disagreement (tier 4), 21 coarse coordinates and 21 spots
+floored on their own described ideal swell (tier 3).
 
 ## Recommended fix order
 

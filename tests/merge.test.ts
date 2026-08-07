@@ -415,6 +415,81 @@ describe('mergeForecastData', () => {
     const falling = rate([2.4, 2.3, 2.2])
     expect(rising[2].ratingScore).toBeGreaterThan(falling[2].ratingScore)
   })
+
+  // ── Phase 4: polish (2026-08-05 audit) ─────────────────────────────────────
+
+  it('scores a gusty hour below a steady one of the same mean speed', () => {
+    const steady = windFixture(times)
+    steady.hourly.wind_direction_10m = times.map(() => 270)   // onshore
+    steady.hourly.wind_speed_10m = times.map(() => 14)
+    steady.hourly.wind_gusts_10m = times.map(() => 14)
+    const gusty = windFixture(times)
+    gusty.hourly.wind_direction_10m = times.map(() => 270)
+    gusty.hourly.wind_speed_10m = times.map(() => 14)
+    gusty.hourly.wind_gusts_10m = times.map(() => 40)
+
+    const calm = mergeForecastData(marineFixture(times), steady, { spotFacing: 270, lat: 33.8 })
+    const blown = mergeForecastData(marineFixture(times), gusty, { spotFacing: 270, lat: 33.8 })
+    expect(blown[0].ratingScore).toBeLessThan(calm[0].ratingScore)
+    // The displayed gust is still the measured one.
+    expect(blown[0].wind.gust).toBe(40)
+  })
+
+  it('does not score the estimated gust stand-in as a real one', () => {
+    // With no weather data the gust is derived from the estimated speed
+    // (speed x 1.25) purely so the compass/readout renders. Feeding that back
+    // into the rating would invent a gust penalty out of a missing reading.
+    const emptyWind = { hourly: { time: [], wind_speed_10m: [], wind_direction_10m: [], wind_gusts_10m: [], temperature_2m: [], weather_code: [], precipitation_probability: [] } }
+    const hours = mergeForecastData(marineFixture(times), emptyWind, { spotFacing: 270, lat: 33.8 })
+    expect(hours[0].wind.gust).toBeGreaterThan(hours[0].wind.speed)
+    expect(hours[0].ratingScore).toBeGreaterThan(45)
+  })
+
+  it('attenuates UV under cloud and leaves it clear-sky without the field', () => {
+    const noon = ['2026-06-21T12:00']
+    const clearWind = windFixture(noon)
+    const cloudyWind = windFixture(noon)
+    cloudyWind.hourly.cloud_cover = [100]
+
+    const clear = mergeForecastData(marineFixture(noon), clearWind, { spotFacing: 270, lat: 34.05 })
+    const cloudy = mergeForecastData(marineFixture(noon), cloudyWind, { spotFacing: 270, lat: 34.05 })
+    expect(clear[0].uvIndex).toBeGreaterThan(9)
+    expect(cloudy[0].uvIndex).toBeLessThan(clear[0].uvIndex * 0.5)
+  })
+
+  it('sums wave power across partitions instead of charging the chop at the swell period', () => {
+    // 1.4 m / 14 s swell under 0.1 m / 4 s chop. The old form used the total
+    // sea height at the swell period and overstated mixed seas up to 2x.
+    const mixed = marineFixture(times, {
+      swell_wave_height: times.map(() => 1.0),
+      swell_wave_period: times.map(() => 15),
+      wind_wave_height: times.map(() => 1.0),
+      wind_wave_period: times.map(() => 4),
+      wave_height: times.map(() => 1.41),
+    })
+    const [hour] = mergeForecastData(mixed, windFixture(times), { spotFacing: 270, lat: 33.8 })
+    // 0.5*1*15 + 0.5*1*4 = 9.5, not 0.5*1.41^2*15 = 14.9
+    expect(hour.wavePower).toBe(9.5)
+  })
+
+  it('keeps the first of a duplicated DST fall-back tide hour', () => {
+    // The autumn transition repeats the local clock, so NOAA emits two rows for
+    // 01:00. Last-write-wins silently took the post-transition one.
+    const duplicated: TidePoint[] = [
+      { time: hh(1), height: 0.4, type: null },
+      { time: hh(1), height: 1.9, type: null },   // the repeated hour
+      ...times.map((t) => ({ time: t, height: 1.2, type: null as null })),
+      { time: hh(20), height: 2.4, type: 'H' as const },
+    ]
+    const first = mergeForecastData(marineFixture([hh(1), ...times]), windFixture([hh(1), ...times]), {
+      spotFacing: 270, lat: 33.8, bottomType: 'reef', tides: duplicated,
+    })
+    const onlyFirst = mergeForecastData(marineFixture([hh(1), ...times]), windFixture([hh(1), ...times]), {
+      spotFacing: 270, lat: 33.8, bottomType: 'reef',
+      tides: duplicated.filter((_, i) => i !== 1),
+    })
+    expect(first[0].ratingScore).toBe(onlyFirst[0].ratingScore)
+  })
 })
 
 describe('findNearestFutureHour', () => {
@@ -458,6 +533,39 @@ describe('findNearestFutureHour', () => {
 })
 
 describe('groupHoursByDay — aggregates', () => {
+  // ── Phase 4 (2026-08-05 audit, tier 2.6) ───────────────────────────────────
+  it('reports the day peak from surfable hours, not from 03:00', () => {
+    // maxFaceHeight and maxWaveHeight took all 24 hours, so a day's headline
+    // size could come from the middle of the night. dominantRating already
+    // filtered to daylight; these did not.
+    const hours = [makeHour(hh(3), 'good'), makeHour(hh(9), 'good'), makeHour(hh(15), 'good')]
+    hours[0].faceHeight = 4.0     // 03:00 — nobody is out
+    hours[0].waveHeight = 3.5
+    hours[1].faceHeight = 1.6
+    hours[2].faceHeight = 1.8
+
+    const [day] = groupHoursByDay(hours)
+    expect(day.maxFaceHeight).toBe(1.8)
+    expect(day.maxWaveHeight).toBe(1.2)
+  })
+
+  it('averages the period over surfable hours only', () => {
+    const hours = [makeHour(hh(2), 'fair'), makeHour(hh(10), 'good'), makeHour(hh(14), 'good')]
+    hours[0].swellPeriod = 4
+    hours[1].swellPeriod = 15
+    hours[2].swellPeriod = 15
+    const [day] = groupHoursByDay(hours)
+    expect(day.avgPeriod).toBe(15)
+  })
+
+  it('still uses every hour when a day has no daylight coverage', () => {
+    // Partial first/last day of the 16-day window can be night-only.
+    const hours = [makeHour(hh(2), 'good'), makeHour(hh(3), 'good')]
+    hours[1].faceHeight = 2.2
+    const [day] = groupHoursByDay(hours)
+    expect(day.maxFaceHeight).toBe(2.2)
+  })
+
   it('ignores zero-period hours in the day average period', () => {
     // Hours with no swell decomposition carry period 0; averaging them in
     // reported a 15 s day as ~8 s.

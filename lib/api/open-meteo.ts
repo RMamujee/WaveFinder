@@ -89,6 +89,9 @@ export interface OpenMeteoWindResponse {
     temperature_2m: number[]
     weather_code: number[]
     precipitation_probability: number[]
+    // Total cloud cover %, for UV attenuation. Optional: payloads cached
+    // before 2026-08-07 have no such array.
+    cloud_cover?: number[]
   }
 }
 
@@ -109,6 +112,9 @@ export interface CurrentMarineConditions {
   secondarySwellPeriod: number | null
   secondarySwellDirection: number | null
   windWaveHeight: number | null
+  /** Windsea period, so wave power can be summed per partition rather than
+   *  charging the chop at the groundswell's period. */
+  windWavePeriod: number | null
   windSpeed: number
   windDirection: number | null
 }
@@ -132,6 +138,7 @@ export interface MarineCurrentEntry {
     secondary_swell_wave_period?: (number | null)[]
     secondary_swell_wave_direction?: (number | null)[]
     wind_wave_height?: (number | null)[]
+    wind_wave_period?: (number | null)[]
     wind_wave_direction?: (number | null)[]
   }
 }
@@ -161,9 +168,10 @@ function condCacheKey(lat: number, lng: number): string {
   // Round to 2 decimal places (~1 km) for the cache key — finer than the
   // 1-decimal bucket used in the route, so accuracy is preserved while
   // repeated calls still deduplicate.
+  // v6: v5 entries predate wind_wave_period
   // v5: v4 entries predate the secondary swell partition, so a hit would rate
   // the map from the primary train alone while the spot page used both.
-  return `om:cond:v5:${lat.toFixed(2)},${lng.toFixed(2)}`
+  return `om:cond:v6:${lat.toFixed(2)},${lng.toFixed(2)}`
 }
 
 function tryGetCache(): ReturnType<typeof getCache> | null {
@@ -233,6 +241,7 @@ export function parseCurrentConditions(
     secondarySwellPeriod:    hourly.secondary_swell_wave_period?.[idx] ?? null,
     secondarySwellDirection: hourly.secondary_swell_wave_direction?.[idx] ?? null,
     windWaveHeight: windWaveH,
+    windWavePeriod: hourly.wind_wave_period?.[idx] ?? null,
     windSpeed:      wind?.current?.wind_speed_10m ?? estimatedWindSpeed,
     // Null when the weather API gave no direction — the engine's mean-
     // direction branch handles it. The old wind_wave_direction stand-in
@@ -280,7 +289,7 @@ async function fetchConditionsChunk(
   const marineParams = new URLSearchParams({
     latitude,
     longitude,
-    hourly: 'wave_height,wave_period,swell_wave_height,swell_wave_period,swell_wave_direction,secondary_swell_wave_height,secondary_swell_wave_period,secondary_swell_wave_direction,wind_wave_height,wind_wave_direction',
+    hourly: 'wave_height,wave_period,swell_wave_height,swell_wave_period,swell_wave_direction,secondary_swell_wave_height,secondary_swell_wave_period,secondary_swell_wave_direction,wind_wave_height,wind_wave_period,wind_wave_direction',
     // 2 days, not 1: forecast_days spans the spot's LOCAL calendar day, so a
     // west-of-UTC spot queried in its evening needs tomorrow's first hours in
     // range or the current-hour lookup runs off the end and pins to 23:00.
@@ -523,12 +532,14 @@ export async function fetchWindForecast(
   lat: number,
   lng: number
 ): Promise<OpenMeteoWindResponse> {
-  const cacheKey = `om:wind:${lat.toFixed(2)},${lng.toFixed(2)}`
+  // v2: v1 entries predate cloud_cover, so a hit would report clear-sky UV
+  // through solid overcast.
+  const cacheKey = `om:wind:v2:${lat.toFixed(2)},${lng.toFixed(2)}`
   return withCache(cacheKey, 3600, ['open-meteo', 'wind'], async () => {
     const params = new URLSearchParams({
       latitude: lat.toString(),
       longitude: lng.toString(),
-      hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code,precipitation_probability',
+      hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,weather_code,precipitation_probability,cloud_cover',
       wind_speed_unit: 'kmh',
       forecast_days: '16',
       timezone: 'auto',
@@ -559,6 +570,7 @@ export async function fetchWindForecast(
           temperature_2m: [] as number[],
           weather_code: [] as number[],
           precipitation_probability: [] as number[],
+          cloud_cover: [] as number[],
         },
       }
     }
