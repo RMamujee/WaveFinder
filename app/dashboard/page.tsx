@@ -5,19 +5,10 @@ import Link from 'next/link'
 import { SpotCard } from '@/components/spots/SpotCard'
 import { Icon } from '@/components/ui/Icon'
 import { WaveLoader } from '@/components/layout/WaveLoader'
-import { PortalButton } from '@/components/billing/PortalButton'
 import { migrateSavedSpots } from '@/lib/spots/saved-spots-migration'
 import type { SurfSpot } from '@/types/spot'
 
 const SAVED_KEY = 'wavefinder_saved'
-
-type AccountState = {
-  user: { email: string; name?: string | null } | null
-  plan: string
-  canManageBilling: boolean
-  stripeCurrentPeriodEnd?: string | null
-  stripeTrialEndsAt?: string | null
-}
 
 function getSavedIds(): string[] {
   try { return JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]') }
@@ -26,7 +17,6 @@ function getSavedIds(): string[] {
 
 export default function DashboardPage() {
   const [savedSpots, setSavedSpots] = useState<SurfSpot[]>([])
-  const [account, setAccount] = useState<AccountState | null>(null)
   const [loading, setLoading] = useState(true)
 
   async function loadSpots() {
@@ -51,10 +41,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadSpots()
-    fetch('/api/account')
-      .then((res) => res.json())
-      .then((data) => setAccount(data))
-      .catch(() => setAccount(null))
     const handler = () => loadSpots()
     window.addEventListener('storage', handler)
     return () => window.removeEventListener('storage', handler)
@@ -78,24 +64,8 @@ export default function DashboardPage() {
                   ? `${savedSpots.length} saved spot${savedSpots.length !== 1 ? 's' : ''}`
                   : 'Save your favorite breaks to track conditions'}
               </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span
-                  className="rounded-full px-3 py-1 text-xs font-semibold"
-                  style={{ background: 'var(--ocean-50)', color: 'var(--ocean-700)' }}
-                >
-                  {account?.plan ?? 'Free'}
-                </span>
-                {account?.user ? (
-                  <span className="text-xs" style={{ color: 'var(--text-3)' }}>{account.user.email}</span>
-                ) : (
-                  <Link href="/sign-in" className="text-xs font-semibold hover:underline" style={{ color: 'var(--ocean-600)' }}>
-                    Sign in for Pro trial and billing
-                  </Link>
-                )}
-              </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {account?.canManageBilling && <PortalButton />}
               <Link
                 href="/spots"
                 className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
