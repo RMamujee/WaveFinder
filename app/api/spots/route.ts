@@ -170,6 +170,17 @@ export async function GET(req: Request) {
     _conditions: CurrentMarineConditions | null
   }
 
+  // Wave power is the sum over partitions: charging the whole sea at the
+  // groundswell's period overstated mixed seas by up to 2x, and the map popup
+  // renders this number directly.
+  function powerOf(om: CurrentMarineConditions): number {
+    return computeWavePower([
+      { height: om.swellHeight > 0 ? om.swellHeight : om.waveHeight, period: om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod },
+      { height: om.secondarySwellHeight, period: om.secondarySwellPeriod },
+      { height: om.windWaveHeight, period: om.windWavePeriod },
+    ])
+  }
+
   function secondaryOf(om: CurrentMarineConditions): SwellPartition | null {
     return om.secondarySwellHeight != null && om.secondarySwellHeight > 0
       && om.secondarySwellPeriod != null && om.secondarySwellPeriod > 0
@@ -209,7 +220,7 @@ export async function GET(req: Request) {
         currentPeriod:        om.wavePeriod,
         currentWindSpeed:     om.windSpeed,
         currentWindDirection: om.windDirection,
-        wavePower:            computeWavePower(om.waveHeight, om.wavePeriod),
+        wavePower:            powerOf(om),
         _needsFallback:       false,
         _conditions:          om,
       }
@@ -277,7 +288,7 @@ export async function GET(req: Request) {
     spot.currentPeriod        = om.wavePeriod
     spot.currentWindSpeed     = om.windSpeed
     spot.currentWindDirection = windDirection
-    spot.wavePower            = computeWavePower(om.waveHeight, om.wavePeriod)
+    spot.wavePower            = powerOf(om)
   }
 
   // A marker projection, not a full spot record. /spots merges this onto the

@@ -50,6 +50,7 @@ function marineEntry(overrides: Partial<NonNullable<MarineCurrentEntry['hourly']
       secondary_swell_wave_period: [16, 17, 18],
       secondary_swell_wave_direction: [200, 205, 210],
       wind_wave_height: [0.2, 0.3, 0.4],
+      wind_wave_period: [4, 5, 6],
       wind_wave_direction: [180, 185, 190],
       ...overrides,
     },
@@ -71,6 +72,7 @@ describe('parseCurrentConditions', () => {
       secondarySwellPeriod: 17,
       secondarySwellDirection: 205,
       windWaveHeight: 0.3,
+      windWavePeriod: 5,
       windSpeed: 12,
       windDirection: 300,
     })
