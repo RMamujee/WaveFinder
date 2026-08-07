@@ -5,6 +5,7 @@ import { fetchTidePredictions, fetchCoastalWind } from '@/lib/api/noaa-tides'
 import { fetchBuoyData } from '@/lib/api/noaa-buoy'
 import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
 import { handleRouteError, cdnCacheHeaders } from '@/lib/route-helpers'
+import { monitor } from '@/lib/monitoring'
 
 export const revalidate = 3600
 export const maxDuration = 60
@@ -33,6 +34,11 @@ export async function GET(
   ])
 
   if (marineResult.status === 'rejected') {
+    // This is the only fatal fetch on the page, and it used to return 502 with
+    // no record of why — so "some spots fail to load" was unanswerable. It now
+    // means upstream failed AND there was no last-known-good copy within
+    // STALE_IF_ERROR_TTL (see withCache), which is a genuinely notable event.
+    monitor('error', 'forecast.marine_unavailable', { slug, error: marineResult.reason })
     return NextResponse.json(
       { error: 'Failed to fetch wave forecast data' },
       { status: 502 }
