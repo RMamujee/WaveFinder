@@ -119,7 +119,7 @@ function isWordChar(ch: string | undefined): boolean {
  *
  * A raw substring `contains` made "Ventura" match "Fuerteventura", so Canary
  * Islands spots were returned for the California region and scored against
- * Californian swell — inside the Pro-gated best-spots feature. Multi-word
+ * Californian swell — inside the best-spots feature. Multi-word
  * keywords ("Orange" → "Orange County", "North Shore") still match; the only
  * thing rejected is a match that starts or ends mid-word.
  */
