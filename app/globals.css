@@ -167,6 +167,31 @@ body {
 .wl-foam3  { animation: wl-foam  2.4s ease-in-out 1.5s infinite; }
 .wl-label  { animation: wl-pulse 1.8s ease-in-out infinite; }
 
+/* ── BreakAnimation (components/forecast/BreakAnimation.tsx) ──
+   Duration/delay are computed from the live forecast's swell period and set
+   per-instance via inline style, so only the keyframe shapes live here.
+   Units below are SVG user-space units (the panel's viewBox is 0 0 320 200),
+   not real pixels — translateY moves a wavefront from just offshore to just
+   past the break zone over one full cycle. */
+@keyframes break-anim-crest {
+  0%   { transform: translateY(-22px); opacity: 0; }
+  10%  { opacity: 0.9; }
+  82%  { opacity: 0.45; }
+  100% { transform: translateY(188px); opacity: 0; }
+}
+@keyframes break-anim-foam {
+  0%, 55% { stroke-dashoffset: 100; opacity: 0; }
+  58%     { opacity: 1; }
+  80%     { stroke-dashoffset: 0; opacity: 1; }
+  100%    { stroke-dashoffset: 0; opacity: 0; }
+}
+/* One rule kills every animated piece at once — the base (non-keyframe) SVG
+   attributes are authored to already be a meaningful mid-scene frame, so
+   this never collapses to a blank box. */
+@media (prefers-reduced-motion: reduce) {
+  .break-anim-move { animation: none !important; }
+}
+
 /* ── Mobile scroll fixes ── */
 /* Smooth momentum scrolling on iOS for all overflow-y scroll containers */
 .overflow-y-auto,
