@@ -22,7 +22,7 @@ export interface SurfSpot {
   lat: number
   lng: number
   description?: string | null
-  difficulty: 'beginner' | 'intermediate' | 'advanced'
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | 'expert'
   facingDirection: number
   noaaTideStationId?: string | null
   noaaBuoyId?: string | null

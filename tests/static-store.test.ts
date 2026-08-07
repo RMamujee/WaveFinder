@@ -13,9 +13,11 @@ import {
   regionsForCountry,
 } from '@/lib/spots/static-store'
 import { SURF_SPOTS_SEED } from '@/lib/spots-data'
-import { inferBottomType } from '@/lib/bottom-type'
 
-const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced'])
+// 'expert' was missing from the store's enum, so 44 spots — Nazaré,
+// Mullaghmore, Dungeons — were silently coerced to 'intermediate' and were
+// filterable as such.
+const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced', 'expert'])
 
 // Reference filter that mirrors the Prisma AND/OR semantics in
 // app/api/spots/route.ts against the seed data, independent of the store.
@@ -75,12 +77,29 @@ describe('static-store: map + resolution', () => {
 })
 
 describe('static-store: id===slug and bottomType', () => {
-  it('id equals slug and bottomType matches inferBottomType for all spots', () => {
+  it('id equals slug and bottomType comes from the seed, not the prose', () => {
+    // bottomType used to be re-derived from the description on every request,
+    // so editing marketing copy silently re-rated the spot. It is now a stored
+    // seed field (scripts/backfill-bottom-type.ts) and the store passes it
+    // through untouched.
+    const seedBottom = new Map(
+      (SURF_SPOTS_SEED as unknown as Array<{ slug: string; bottomType: string }>)
+        .map((s) => [s.slug, s.bottomType])
+    )
     for (const spot of SPOTS) {
       expect(spot.id).toBe(spot.slug)
-      expect(spot.bottomType).toBe(inferBottomType(spot.description ?? null, spot.name))
+      expect(spot.bottomType).toBe(seedBottom.get(spot.slug))
       expect(VALID_DIFFICULTIES.has(spot.difficulty)).toBe(true)
     }
+  })
+
+  it('preserves the seed difficulty rather than coercing unknown values', () => {
+    const seedDifficulty = new Map(
+      (SURF_SPOTS_SEED as unknown as Array<{ slug: string; difficulty: string }>)
+        .map((s) => [s.slug, s.difficulty])
+    )
+    for (const spot of SPOTS) expect(spot.difficulty).toBe(seedDifficulty.get(spot.slug))
+    expect(SPOTS.filter((s) => s.difficulty === 'expert').length).toBeGreaterThan(0)
   })
 })
 

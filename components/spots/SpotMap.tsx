@@ -45,6 +45,7 @@ const DIFFICULTY_COLOR: Record<string, string> = {
   beginner:     '#15803d',
   intermediate: '#b45309',
   advanced:     '#b91c1c',
+  expert:       '#6b21a8',
 }
 
 
