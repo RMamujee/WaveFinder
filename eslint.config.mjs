@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent worktrees are full checkouts of another branch living inside this
+    // one; linting them reports that branch's problems against this one.
+    ".claude/**",
   ]),
   // Disallow stray console.log; allow console.warn/console.error everywhere.
   {
