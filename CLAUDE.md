@@ -1,7 +1,8 @@
 # WaveFinder — Claude Code project notes
 
 Free Surfline-style surf forecast app. Next.js 16 App Router, Prisma 5 +
-Supabase Postgres (`wavefinder` schema), better-auth, Stripe (TEST mode),
+Supabase Postgres (`wavefinder` schema), free with no accounts (better-auth and
+Stripe remain wired but dormant — see below),
 Upstash Redis, deployed on Vercel at https://wave-finder.vercel.app.
 
 ## Current state & open work
@@ -214,12 +215,19 @@ the `/spots` filter dropdown.
   for unknown slugs; on-demand ISR cached soft-404 200s, see the 2026-06-09
   audit). Local builds without `DATABASE_URL` skip the prerender by design.
 - **`npm run db:reset` force-resets the database** — never run it against prod.
-- **Only `/api/best-spots` is Pro-gated — by design.** Forecast/surf-reports/
-  water-quality/alerts are intentionally free per the pricing page.
-  Do not "fix" this as a paywall hole. (Webcams were removed entirely 2026-07-15
-  at the user's request — quality was poor. `webcamUrl`/`webcamType` still exist
-  in the spot dataset/DB as dead data; `WINDY_WEBCAM_API_KEY`/`YOUTUBE_API_KEY`
-  env vars are no longer read.)
+- **The app is free and account-free (2026-08-07). Nothing is gated — do not
+  re-introduce a gate.** `/api/best-spots` used to call `requireProAccess()`;
+  that is gone, and `tests/best-spots-route.test.ts` fails if it returns. The
+  sign-in/sign-up/pricing pages and `components/billing/*` are deleted.
+  `lib/auth.ts`, `lib/auth-client.ts`, `lib/session.ts`, `lib/stripe.ts`,
+  `lib/entitlements.ts`, `/api/auth/*`, `/api/billing/*`, `/api/stripe/webhook`
+  and `/api/account` are all still present but **unreferenced by any UI**, and
+  the `User`/`Session`/`Account`/`Verification` tables are deliberately kept so
+  existing signups are not destroyed. Leaving that code dormant was a decision,
+  not an oversight; delete it only if asked. (Webcams were removed entirely
+  2026-07-15 at the user's request — quality was poor. `webcamUrl`/`webcamType`
+  still exist in the spot dataset/DB as dead data;
+  `WINDY_WEBCAM_API_KEY`/`YOUTUBE_API_KEY` env vars are no longer read.)
 - Spot data is a static dataset (`lib/spots-data.ts` + `lib/spots/*`, ~1,490
   spots) seeded into Postgres; the DB cuid `id` keys saved-spots localStorage,
   so don't swap id sources.
@@ -233,8 +241,11 @@ the `/spots` filter dropdown.
 CI runs lint (zero-warnings) + typecheck + test + `next build` (build job has
 no `DATABASE_URL`, so the spot prerender is skipped there by design).
 
-## Before real customers (Stripe is in TEST mode)
+## Billing is retired (was Stripe TEST mode)
 
-Live price IDs + live webhook endpoint/secret + `sk_live_` key, enforce email
-verification first (needs `RESEND_API_KEY`, `requireEmailVerification: true`,
-gate checkout on `emailVerified`). Details in the 2026-06-09 audit + RUNBOOK.
+The app went free and account-free on 2026-08-07, so there is no checkout to
+take live. The Stripe wiring still exists, dormant and unreferenced — if paid
+plans ever come back it needs live price IDs, a live webhook endpoint/secret
+and an `sk_live_` key, and email verification enforced first (`RESEND_API_KEY`,
+`requireEmailVerification: true`, checkout gated on `emailVerified`). Details in
+the 2026-06-09 audit + RUNBOOK, both of which predate the change.

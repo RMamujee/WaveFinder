@@ -12,15 +12,23 @@ export const maxDuration = 60
 
 // The response depends only on (region, date) — no session, no per-user data —
 // so it is share-cacheable. The fresh window matches the hourly cache the
-// Open-Meteo fetches already sit behind: nothing new can appear sooner. The
-// stale window is a full day because there are only ~105 (region, date) keys
-// spread thinly over real traffic, and a key that goes cold costs the next
-// visitor the whole fan-out — up to 4 marine + 4 wind fetches with a 28 s
-// timeout each. Serving a model run a few hours old in ~0.5 s beats making one
-// person wait out the cold path; `date` is in the key, so a stale entry is
-// never the wrong day.
+// Open-Meteo fetches already sit behind: nothing new can appear sooner.
+//
+// The stale window is a compromise between two real costs. Long is good: there
+// are only ~105 (region, date) keys spread thinly over traffic, and a key that
+// goes fully cold costs the next visitor the whole fan-out (up to 4 marine +
+// 4 wind fetches at a 28 s timeout each). But long is also bad in a way that
+// is easy to miss — `date` being in the key guarantees a stale entry is the
+// right DAY, not that it was computed from the right model run. At 24 h, a
+// request for today could be served a ranking computed when today was still
+// tomorrow: a day-2 forecast, less accurate, and visibly disagreeing with the
+// spot pages beside it. That cross-surface disagreement is exactly what the
+// accuracy audit spent four phases removing.
+//
+// 6 h keeps a stale entry within roughly one Open-Meteo model cycle while
+// still covering the traffic gaps this feature actually sees.
 const CACHE_MAX_AGE = 3600
-const CACHE_STALE_WHILE_REVALIDATE = 86400
+const CACHE_STALE_WHILE_REVALIDATE = 6 * 3600
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
