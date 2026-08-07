@@ -236,6 +236,21 @@ unbounded. The unbounded column is finding 1.5.
   a one-hour post-deploy window (one historical lapse: `is_long_range` added without a bump,
   degraded gracefully).
 
+## Status
+
+- **Phase 1 — shipped** (PR #10, 2026-08-05): 1.1-1.5 in full.
+- **Phase 2 — not started.** Spot-metadata work (tier 3) is still entirely open.
+- **Phase 3 — shipped** (2026-08-07): 2.1 secondary partition · 2.2 mean→peak
+  period recalibration + interpolation · 2.3 buoy blending · 2.4 absolute-depth
+  tide + rising/falling · 2.5 quadrature cleanliness on `effectiveSwell` · 2.6
+  cap ramps and the ≥8 m height-curve discontinuity · difficulty-scaled height
+  curve · tier-4 fallback caps (50 km + 45° facing, true distance) and 0.05°
+  bucketing with a filter-stable representative · tier-4 best-spots region
+  scoping (word-boundary match, up to 4 swell cells per region).
+  Still open from tier 2/4: WRAP_FLOOR generosity (2.6 row 2), map wind/marine
+  time skew, map-vs-page tide disagreement.
+- **Phase 4 — not started.**
+
 ## Recommended fix order
 
 1. **Phase 1 — correctness (small diffs, verified-live bugs):** 1.1 timezone hour selection +

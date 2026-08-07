@@ -261,21 +261,159 @@ describe('mergeForecastData', () => {
   })
 
   it('drops the cleanliness factor when the wind-wave partition is missing, rather than scoring it perfectly clean', () => {
-    const noChopData = mergeForecastData(
-      marineFixture(times, { wind_wave_height: [null, null, null] as unknown as number[] }),
-      windFixture(times),
-      { spotFacing: 270, lat: 33.8 }
+    // Cross-onshore 12 km/h rather than the fixture's offshore breeze: with a
+    // perfect wind the other three factors all sit at or near 100, and the
+    // renormalised mean rounds to the same integer with or without a 100-scored
+    // cleanliness factor. The regression this pins is directional, so the
+    // fixture has to leave room to move in.
+    const breezy = (marine: ReturnType<typeof marineFixture>) => {
+      const wind = windFixture(times)
+      wind.hourly.wind_speed_10m = times.map(() => 12)
+      wind.hourly.wind_direction_10m = times.map(() => 200)
+      return mergeForecastData(marine, wind, { spotFacing: 270, lat: 33.8 })
+    }
+    const noChopData = breezy(
+      marineFixture(times, { wind_wave_height: [null, null, null] as unknown as number[] })
     )
-    const trulyClean = mergeForecastData(
-      marineFixture(times, { wind_wave_height: [0, 0, 0] }),
-      windFixture(times),
-      { spotFacing: 270, lat: 33.8 }
-    )
+    const trulyClean = breezy(marineFixture(times, { wind_wave_height: [0, 0, 0] }))
     // Missing data must never score better than a genuinely clean reading —
     // strictly less: with the fix the cleanliness factor DROPS (renormalised
     // weights) while a real 0-chop reading adds a 100-scored factor. A `?? 0`
     // revert makes the two identical, which `<=` could not catch.
     expect(noChopData[0].ratingScore).toBeLessThan(trulyClean[0].ratingScore)
+  })
+
+  // ── Phase 3: model upgrades (2026-08-05 audit, tier 2) ─────────────────────
+
+  it('scores and displays the secondary swell train when it carries the surf', () => {
+    // Live at Santa Monica: primary 0.54 m @ 6.0 s, secondary 0.34 m @ 11.15 s.
+    // Requesting only the first partition meant scoring 6-second slop while the
+    // actual surf sat in the ignored one — 57% of sampled spots had a secondary
+    // with >1.5 s more period.
+    const base = {
+      swell_wave_height: times.map(() => 0.54),
+      swell_wave_period: times.map(() => 6),
+      wave_height: times.map(() => 0.7),
+      wind_wave_height: times.map(() => 0.1),
+    }
+    const primaryOnly = mergeForecastData(
+      marineFixture(times, base), windFixture(times), { spotFacing: 270, lat: 33.8 }
+    )
+    const withSecondary = mergeForecastData(
+      marineFixture(times, {
+        ...base,
+        secondary_swell_wave_height: times.map(() => 0.34),
+        secondary_swell_wave_period: times.map(() => 11.15),
+        secondary_swell_wave_direction: times.map(() => 270),
+      }),
+      windFixture(times),
+      { spotFacing: 270, lat: 33.8 }
+    )
+
+    expect(withSecondary[0].faceHeight).toBeGreaterThan(primaryOnly[0].faceHeight)
+    expect(withSecondary[0].ratingScore).toBeGreaterThan(primaryOnly[0].ratingScore)
+    // What is rated is what is displayed — a 6 s period next to a score
+    // computed from both trains is exactly the cross-surface disagreement the
+    // audit flagged elsewhere.
+    expect(withSecondary[0].swellPeriod).toBeGreaterThan(primaryOnly[0].swellPeriod)
+    expect(withSecondary[0].swellHeight).toBeGreaterThan(primaryOnly[0].swellHeight)
+  })
+
+  it('leaves the displayed swell untouched when there is only one train', () => {
+    const [hour] = mergeForecastData(
+      marineFixture(times), windFixture(times), { spotFacing: 270, lat: 33.8 }
+    )
+    expect(hour.swellHeight).toBe(1.4)
+    expect(hour.swellPeriod).toBe(14)
+    expect(hour.swellDirection).toBe(270)
+  })
+
+  it('ignores a secondary partition with no height or no period', () => {
+    const withEmpty = mergeForecastData(
+      marineFixture(times, {
+        secondary_swell_wave_height: [null, 0, 0.4] as unknown as number[],
+        secondary_swell_wave_period: [12, 12, null] as unknown as number[],
+        secondary_swell_wave_direction: times.map(() => 270),
+      }),
+      windFixture(times), { spotFacing: 270, lat: 33.8 }
+    )
+    const none = mergeForecastData(
+      marineFixture(times), windFixture(times), { spotFacing: 270, lat: 33.8 }
+    )
+    for (let i = 0; i < times.length; i++) {
+      expect(withEmpty[i].faceHeight).toBe(none[i].faceHeight)
+    }
+  })
+
+  it('blends a fresh buoy observation into the near-term swell period', () => {
+    // Live at Huntington Beach the buoy observed 13 s while the rating consumed
+    // the model's 6.7 s — a period score of 15 against an observation-supported
+    // 90. Mean |dominant-period gap| across sampled buoys was 4.0 s.
+    const nowMs = Date.parse('2026-08-04T08:30:00Z')
+    const buoy = {
+      time: '2026-08-04T08:00:00Z',
+      waveHeight: 1.3, dominantPeriod: 17, averagePeriod: 9,
+      meanDirection: 270, waterTemp: 18, airTemp: 20,
+      windSpeed: 2, windDirection: 90,
+    }
+    const marine = marineFixture(times, { swell_wave_period: times.map(() => 8) })
+    const withBuoy = mergeForecastData(marine, windFixture(times), {
+      spotFacing: 270, lat: 33.8, buoy, nowMs,
+    })
+    const withoutBuoy = mergeForecastData(marine, windFixture(times), {
+      spotFacing: 270, lat: 33.8, nowMs,
+    })
+
+    // Blended, not substituted: between the model's 8 s and the buoy's 17 s.
+    expect(withBuoy[0].swellPeriod).toBeGreaterThan(withoutBuoy[0].swellPeriod)
+    expect(withBuoy[0].swellPeriod).toBeLessThan(17)
+    // Weight decays with distance from the observed hour.
+    expect(withBuoy[2].swellPeriod).toBeLessThan(withBuoy[0].swellPeriod)
+  })
+
+  it('ignores a stale buoy or an offline sensor', () => {
+    const nowMs = Date.parse('2026-08-04T08:30:00Z')
+    const baseline = mergeForecastData(marineFixture(times), windFixture(times), {
+      spotFacing: 270, lat: 33.8, nowMs,
+    })
+    const reading = {
+      waveHeight: 1.3, averagePeriod: 9, waterTemp: 18, airTemp: 20,
+      windSpeed: 2, windDirection: 90,
+    }
+    // Six hours old: no longer a description of the current sea state.
+    const stale = mergeForecastData(marineFixture(times), windFixture(times), {
+      spotFacing: 270, lat: 33.8, nowMs,
+      buoy: { ...reading, time: '2026-08-04T02:00:00Z', dominantPeriod: 17, meanDirection: 200 },
+    })
+    // WVHT/DPD/MWD reported as MM → null. Nothing to blend, nothing invented.
+    const offline = mergeForecastData(marineFixture(times), windFixture(times), {
+      spotFacing: 270, lat: 33.8, nowMs,
+      buoy: { ...reading, time: '2026-08-04T08:00:00Z', dominantPeriod: null, meanDirection: null },
+    })
+
+    expect(stale[0].ratingScore).toBe(baseline[0].ratingScore)
+    expect(offline[0].ratingScore).toBe(baseline[0].ratingScore)
+  })
+
+  it('scores a pushing tide above the same depth draining', () => {
+    // The compared hour sits at exactly 2.2 m in both series — only the
+    // direction of travel differs. Small by design: it nudges between hours,
+    // it does not decide the session.
+    const series = (heights: number[]): TidePoint[] => [
+      // Anchors so both series span the same range; deliberately out of time
+      // order, because NOAA's array order is not something merge should trust.
+      { time: hh(20), height: 2.6, type: 'H' },
+      ...times.map((t, i) => ({ time: t, height: heights[i], type: null as null })),
+      { time: hh(2), height: 0.0, type: 'L' },
+    ]
+    const rate = (heights: number[]) =>
+      mergeForecastData(marineFixture(times), windFixture(times), {
+        spotFacing: 270, lat: 33.8, bottomType: 'reef', tides: series(heights),
+      })
+
+    const rising = rate([2.0, 2.1, 2.2])
+    const falling = rate([2.4, 2.3, 2.2])
+    expect(rising[2].ratingScore).toBeGreaterThan(falling[2].ratingScore)
   })
 })
 

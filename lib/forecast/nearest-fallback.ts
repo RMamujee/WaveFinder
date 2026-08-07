@@ -4,9 +4,9 @@
 // closest spot that has data. A naive scan is O(spotsNeedingData × spotsWithData)
 // — up to ~2M distance computations on the request thread when the upstream API
 // degrades. Bucketing spots into 1° cells (~111 km) and searching expanding
-// rings bounds the work to nearby cells, and spots with no data within
-// MAX_RINGS cells stay "unknown" instead of copying conditions from a coastline
-// hundreds of kilometres away.
+// rings bounds the work to nearby cells, and spots with no acceptable neighbour
+// inside the search window stay "unknown" instead of copying conditions from a
+// coastline hundreds of kilometres away.
 
 interface LatLng {
   lat: number
@@ -22,6 +22,28 @@ function cellKey(latCell: number, lngCell: number): string {
 // Wrap a longitude cell index across the antimeridian (lng cells span -180..179).
 function wrapLngCell(cell: number): number {
   return ((cell + 540) % 360) - 180
+}
+
+const KM_PER_DEGREE_LAT = 111.32
+
+/**
+ * Approximate surface distance in kilometres (equirectangular projection).
+ *
+ * Raw `hypot(dLat, dLng)` in degrees was wrong in two ways that mattered: a
+ * degree of longitude is not a degree of latitude away from the equator (2×
+ * distortion in Alaska), and an unwrapped dLng ranked Fiji and Futuna 75× too
+ * far apart across the antimeridian.
+ */
+export function distanceKm(
+  aLat: number, aLng: number,
+  bLat: number, bLng: number
+): number {
+  const dLatKm = (bLat - aLat) * KM_PER_DEGREE_LAT
+  let dLng = bLng - aLng
+  if (dLng > 180) dLng -= 360
+  else if (dLng < -180) dLng += 360
+  const dLngKm = dLng * KM_PER_DEGREE_LAT * Math.cos(((aLat + bLat) / 2 * Math.PI) / 180)
+  return Math.hypot(dLatKm, dLngKm)
 }
 
 export interface SpatialIndex<T extends LatLng> {
@@ -56,34 +78,46 @@ function collectRing<T extends LatLng>(
   }
 }
 
+export interface NearestOptions<T> {
+  /** Reject a neighbour further than this. Borrowing across 100+ km (or across
+   *  a basin: Gulf of Thailand ← Andaman Sea) invents conditions rather than
+   *  approximating them; "unknown" is the honest answer. */
+  maxDistanceKm?: number
+  /** Reject a neighbour that isn't a plausible stand-in — e.g. one whose
+   *  coastline faces a different way, which is the cheap proxy for "is exposed
+   *  to the same swell". */
+  accept?: (candidate: T) => boolean
+}
+
 export function findNearestInIndex<T extends LatLng>(
   index: SpatialIndex<T>,
   lat: number,
-  lng: number
+  lng: number,
+  options: NearestOptions<T> = {}
 ): T | null {
+  const { maxDistanceKm = Infinity, accept } = options
   const latCell = Math.floor(lat)
   const lngCell = Math.floor(lng)
 
+  // Scan the whole (2·MAX_RINGS+1)² cell block and take the global minimum
+  // rather than returning from the first populated ring: a query point near a
+  // cell edge can have its true nearest neighbour a ring further out, and with
+  // an `accept` filter the first populated ring may contain no usable
+  // candidate at all.
+  const candidates: T[] = []
   for (let ring = 0; ring <= MAX_RINGS; ring++) {
-    const candidates: T[] = []
     collectRing(index, latCell, lngCell, ring, candidates)
-    if (candidates.length === 0) continue
-
-    // A query point near a cell edge can have its true nearest neighbour one
-    // ring further out than the first populated ring (e.g. lat 33.99 vs a spot
-    // at 34.01), so widen by one ring before picking the minimum.
-    collectRing(index, latCell, lngCell, ring + 1, candidates)
-
-    let closest = candidates[0]
-    let minDist = Infinity
-    for (const c of candidates) {
-      const d = Math.hypot(c.lat - lat, c.lng - lng)
-      if (d < minDist) {
-        minDist = d
-        closest = c
-      }
-    }
-    return closest
   }
-  return null
+
+  let closest: T | null = null
+  let minDist = Infinity
+  for (const c of candidates) {
+    if (accept && !accept(c)) continue
+    const d = distanceKm(lat, lng, c.lat, c.lng)
+    if (d <= maxDistanceKm && d < minDist) {
+      minDist = d
+      closest = c
+    }
+  }
+  return closest
 }

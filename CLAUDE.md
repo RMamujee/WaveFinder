@@ -37,6 +37,41 @@ deliberate and the tests pin the intended behaviour.
   engine scored it (and accepted a `swellHeight` argument it never read), so
   0.4 m of clean swell under 1.1 m of onshore slop rated the same as a 1.5 m
   groundswell day.
+- **Both swell trains, blended by breaking energy** (2026-08-07). Open-Meteo
+  ranks partitions by HEIGHT, so the longer-period (more surfable) train is
+  frequently `secondary_swell_wave_*` — which used to be neither requested nor
+  scored. Each train is shoaled by its own period and reduced by its own angle;
+  `faceHeight` is their quadrature sum. Period/direction are blended weighted by
+  each train's breaking energy, NOT taken from whichever train is "dominant" —
+  rank flips between near-equal trains produced a 6.7-11.9 s period spread
+  across 16 adjacent spots in one uniform swell. `combinedSwell` in the result
+  is what callers must DISPLAY; showing the model's primary partition beside a
+  score computed from both is the same class of bug.
+- **Period thresholds are for a MEAN period.** `swell_wave_period` is Tm, not
+  Tp (Tm ≈ 0.8-0.85·Tp), so the buckets are shifted ~15% down from the
+  peak-period language they were written in (16→13.5, 14→12, …) and
+  interpolated. `swell_wave_peak_period` exists but returns null on best_match.
+- **Tide is scored in metres of water, not rank within the day's range.** A
+  reef sits at a fixed depth below datum, so it needs an absolute amount of
+  water over it — rank-scoring made "ideal reef tide" mean 1.31 m at one station
+  and 2.72 m at another. Rising/falling is a small ±4 nudge, deliberately not a
+  decider. Below 0.5 m of range the factor goes neutral.
+- **Cleanliness is an energy (quadrature) share of the EXPOSURE-REDUCED swell.**
+  A linear height ratio over-penalised modest chop and let genuine
+  victory-at-sea escape the veto; using the raw partition rated off-axis spots
+  "clean" when their actual sea surface is windsea.
+- **The height curve and the size caps are read against `faceHeight / difficulty
+  scale`** (beginner 0.55, intermediate 1, advanced 1.5). One universal curve
+  had a beginner beach break and Nazaré sharing a 2.5-3.5 m sweet spot.
+- **The size caps ramp, they do not step.** Control points are the old step's
+  values at the sizes where it changed, so every boundary judgement is preserved
+  and only the cliffs are gone (8 cm of face across 1.6 m used to be 20 points).
+  `npx tsx scripts/rating-sanity.ts` verdicts are unchanged by this.
+- **NDBC observations feed the rating** (`MergeContext.buoy`), not just the
+  display: the model's swell period/direction is blended toward the buoy for the
+  hours the observation describes (max weight 0.6, fading to 0 over 6 h, ignored
+  entirely if older than 3 h or if the sensor reported MM). Mean |period gap|
+  against sampled buoys was 4.0 s.
 - **`faceHeight` is the surfable size**, not `waveHeight`. It is the swell
   partition shoaled by period via Komar & Gaughan (1972) and reduced by
   directional exposure. `SHOALING_CALIBRATION` (0.85) pulls the textbook formula
@@ -94,6 +129,15 @@ deliberate and the tests pin the intended behaviour.
 - Parsing lives in `parseCurrentConditions`, which is pure and unit-tested —
   Open-Meteo is unreachable from some networks, so keep the network layer thin
   and the logic testable with fixtures.
+- **Conditions buckets are 0.05°, and the representative coordinate comes from
+  the full dataset** (`conditionsBucketKey` / `conditionsBucketPoint` in
+  `lib/spots/static-store.ts`). At 0.1° 29.5% of spots were served a
+  neighbour's reading up to 11.3 km away, while Open-Meteo's marine grid is
+  ~0.04° — the resolution was being discarded, not unavailable. 0.05° halves
+  that (19.8%, max 5.5 km) for 3 extra parallel chunks. Going finer than the
+  upstream grid buys nothing. Resolving the representative against the full
+  dataset is what stops a `difficulty=` filter changing which coordinate is
+  queried (and cached) for 229 spots.
 - **`?withConditions=true` returns a marker projection, not full spot records.**
   It carries only what the map and its popups read. `/spots` merges it onto the
   full list it already has; the home map renders from it directly, so anything

@@ -6,9 +6,33 @@ export function degreesToCompass(deg: number): string {
   return dirs[Math.round(deg / 22.5) % 16]
 }
 
-function angleDiff(a: number, b: number): number {
+/** Smallest absolute separation between two compass bearings, 0-180. */
+export function angleDiff(a: number, b: number): number {
   const diff = Math.abs(a - b) % 360
   return diff > 180 ? 360 - diff : diff
+}
+
+// Linear interpolation over a monotonically-increasing table of [x, y] control
+// points. Below the first point returns its y; at or above the last returns the
+// caller's `beyond` value. Stepped buckets are the recurring defect this
+// replaces: 0.1 s of period or 8 cm of face used to move a rating two bands.
+function interpolateCurve(
+  curve: ReadonlyArray<readonly [number, number]>,
+  x: number,
+  beyond: number
+): number {
+  if (x <= curve[0][0]) return curve[0][1]
+  const last = curve[curve.length - 1]
+  if (x >= last[0]) return beyond
+  for (let i = 1; i < curve.length; i++) {
+    const [x1, y1] = curve[i]
+    if (x <= x1) {
+      const [x0, y0] = curve[i - 1]
+      const t = (x - x0) / (x1 - x0)
+      return y0 + t * (y1 - y0)
+    }
+  }
+  return beyond
 }
 
 // ── Breaking wave height ─────────────────────────────────────────────────────
@@ -71,6 +95,10 @@ export function directionalExposure(
 // off-axis penalty in particular vanished whenever both sizes fell in the same
 // bucket. Linear interpolation between control points keeps the shape while
 // making the score strictly responsive to size.
+//
+// The curve is expressed for an INTERMEDIATE spot; `difficulty` rescales the
+// x-axis (see DIFFICULTY_SCALE), because a beginner beach break and Nazaré do
+// not share a sweet spot.
 const HEIGHT_CURVE: ReadonlyArray<readonly [number, number]> = [
   [0.0, 0],    // flat
   [0.4, 10],   // ankle
@@ -83,30 +111,55 @@ const HEIGHT_CURVE: ReadonlyArray<readonly [number, number]> = [
   [4.5, 88],   // double overhead plus
   [6.0, 62],   // few spots hold it
   [8.0, 35],   // closing out
+  [10.0, 20],  // nobody is paddling out
 ]
+
+// A spot's difficulty rating IS a statement about the size it is meant for. One
+// universal curve rated a beginner's waist-high peeler and a big-wave reef on
+// the same scale — the beach break never scored above "fair" on its best day,
+// and Nazaré peaked at a size it barely wakes up for. Scaling the curve's
+// x-axis is the smallest change that respects both: divide the face height by
+// the spot's scale before reading the curve.
+const DIFFICULTY_SCALE = {
+  beginner: 0.55,
+  intermediate: 1,
+  advanced: 1.5,
+} as const
+
+export type SpotDifficulty = keyof typeof DIFFICULTY_SCALE
+
+function difficultyScale(difficulty?: SpotDifficulty | null): number {
+  return (difficulty && DIFFICULTY_SCALE[difficulty]) || 1
+}
 
 function scoreFaceHeight(height: number): number {
   if (height <= 0) return 0
-  const last = HEIGHT_CURVE[HEIGHT_CURVE.length - 1]
-  if (height >= last[0]) return 30
-  for (let i = 1; i < HEIGHT_CURVE.length; i++) {
-    const [x1, y1] = HEIGHT_CURVE[i]
-    if (height <= x1) {
-      const [x0, y0] = HEIGHT_CURVE[i - 1]
-      const t = (height - x0) / (x1 - x0)
-      return Math.round(y0 + t * (y1 - y0))
-    }
-  }
-  return 30
+  // `beyond` matches the final control point rather than the old hardcoded 30,
+  // which sat 5 points BELOW the curve it continued — an 8.0 m face scored 35
+  // and an 8.01 m face scored 30.
+  return Math.round(interpolateCurve(HEIGHT_CURVE, height, 20))
 }
 
+// Open-Meteo's `swell_wave_period` is a MEAN period (Tm), but these thresholds
+// were written in peak-period language ("16 s groundswell"). Tm ≈ 0.8-0.85·Tp,
+// so the old buckets under-rated exactly the swells worth shouting about: a true
+// 16 s groundswell arrives as ~13.2 s and scored 91 instead of 98. Thresholds
+// are shifted down ~15% (16→13.5, 14→12, 12→10, 10→8.5, 8→6.5) and interpolated
+// — the step buckets flipped bands on 0.1 s of model noise (9.9 s → 79,
+// 10.0 s → 84).
+const PERIOD_CURVE: ReadonlyArray<readonly [number, number]> = [
+  [0.0, 0],
+  [4.0, 15],   // wind slop
+  [6.5, 35],   // short-period windswell
+  [8.5, 55],
+  [10.0, 75],
+  [12.0, 90],
+  [13.5, 100], // ~16 s peak period — a real groundswell
+]
+
 function scorePeriod(period: number): number {
-  if (period >= 16) return 100
-  if (period >= 14) return 90
-  if (period >= 12) return 75
-  if (period >= 10) return 55
-  if (period >= 8) return 35
-  return 15
+  if (period <= 0) return 0
+  return Math.round(interpolateCurve(PERIOD_CURVE, period, 100))
 }
 
 // The expectation of dirScore over a uniformly unknown direction:
@@ -170,14 +223,26 @@ function scoreWind(
 // groundswell. This is the factor that separates "3 ft and glassy" from
 // "3 ft of onshore mush" — the old engine could not tell them apart because it
 // scored the combined sea height and ignored the wind-wave partition entirely.
+//
+// The share is taken in QUADRATURE (H² is proportional to energy), not as a
+// linear height ratio. The linear form over-penalised modest chop by 20-25
+// points and let genuine victory-at-sea (0.6 m swell under 1.0 m of windsea)
+// escape the strong veto. Buckets are re-anchored to the energy scale.
+//
+// `swellHeight` should be the EXPOSURE-REDUCED swell actually reaching the
+// spot: an off-axis spot whose groundswell mostly sails past still rated
+// "clean" when the raw partition height was used, even though its sea surface
+// is windsea-dominated.
 export function scoreCleanliness(swellHeight: number, windWaveHeight: number): number {
-  const total = swellHeight + windWaveHeight
+  const swellEnergy = swellHeight * swellHeight
+  const chopEnergy = windWaveHeight * windWaveHeight
+  const total = swellEnergy + chopEnergy
   if (total <= 0) return 50
-  const chopRatio = windWaveHeight / total
-  if (chopRatio <= 0.15) return 100  // groundswell-dominated, organised
-  if (chopRatio <= 0.30) return 80
-  if (chopRatio <= 0.50) return 55
-  if (chopRatio <= 0.70) return 30
+  const chopRatio = chopEnergy / total
+  if (chopRatio <= 0.05) return 100  // groundswell-dominated, organised
+  if (chopRatio <= 0.15) return 80
+  if (chopRatio <= 0.40) return 55
+  if (chopRatio <= 0.65) return 30
   return 10                          // windsea-dominated victory-at-sea
 }
 
@@ -185,44 +250,60 @@ export interface TideContext {
   height: number  // tide height at this hour (m, MLLW)
   min: number     // lowest predicted tide across the forecast window
   max: number     // highest predicted tide across the forecast window
+  /** True when the tide is pushing in at this hour, false when draining, null
+   *  when the series can't say (first hour, or a flat pair). */
+  rising?: boolean | null
 }
 
-// Tide preference by bottom type. Reef and coral need water over the shelf, so
-// they favour mid-to-high and get dangerous/unrideable at the bottom of the
-// range. Sand bars generally break best around mid tide, and extreme high tide
-// tends to fatten and back off most breaks regardless of bottom.
+// Tide preference by bottom type, in METRES of water above the station datum —
+// not as a rank within the day's range. Rank-scoring made "ideal reef tide"
+// (0.62 normalised) mean 1.31 m at a 2.6 m-range station and 2.72 m at a 6 m
+// one, and at a station barely clearing the old range guard ±5 cm swung the
+// factor 75 points. A reef sits at a fixed depth below datum: what it needs is
+// an absolute amount of water over it, and the same amount is too much water
+// once the tide is metres above that.
+//
+// Tolerance is asymmetric — a dry reef is unrideable, a fat high tide is merely
+// disappointing.
+interface TidePreference {
+  ideal: number
+  lowTolerance: number
+  highTolerance: number
+}
+
+const TIDE_PREFERENCE: Record<string, TidePreference> = {
+  coral: { ideal: 1.2, lowTolerance: 0.7, highTolerance: 1.4 },
+  reef:  { ideal: 1.2, lowTolerance: 0.7, highTolerance: 1.4 },
+  rock:  { ideal: 1.0, lowTolerance: 0.8, highTolerance: 1.4 },
+  sand:  { ideal: 0.9, lowTolerance: 0.9, highTolerance: 1.3 },
+}
+
+// Unknown bottom — stay near neutral rather than guessing a depth preference.
+const TIDE_PREFERENCE_DEFAULT: TidePreference = {
+  ideal: 1.0, lowTolerance: 1.1, highTolerance: 1.6,
+}
+
+// Surf lore with a physical basis: a pushing tide carries water (and swell
+// energy) shoreward, a draining one works against it. Small on purpose — it
+// nudges between hours, it does not decide a session.
+const TIDE_TREND_BONUS = 4
+
 export function scoreTide(tide: TideContext, bottomType?: string | null): number {
   const range = tide.max - tide.min
-  // A station with no meaningful range (some Gulf/Med stations) tells us nothing.
-  if (!isFinite(range) || range < 0.15) return 50
+  // A station with no meaningful range (some Gulf/Med stations, and any station
+  // whose series failed to load properly) tells us nothing about depth. Widened
+  // from 0.15 m: below ~0.5 m of range the tide is not what decides the session.
+  if (!isFinite(range) || range < 0.5) return 50
+  if (!isFinite(tide.height)) return 50
 
-  // Normalised 0 = lowest tide of the window, 1 = highest.
-  const t = Math.min(1, Math.max(0, (tide.height - tide.min) / range))
+  const pref = (bottomType && TIDE_PREFERENCE[bottomType]) || TIDE_PREFERENCE_DEFAULT
+  const delta = tide.height - pref.ideal
+  const tolerance = delta < 0 ? pref.lowTolerance : pref.highTolerance
 
-  // Ideal normalised tide and tolerance per bottom type.
-  let ideal: number
-  let tolerance: number
-  switch (bottomType) {
-    case 'coral':
-    case 'reef':
-      ideal = 0.62      // needs water over the reef
-      tolerance = 0.30
-      break
-    case 'rock':
-      ideal = 0.45      // points often prefer mid-to-low
-      tolerance = 0.32
-      break
-    case 'sand':
-      ideal = 0.50      // beach breaks: mid tide, fairly forgiving
-      tolerance = 0.38
-      break
-    default:
-      ideal = 0.50
-      tolerance = 0.45  // unknown bottom — stay near neutral
-  }
+  const offset = Math.abs(delta) / tolerance
+  let score = 100 - offset * offset * 55
+  if (tide.rising != null) score += tide.rising ? TIDE_TREND_BONUS : -TIDE_TREND_BONUS
 
-  const offset = Math.abs(t - ideal) / tolerance
-  const score = 100 - offset * offset * 55
   return Math.max(15, Math.min(100, Math.round(score)))
 }
 
@@ -236,14 +317,26 @@ export function computeWavePower(waveHeight: number, period: number): number {
   return Math.round(0.5 * waveHeight * waveHeight * period * 10) / 10
 }
 
+/** One swell train reported by the model (or observed by a buoy). */
+export interface SwellPartition {
+  height: number
+  period: number
+  direction: number | null
+}
+
 export interface SurfRatingInput {
   /** Total significant wave height (m) — combined sea. Used only as a fallback
    *  when the swell partition is unavailable (e.g. long-range model hours). */
   waveHeight: number
-  /** Groundswell partition height (m) — the surfable component. */
+  /** Primary groundswell partition height (m) — the surfable component. */
   swellHeight: number
   swellPeriod: number
   swellDirection: number | null
+  /** Open-Meteo's second swell train. Partitions are ranked by HEIGHT, so the
+   *  longer-period (and usually more surfable) train is frequently the second
+   *  one — scoring only the first meant scoring 6-second slop while the actual
+   *  surf sat in the ignored partition. Omit when unavailable. */
+  secondarySwell?: SwellPartition | null
   /** Local windsea partition height (m). Omit when unknown; the cleanliness
    *  factor is then dropped and remaining weights renormalise. */
   windWaveHeight?: number | null
@@ -255,13 +348,23 @@ export interface SurfRatingInput {
   /** Omit when the spot has no tide station; tide weight renormalises away. */
   tide?: TideContext | null
   bottomType?: string | null
+  /** Rescales the height curve — a beginner break peaks far below Nazaré.
+   *  Defaults to 'intermediate' (scale 1), i.e. the unscaled curve. */
+  difficulty?: SpotDifficulty | null
 }
 
 export interface SurfRating {
   score: number
   rating: ConditionRating
-  /** Estimated breaking wave height (m) after shoaling and directional exposure. */
+  /** Estimated breaking wave height (m) — every swell partition shoaled,
+   *  reduced by directional exposure, and combined in quadrature. */
   faceHeight: number
+  /** The swell trains folded into one: height in quadrature, period and
+   *  direction weighted by each train's breaking energy AT THIS SPOT. Callers
+   *  should DISPLAY this rather than the model's primary partition, or the UI
+   *  shows a 6 s period beside a rating computed from an 11 s one. Null when
+   *  nothing breaks (no height, or no period to shoal it with). */
+  combinedSwell: SwellPartition | null
   /** Per-factor 0-100 scores, for "why is it rated this way" UI. */
   factors: {
     height: number
@@ -273,23 +376,103 @@ export interface SurfRating {
   }
 }
 
+// Hard caps on small surf, as a continuous ramp rather than three steps. The
+// stepped form released discontinuously: 8 cm of face (4 cm of model swell)
+// across the 1.6 m boundary was worth 20 points and moved "good" → "epic".
+//
+// The control points are the old step's own values at the sizes where it
+// changed — knee-high still can't beat "poor", the release is still complete at
+// 1.6 m — so the ramp reproduces the intended judgement at every boundary and
+// only removes the cliffs between them.
+//
+// Read against the DIFFICULTY-SCALED face height, so a beginner break at
+// waist-high is not permanently capped at "fair" on its best day.
+const HEIGHT_CAP_CURVE: ReadonlyArray<readonly [number, number]> = [
+  [0.0, 0],    // flat
+  [0.6, 29],   // knee-high: poor at best
+  [1.0, 72],   // chest-high: good at best
+  [1.6, 100],  // head-high and over: nothing withheld
+]
+
+function heightCap(scaledFace: number): number {
+  return interpolateCurve(HEIGHT_CAP_CURVE, scaledFace, 100)
+}
+
 export function rateSurfConditions(input: SurfRatingInput): SurfRating {
   // Prefer the groundswell partition. Past day ~10 the long-range model has no
   // swell decomposition (open-meteo.ts substitutes total wave), and some hours
   // legitimately have no swell at all — fall back to total sea so the engine
   // still has something to score rather than reporting flat.
-  const swellHeight = input.swellHeight > 0 ? input.swellHeight : input.waveHeight
+  const primaryHeight = input.swellHeight > 0 ? input.swellHeight : input.waveHeight
   const windWaveHeight = input.windWaveHeight ?? null
 
-  const exposure = directionalExposure(input.swellDirection, input.spotFacing)
-  const effectiveSwell = swellHeight * exposure
-  const faceHeight = breakingWaveHeight(effectiveSwell, input.swellPeriod)
+  // Score every swell train separately: each shoals by its OWN period and is
+  // reduced by its OWN angle to the beach. A 0.34 m / 11 s secondary can break
+  // bigger than a 0.54 m / 6 s primary, and combining them in quadrature (the
+  // sea-state energy sum) is what makes the reported face match the water.
+  const raw: SwellPartition[] = [
+    { height: primaryHeight, period: input.swellPeriod, direction: input.swellDirection },
+  ]
+  if (input.secondarySwell && input.secondarySwell.height > 0 && input.secondarySwell.period > 0) {
+    raw.push(input.secondarySwell)
+  }
 
-  const heightScore = scoreFaceHeight(faceHeight)
-  const periodScore = scorePeriod(input.swellPeriod)
+  let faceEnergy = 0          // Σ Hb² — the breaking energy, weight for the blend
+  let effectiveEnergy = 0     // Σ (H·exposure)² — the swell energy reaching the spot
+  let rawEnergy = 0           // Σ H² — the sea state, independent of this spot
+  let weightedPeriod = 0
+  let dirX = 0
+  let dirY = 0
+  let dirWeight = 0
+  let weightedExposure = 0
+
+  for (const partition of raw) {
+    const exposure = directionalExposure(partition.direction, input.spotFacing)
+    const effective = partition.height * exposure
+    const breaking = breakingWaveHeight(effective, partition.period)
+    const energy = breaking * breaking
+
+    faceEnergy += energy
+    effectiveEnergy += effective * effective
+    rawEnergy += partition.height * partition.height
+    weightedPeriod += energy * partition.period
+    weightedExposure += energy * exposure
+    if (partition.direction != null) {
+      const rad = (partition.direction * Math.PI) / 180
+      dirX += energy * Math.cos(rad)
+      dirY += energy * Math.sin(rad)
+      dirWeight += energy
+    }
+  }
+
+  const faceHeight = Math.round(Math.sqrt(faceEnergy) * 100) / 100
+  const effectiveSwell = Math.sqrt(effectiveEnergy)
+
+  // Blend the trains rather than picking one. Picking the "dominant" partition
+  // reintroduces exactly the defect the audit measured on the model's own
+  // ranking: one uniform SoCal swell produced periods spanning 6.7-11.9 s
+  // across 16 adjacent spots, purely from rank flips between trains of nearly
+  // equal size. A continuous energy-weighted blend cannot flip.
+  const combinedSwell: SwellPartition | null = faceEnergy > 0
+    ? {
+        height: Math.round(Math.sqrt(rawEnergy) * 100) / 100,
+        period: Math.round((weightedPeriod / faceEnergy) * 100) / 100,
+        direction: dirWeight > 0 && (dirX !== 0 || dirY !== 0)
+          ? Math.round((((Math.atan2(dirY, dirX) * 180) / Math.PI) + 360) % 360) % 360
+          : null,
+      }
+    : null
+
+  const scale = difficultyScale(input.difficulty)
+  const scaledFace = faceHeight / scale
+
+  const heightScore = scoreFaceHeight(scaledFace)
+  // The period that matters is the one carrying the surf, not whichever train
+  // the model happened to rank first.
+  const periodScore = scorePeriod(combinedSwell?.period ?? raw[0].period)
   const windScore = scoreWind(input.windSpeed, input.windDirection, input.spotFacing)
   const cleanScore = windWaveHeight != null
-    ? scoreCleanliness(swellHeight, windWaveHeight)
+    ? scoreCleanliness(effectiveSwell, windWaveHeight)
     : null
   const tideScore = input.tide ? scoreTide(input.tide, input.bottomType) : null
 
@@ -308,13 +491,10 @@ export function rateSurfConditions(input: SurfRatingInput): SurfRating {
     weighted.reduce((sum, [s, w]) => sum + s * w, 0) / totalWeight
   )
 
-  // Hard caps: calm wind and a long period can otherwise push tiny surf to
+  // Size cap: calm wind and a long period can otherwise push tiny surf to
   // "epic". Applied to breaking height, so a small-but-long-period swell that
   // genuinely stands up overhead is no longer capped the way raw Hs capped it.
-  let score = rawScore
-  if (faceHeight < 0.6) score = Math.min(score, 29)       // knee-high: always poor
-  else if (faceHeight < 1.0) score = Math.min(score, 49)  // waist-high: fair at best
-  else if (faceHeight < 1.6) score = Math.min(score, 72)  // chest-to-head: good at best
+  let score = Math.min(rawScore, Math.round(heightCap(scaledFace)))
 
   // Veto caps. A weighted mean lets one catastrophic factor be averaged away by
   // strong numbers elsewhere — a 4.5 m swell at 13 s under 40 km/h of straight
@@ -339,13 +519,16 @@ export function rateSurfConditions(input: SurfRatingInput): SurfRating {
     score,
     rating,
     faceHeight,
+    combinedSwell,
     factors: {
       height: heightScore,
       period: periodScore,
       wind: windScore,
       cleanliness: cleanScore,
       tide: tideScore,
-      exposure: Math.round(exposure * 100) / 100,
+      exposure: faceEnergy > 0
+        ? Math.round((weightedExposure / faceEnergy) * 100) / 100
+        : Math.round(directionalExposure(raw[0].direction, input.spotFacing) * 100) / 100,
     },
   }
 }
