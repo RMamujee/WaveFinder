@@ -109,21 +109,36 @@ export function mergeForecastData(
 
   // Tide index keyed by local "YYYY-MM-DDTHH:MM" — the same local-clock format
   // Open-Meteo returns, so hours line up without timezone conversion.
+  // One canonical series, sorted and de-duplicated, feeding both the height
+  // lookup and the rise/fall trend.
+  //
+  // On the autumn DST fall-back the local clock repeats an hour, so NOAA emits
+  // two rows for e.g. 01:00. Keeping the first is deterministic and matches the
+  // hour a forecast timestamp of 01:00 refers to first; more importantly, both
+  // derived structures now agree. Deduplicating only the height map left the
+  // trend differencing against a phantom step, which flipped the following
+  // hour from rising to falling.
+  const orderedTides: TidePoint[] = []
+  const seenTideTimes = new Set<string>()
+  for (const p of [...(ctx.tides ?? [])].sort((a, b) => a.time.localeCompare(b.time))) {
+    if (seenTideTimes.has(p.time)) continue
+    seenTideTimes.add(p.time)
+    orderedTides.push(p)
+  }
+
   const tideByTime = new Map<string, number>()
   let tideMin = Infinity
   let tideMax = -Infinity
-  for (const p of ctx.tides ?? []) {
+  for (const p of orderedTides) {
     tideByTime.set(p.time, p.height)
     if (p.height < tideMin) tideMin = p.height
     if (p.height > tideMax) tideMax = p.height
   }
   const hasTides = tideByTime.size > 0 && isFinite(tideMin) && isFinite(tideMax)
 
-  // Rising vs falling, read off the series itself. The caller's array is not
-  // guaranteed to be in time order, so sort a copy before differencing. Equal
-  // consecutive heights leave the hour unmarked (neither push nor drain).
+  // Rising vs falling, read off the series itself. Equal consecutive heights
+  // leave the hour unmarked (neither push nor drain).
   const tideRising = new Map<string, boolean>()
-  const orderedTides = [...(ctx.tides ?? [])].sort((a, b) => a.time.localeCompare(b.time))
   for (let i = 1; i < orderedTides.length; i++) {
     const prev = orderedTides[i - 1]
     const curr = orderedTides[i]
@@ -148,6 +163,7 @@ export function mergeForecastData(
   const tempMap = new Map<string, number>()
   const weatherCodeMap = new Map<string, number>()
   const precipProbMap = new Map<string, number>()
+  const cloudCoverMap = new Map<string, number>()
 
   w.time.forEach((t, i) => {
     if (w.wind_speed_10m[i] != null) {
@@ -160,6 +176,7 @@ export function mergeForecastData(
     if (w.temperature_2m?.[i] != null) tempMap.set(t, w.temperature_2m[i])
     if (w.weather_code?.[i] != null) weatherCodeMap.set(t, w.weather_code[i])
     if (w.precipitation_probability?.[i] != null) precipProbMap.set(t, w.precipitation_probability[i])
+    if (w.cloud_cover?.[i] != null) cloudCoverMap.set(t, w.cloud_cover[i])
   })
 
   const hours: ForecastHour[] = []
@@ -259,6 +276,10 @@ export function mergeForecastData(
       // factor renormalises away instead of scoring "perfectly clean".
       windWaveHeight: windWaveH,
       windSpeed: windData.speed,
+      // Gusts were fetched and displayed but never scored: 12 km/h gusting 35
+      // rated exactly like 12 km/h steady. Only a measured gust counts — the
+      // estimated stand-in below is derived from the speed itself.
+      windGust: rawWind && rawWind.gust > 0 ? rawWind.gust : null,
       windDirection: windData.ratingDir,
       spotFacing,
       tide,
@@ -292,8 +313,15 @@ export function mergeForecastData(
       },
       rating,
       ratingScore: score,
-      wavePower: computeWavePower(waveHeight, shownPeriod),
-      uvIndex: computeUVIndex(lat, time),
+      // Summed per partition: charging the whole sea at the swell's period
+      // overstated mixed seas by 1.79-2.0x. The gear panel renders the day's
+      // average of this, so the error was visible.
+      wavePower: computeWavePower([
+        { height: swellHeight > 0 ? swellHeight : waveHeight, period: swellPeriod },
+        secondarySwell ?? { height: null, period: null },
+        { height: windWaveH, period: m.wind_wave_period?.[i] ?? null },
+      ]),
+      uvIndex: computeUVIndex(lat, time, cloudCoverMap.get(time) ?? null),
       waterTemp: m.sea_surface_temperature?.[i] ?? null,
       airTempC: tempMap.get(time) ?? null,
       weatherCode: weatherCodeMap.get(time) ?? null,
@@ -314,23 +342,25 @@ export function groupHoursByDay(hours: ForecastHour[]): ForecastDay[] {
   }
 
   return Array.from(dayMap.entries()).map(([date, dayHours]) => {
-    const maxWaveHeight = Math.max(...dayHours.map((h) => h.waveHeight))
-    const maxFaceHeight = Math.max(...dayHours.map((h) => h.faceHeight))
-    // Hours with no swell decomposition carry swellPeriod 0 — averaging those
-    // in reported a 15 s day as 8 s. Average over the hours that have one.
-    const periods = dayHours.map((h) => h.swellPeriod).filter((p) => p > 0)
-    const avgPeriod = periods.length
-      ? periods.reduce((sum, p) => sum + p, 0) / periods.length
-      : 0
-
-    // Dominant rating over *surfable* hours only. This previously counted all 24
-    // hours despite the comment claiming otherwise, so a day that was good from
-    // dawn to dusk got outvoted by 12 hours of darkness nobody surfs.
+    // Every surf-facing aggregate is taken over *surfable* hours. The dominant
+    // rating already was; the rest were not, so a day's headline size could be
+    // reported from 03:00 and its average period dragged by hours nobody
+    // paddles out in. Falls back to all hours when a partial first/last day of
+    // the window has no daylight coverage at all.
     const daylight = dayHours.filter((h) => {
       const hour = Number(h.time.slice(11, 13))
       return hour >= 6 && hour <= 18
     })
     const ratedHours = daylight.length ? daylight : dayHours
+
+    const maxWaveHeight = Math.max(...ratedHours.map((h) => h.waveHeight))
+    const maxFaceHeight = Math.max(...ratedHours.map((h) => h.faceHeight))
+    // Hours with no swell decomposition carry swellPeriod 0 — averaging those
+    // in reported a 15 s day as 8 s. Average over the hours that have one.
+    const periods = ratedHours.map((h) => h.swellPeriod).filter((p) => p > 0)
+    const avgPeriod = periods.length
+      ? periods.reduce((sum, p) => sum + p, 0) / periods.length
+      : 0
 
     const ratingCounts: Record<string, number> = {}
     for (const h of ratedHours) {

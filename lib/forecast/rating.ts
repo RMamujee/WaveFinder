@@ -186,11 +186,26 @@ function windSpeedPenalty(windSpeed: number): number {
   return Math.min(70, 60 + (windSpeed - 45) * 2)               // 60 → 70 by 50; unpaddleable
 }
 
+// A gusty wind is worse than a steady one at the same mean speed: the face is
+// groomed then wrecked, then groomed again. Gusts were fetched and displayed
+// but never scored, so 12 km/h gusting 35 rated exactly like 12 km/h steady.
+// Blending part of the excess into the speed the engine scores is the smallest
+// change that captures it — and it keeps a genuine calm calm, because 2 km/h
+// gusting 8 still lands below the 5 km/h glassy threshold.
+const GUST_WEIGHT = 0.4
+
+function effectiveWindSpeed(windSpeed: number, windGust: number | null | undefined): number {
+  if (windGust == null || windGust <= windSpeed) return windSpeed
+  return windSpeed + GUST_WEIGHT * (windGust - windSpeed)
+}
+
 function scoreWind(
-  windSpeed: number,
+  rawWindSpeed: number,
   windDirection: number | null,
-  spotFacing: number
+  spotFacing: number,
+  windGust?: number | null
 ): number {
+  const windSpeed = effectiveWindSpeed(rawWindSpeed, windGust)
   if (windSpeed < 5) return 100
 
   // Speed-gate the direction penalty: wind damage scales with SPEED — direction
@@ -311,13 +326,28 @@ export function scoreTide(tide: TideContext, bottomType?: string | null): number
 }
 
 /**
- * Wave energy flux (power) in kW per meter of crest width.
- * Simplified formula: P ≈ 0.5 × Hs² × T
- * where Hs is significant wave height (m) and T is dominant period (s).
+ * Wave energy flux (power) in kW per metre of crest width.
+ *
+ * P ≈ 0.5 · H² · T, summed over the sea's PARTITIONS rather than applied once
+ * to the combined height. Energy is additive across partitions but period is
+ * not: feeding the total sea height with the swell's period charges the short,
+ * choppy windsea at the groundswell's period, which measured 1.79-2.0× too
+ * high in mixed seas. It is a user-facing number in three places (the map
+ * popup, the gear panel's power line, and the surf-report energy card), so a
+ * 2x error is read, not just stored.
+ *
+ * Partitions with no height or no period contribute nothing.
  */
-export function computeWavePower(waveHeight: number, period: number): number {
-  if (waveHeight <= 0 || period <= 0) return 0
-  return Math.round(0.5 * waveHeight * waveHeight * period * 10) / 10
+export function computeWavePower(
+  partitions: ReadonlyArray<{ height: number | null; period: number | null }>
+): number {
+  let total = 0
+  for (const p of partitions) {
+    if (p.height == null || p.period == null) continue
+    if (p.height <= 0 || p.period <= 0) continue
+    total += 0.5 * p.height * p.height * p.period
+  }
+  return Math.round(total * 10) / 10
 }
 
 /** One swell train reported by the model (or observed by a buoy). */
@@ -344,6 +374,9 @@ export interface SurfRatingInput {
    *  factor is then dropped and remaining weights renormalise. */
   windWaveHeight?: number | null
   windSpeed: number       // km/h
+  /** Peak gust (km/h). Omit when unknown; the wind factor is then scored on the
+   *  mean speed alone, exactly as before. */
+  windGust?: number | null
   /** Null when the wind reading is borrowed or unavailable — the wind factor
    *  then falls back to a speed-only score. */
   windDirection: number | null
@@ -473,7 +506,7 @@ export function rateSurfConditions(input: SurfRatingInput): SurfRating {
   // The period that matters is the one carrying the surf, not whichever train
   // the model happened to rank first.
   const periodScore = scorePeriod(combinedSwell?.period ?? raw[0].period)
-  const windScore = scoreWind(input.windSpeed, input.windDirection, input.spotFacing)
+  const windScore = scoreWind(input.windSpeed, input.windDirection, input.spotFacing, input.windGust)
   const cleanScore = windWaveHeight != null
     ? scoreCleanliness(effectiveSwell, windWaveHeight)
     : null

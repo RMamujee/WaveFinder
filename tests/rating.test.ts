@@ -45,15 +45,39 @@ describe('degreesToCompass', () => {
 })
 
 describe('computeWavePower', () => {
-  it('uses P = 0.5 * Hs^2 * T rounded to one decimal', () => {
-    expect(computeWavePower(2, 10)).toBe(20)
-    expect(computeWavePower(1.5, 12)).toBe(13.5)
+  it('uses P = 0.5 * H^2 * T rounded to one decimal', () => {
+    expect(computeWavePower([{ height: 2, period: 10 }])).toBe(20)
+    expect(computeWavePower([{ height: 1.5, period: 12 }])).toBe(13.5)
   })
 
-  it('returns 0 for non-positive height or period', () => {
-    expect(computeWavePower(0, 10)).toBe(0)
-    expect(computeWavePower(2, 0)).toBe(0)
-    expect(computeWavePower(-1, 10)).toBe(0)
+  it('sums partitions, each at its own period', () => {
+    // The defect: 0.5·(ΣH²)·T_swell charged the short windsea at the
+    // groundswell's period. A 1 m / 15 s swell under 1 m / 4 s chop is
+    // 7.5 + 2 = 9.5 kW/m, not 0.5·2·15 = 15 — measured at 1.79-2.0x too high
+    // in mixed seas, and this number drives the gear recommendations.
+    const partitioned = computeWavePower([
+      { height: 1, period: 15 },
+      { height: 1, period: 4 },
+    ])
+    expect(partitioned).toBe(9.5)
+    const combinedHeightAtSwellPeriod = computeWavePower([
+      { height: Math.sqrt(2), period: 15 },
+    ])
+    expect(combinedHeightAtSwellPeriod).toBeGreaterThan(partitioned * 1.5)
+  })
+
+  it('ignores partitions with no height or no period', () => {
+    expect(computeWavePower([{ height: 0, period: 10 }])).toBe(0)
+    expect(computeWavePower([{ height: 2, period: 0 }])).toBe(0)
+    expect(computeWavePower([{ height: -1, period: 10 }])).toBe(0)
+    expect(computeWavePower([{ height: null, period: 10 }])).toBe(0)
+    expect(computeWavePower([{ height: 2, period: null }])).toBe(0)
+    expect(computeWavePower([])).toBe(0)
+    // A missing partition must not discard the ones that are present.
+    expect(computeWavePower([
+      { height: 2, period: 10 },
+      { height: null, period: null },
+    ])).toBe(20)
   })
 })
 
@@ -564,6 +588,31 @@ describe('rateSurfConditions', () => {
     const base = rateSurfConditions({ ...CLEAN })
     expect(rateSurfConditions({ ...CLEAN, difficulty: 'intermediate' }).score).toBe(base.score)
     expect(rateSurfConditions({ ...CLEAN, difficulty: null }).score).toBe(base.score)
+  })
+
+  // ── Phase 4: polish (2026-08-05 audit) ────────────────────────────────────
+
+  it('penalises a gusty wind over a steady one at the same mean speed', () => {
+    // Gusts were fetched and displayed but never scored, so 12 km/h gusting 35
+    // rated exactly like 12 km/h steady. The face is groomed then wrecked.
+    const steady = rateSurfConditions({ ...CLEAN, windSpeed: 12, windDirection: 270 })
+    const gusty = rateSurfConditions({ ...CLEAN, windSpeed: 12, windDirection: 270, windGust: 35 })
+    expect(gusty.factors.wind).toBeLessThan(steady.factors.wind)
+  })
+
+  it('leaves a genuine calm calm even when the gust field is set', () => {
+    // A 2 km/h morning gusting 8 is still glassy — the gust must not tip it
+    // over the 5 km/h threshold and start applying a direction penalty.
+    const glassy = rateSurfConditions({ ...CLEAN, windSpeed: 2, windDirection: 270, windGust: 8 })
+    expect(glassy.factors.wind).toBe(100)
+  })
+
+  it('ignores a gust that does not exceed the mean speed', () => {
+    const base = rateSurfConditions({ ...CLEAN, windSpeed: 20, windDirection: 270 })
+    for (const gust of [null, undefined, 0, 15, 20]) {
+      const r = rateSurfConditions({ ...CLEAN, windSpeed: 20, windDirection: 270, windGust: gust })
+      expect(r.factors.wind, `gust ${gust}`).toBe(base.factors.wind)
+    }
   })
 
   it('holds the gale cap through the 45-55 km/h offshore window', () => {

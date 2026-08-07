@@ -159,7 +159,9 @@ export async function GET(
       : 'unknown'
 
     const wavePower = current.waveHeight != null && current.dominantPeriod != null
-      ? computeWavePower(current.waveHeight, current.dominantPeriod)
+      // A buoy reports one total height and one dominant period, with no
+      // partitioning available — that pair IS the single partition here.
+      ? computeWavePower([{ height: current.waveHeight, period: current.dominantPeriod }])
       : null
 
     const windDir = current.windDirection != null ? degreesToCompass(current.windDirection) : null
