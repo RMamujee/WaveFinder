@@ -26,7 +26,6 @@ export function Footer() {
               <li><Link href="/best-spots" className="hover:underline" style={{ color: 'var(--text-2)' }}>Best now</Link></li>
               <li><Link href="/compare"   className="hover:underline" style={{ color: 'var(--text-2)' }}>Compare</Link></li>
               <li><Link href="/timeline"  className="hover:underline" style={{ color: 'var(--text-2)' }}>Timeline</Link></li>
-              <li><Link href="/pricing"   className="hover:underline" style={{ color: 'var(--text-2)' }}>Pricing</Link></li>
             </ul>
           </div>
 

@@ -6,13 +6,21 @@ import { rateSurfConditions, degreesToCompass } from '@/lib/forecast/rating'
 import type { SwellPartition } from '@/lib/forecast/rating'
 import { distanceKm } from '@/lib/forecast/nearest-fallback'
 import type { SurfSpot } from '@/types/spot'
-import { requireProAccess } from '@/lib/entitlements'
-import { handleRouteError } from '@/lib/route-helpers'
+import { handleRouteError, cdnCacheHeaders } from '@/lib/route-helpers'
 
-// Per-user Pro-gated route: never share-cache. Explicit so the no-cache
-// guarantee survives future refactors even if req.url access changes.
-export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+// The response depends only on (region, date) — no session, no per-user data —
+// so it is share-cacheable. The fresh window matches the hourly cache the
+// Open-Meteo fetches already sit behind: nothing new can appear sooner. The
+// stale window is a full day because there are only ~105 (region, date) keys
+// spread thinly over real traffic, and a key that goes cold costs the next
+// visitor the whole fan-out — up to 4 marine + 4 wind fetches with a 28 s
+// timeout each. Serving a model run a few hours old in ~0.5 s beats making one
+// person wait out the cold path; `date` is in the key, so a stale entry is
+// never the wrong day.
+const CACHE_MAX_AGE = 3600
+const CACHE_STALE_WHILE_REVALIDATE = 86400
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
@@ -162,9 +170,6 @@ export interface BestSpotsSpotEntry {
 }
 
 export async function GET(req: Request) {
-  const gate = await requireProAccess()
-  if (!gate.ok) return NextResponse.json({ error: gate.status === 401 ? 'Sign in required' : 'Pro required' }, { status: gate.status })
-
   try {
   const { searchParams } = new URL(req.url)
   const region = (searchParams.get('region') ?? '').slice(0, 100)
@@ -177,7 +182,10 @@ export async function GET(req: Request) {
   const spots = spotsInRegion(region)
 
   if (!spots.length) {
-    return NextResponse.json({ spots: [], regionalSwell: [], date })
+    return NextResponse.json(
+      { spots: [], regionalSwell: [], date },
+      { headers: cdnCacheHeaders(CACHE_MAX_AGE, CACHE_STALE_WHILE_REVALIDATE) }
+    )
   }
 
   const seeds = buildClusterSeeds(spots, region)
@@ -319,7 +327,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json(
     { spots: spotsData, regionalSwell, date },
-    { headers: { 'Cache-Control': 'private, no-store' } }
+    { headers: cdnCacheHeaders(CACHE_MAX_AGE, CACHE_STALE_WHILE_REVALIDATE) }
   )
   } catch (error) {
     return handleRouteError(error, 'best_spots_error')
