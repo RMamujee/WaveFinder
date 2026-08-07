@@ -314,8 +314,8 @@ export function mergeForecastData(
       rating,
       ratingScore: score,
       // Summed per partition: charging the whole sea at the swell's period
-      // overstated mixed seas by 1.79-2.0x, and this number drives the gear
-      // recommendations, not just a readout.
+      // overstated mixed seas by 1.79-2.0x. The gear panel renders the day's
+      // average of this, so the error was visible.
       wavePower: computeWavePower([
         { height: swellHeight > 0 ? swellHeight : waveHeight, period: swellPeriod },
         secondarySwell ?? { height: null, period: null },

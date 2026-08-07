@@ -172,7 +172,7 @@ export async function GET(req: Request) {
 
   // Wave power is the sum over partitions: charging the whole sea at the
   // groundswell's period overstated mixed seas by up to 2x, and the map popup
-  // and gear recommendations both read this number.
+  // renders this number directly.
   function powerOf(om: CurrentMarineConditions): number {
     return computeWavePower([
       { height: om.swellHeight > 0 ? om.swellHeight : om.waveHeight, period: om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod },
