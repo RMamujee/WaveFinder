@@ -332,8 +332,9 @@ export function scoreTide(tide: TideContext, bottomType?: string | null): number
  * to the combined height. Energy is additive across partitions but period is
  * not: feeding the total sea height with the swell's period charges the short,
  * choppy windsea at the groundswell's period, which measured 1.79-2.0× too
- * high in mixed seas — and this number drives the gear recommendations and the
- * "high energy" label, not just a readout.
+ * high in mixed seas. It is a user-facing number in three places (the map
+ * popup, the gear panel's power line, and the surf-report energy card), so a
+ * 2x error is read, not just stored.
  *
  * Partitions with no height or no period contribute nothing.
  */
