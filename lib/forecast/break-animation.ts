@@ -107,9 +107,14 @@ export function deriveBreakHand(description: string | null | undefined): BreakHa
 // 1:1) keeps the loop watchable while preserving the *relative* difference
 // the brief asks for — a 16s groundswell must read as unmistakably
 // slower/more spaced than a 7s windswell, not just technically different.
-const PERIOD_TO_SECONDS = 0.6
-const MIN_SET_INTERVAL = 2.6 // below this the motion reads as jittery noise, not "long period"
-const MAX_SET_INTERVAL = 10.5 // above this it starts to look frozen/broken, not "slow and powerful"
+// Retuned 2026-08-07 after watching it: the original 0.6x mapping produced a
+// 7.4 s loop for a mid-period swell, which in a 360x232 panel is a crest
+// crawling at ~21 px/s. It was genuinely animating and read as a still image.
+// The RATIO between periods is the informative part and is preserved exactly;
+// only the absolute scale is compressed, so a set now reads in a glance.
+const PERIOD_TO_SECONDS = 0.2
+const MIN_SET_INTERVAL = 1.2 // below this the motion reads as jittery noise, not "long period"
+const MAX_SET_INTERVAL = 3.6 // above this a small panel reads as static, not "slow and powerful"
 
 export function periodToSetInterval(period: number): number {
   if (!Number.isFinite(period) || period <= 0) return MAX_SET_INTERVAL
@@ -128,4 +133,19 @@ export function relativeSwellAngle(swellDirection: number, facingDirection: numb
   // +180 this function's own (-180, 180] contract promises.
   const raw = ((swellDirection - facingDirection) % 360 + 360) % 360
   return raw > 180 ? raw - 360 : raw
+}
+
+// ── Spacing: how many crests are on screen at once ──────────────────────────
+// Period reads twice over in the diagram: as cadence, and as spacing. Deep-water
+// wavelength grows with the square of period, so a long-period groundswell puts
+// far fewer crests in the same stretch of water than short-period windswell.
+// Encoding that as crest COUNT means the difference is visible in a still
+// frame, before any motion is read — which is also what makes the
+// reduced-motion fallback informative rather than merely present.
+export const MIN_CRESTS = 2
+export const MAX_CRESTS = 5
+
+export function crestCountForPeriod(period: number): number {
+  if (!Number.isFinite(period) || period <= 0) return MIN_CRESTS
+  return Math.min(MAX_CRESTS, Math.max(MIN_CRESTS, Math.round(30 / period)))
 }

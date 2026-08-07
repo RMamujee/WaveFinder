@@ -8,321 +8,359 @@ import {
   deriveBreakHand,
   periodToSetInterval,
   relativeSwellAngle,
+  crestCountForPeriod,
   type BreakArchetype,
   type BreakHand,
 } from '@/lib/forecast/break-animation'
-import { BOTTOM_TYPE_STYLE, type BottomType } from '@/lib/bottom-type'
-import { degreesToCompass } from '@/lib/forecast/rating'
 
 interface Props {
   spot: SurfSpot
-  /** The same hour the rest of the page shows (current condition), so the
-   *  diagram never disagrees with the numbers displayed beside it. */
+  /** The same hour the rest of the page shows, so the diagram never disagrees
+   *  with the numbers displayed beside it. */
   hour: ForecastHour | null
 }
 
-// viewBox coordinate space — ocean at the top, shore at the bottom, same
-// orientation a surfer paddling out and facing the beach would see.
-const W = 320
-const H = 200
-const OCEAN_ZONE_H = 172 // where the sand band begins
+// ── Why this looks like a chart ──────────────────────────────────────────────
+//
+// Depth is the reason a wave breaks where it does, so the diagram is drawn as
+// bathymetry: contour lines, a shoal, a shoreline. That is the vernacular every
+// printed surf guide already uses, and it makes "where it breaks" information
+// rather than decoration — the contours differ per archetype because the
+// seabed is the thing that differs.
+//
+// Plan view, ocean at the top, shore at the bottom: the orientation of a
+// lineup diagram, and of a surfer sitting outside looking in.
+const W = 360
+const H = 232
+const SHORE_Y = 196
 
-const ARCHETYPE_META: Record<BreakArchetype, { label: string; hint: string; swatch: BottomType }> = {
-  point: { label: 'Point break', hint: 'peels off a headland', swatch: 'rock' },
-  reef: { label: 'Reef break', hint: 'stands up over a fixed outside bank', swatch: 'reef' },
-  beach: { label: 'Beach break', hint: 'peaks shift along the sandbar', swatch: 'sand' },
+// ── Geometry per archetype ──────────────────────────────────────────────────
+//
+// `peels` are authored FROM THE PEAK OUTWARD in the peel direction, which is
+// what lets one keyframe drive left, right and both: the whitewater is a dash
+// sweeping along the path from its start, so the path's direction IS the
+// wave's direction. pathLength={100} normalises the dash maths so it does not
+// depend on each path's real length.
+interface BreakGeometry {
+  /** Depth contours, deepest first. */
+  contours: string[]
+  /** The shoal itself — the shallow ground the wave trips over. */
+  shoal: string
+  /** Land mass, drawn over the sea. */
+  land: string
+  /** One path per peel direction, each starting at the peak. */
+  peels: string[]
+  /** Takeoff point. */
+  peak: { x: number; y: number }
+  /** Unbroken crest line, offset shoreward by `o`. */
+  crest: (o: number) => string
 }
 
-const HAND_LABEL: Record<BreakHand, string> = {
-  left: 'Left-hand',
-  right: 'Right-hand',
+function pointGeometry(hand: BreakHand): BreakGeometry {
+  // A right-hander peels toward screen-right, so the headland sits to the
+  // left. Mirroring the whole scene keeps one set of coordinates honest.
+  const flip = hand === 'left'
+  const x = (v: number) => (flip ? W - v : v)
+  return {
+    contours: [
+      `M${x(28)},34 C${x(120)},52 ${x(230)},72 ${x(348)},86`,
+      `M${x(40)},58 C${x(126)},76 ${x(232)},96 ${x(350)},110`,
+    ],
+    shoal: `M${x(52)},72 C${x(130)},92 ${x(236)},112 ${x(352)},126 L${x(352)},${SHORE_Y} L${x(52)},${SHORE_Y} Z`,
+    // Headland wedge pushing out from the shore into the sea.
+    land: `M${x(-20)},${SHORE_Y} L${x(-20)},62 C${x(40)},70 ${x(78)},104 ${x(104)},${SHORE_Y} Z`,
+    peels: [`M${x(96)},92 C${x(150)},104 ${x(226)},120 ${x(334)},136`],
+    peak: { x: x(96), y: 92 },
+    crest: (o) => `M${x(44)},${18 + o} C${x(120)},${34 + o} ${x(224)},${52 + o} ${x(352)},${66 + o}`,
+  }
+}
+
+function reefGeometry(hand: BreakHand): BreakGeometry {
+  const right = 'M180,96 C214,102 250,116 296,140'
+  const left = 'M180,96 C146,102 110,116 64,140'
+  return {
+    contours: ['M22,58 C86,40 274,40 338,58', 'M40,76 C98,60 262,60 320,76'],
+    // A closed offshore bank — the defining feature of a reef.
+    shoal: 'M62,104 C88,74 272,74 298,104 C272,132 88,132 62,104 Z',
+    land: `M0,${SHORE_Y} C90,${SHORE_Y - 10} 270,${SHORE_Y - 10} ${W},${SHORE_Y} L${W},${H} L0,${H} Z`,
+    peels: hand === 'right' ? [right] : hand === 'left' ? [left] : [right, left],
+    peak: { x: 180, y: 96 },
+    crest: (o) => `M-16,${26 + o} C80,${8 + o} 280,${8 + o} 376,${26 + o}`,
+  }
+}
+
+function beachGeometry(hand: BreakHand): BreakGeometry {
+  const right = 'M168,118 C198,124 228,132 268,146'
+  const left = 'M168,118 C138,124 108,132 68,146'
+  return {
+    contours: ['M-10,64 C90,54 270,54 370,64', 'M-10,88 C90,80 270,80 370,88'],
+    // Two bars with a rip gap between them — why a beach break's peaks shift.
+    shoal:
+      'M18,116 C60,100 132,100 158,120 C132,140 60,140 18,124 Z ' +
+      'M202,120 C228,100 300,100 342,116 C300,140 228,140 202,140 Z',
+    land: `M0,${SHORE_Y} C90,${SHORE_Y - 6} 270,${SHORE_Y - 6} ${W},${SHORE_Y} L${W},${H} L0,${H} Z`,
+    peels: hand === 'right' ? [right] : hand === 'left' ? [left] : [right, left],
+    peak: { x: 168, y: 118 },
+    crest: (o) => `M-16,${30 + o} C80,${16 + o} 280,${16 + o} 376,${30 + o}`,
+  }
+}
+
+function geometryFor(archetype: BreakArchetype, hand: BreakHand): BreakGeometry {
+  if (archetype === 'point') return pointGeometry(hand)
+  if (archetype === 'reef') return reefGeometry(hand)
+  return beachGeometry(hand)
+}
+
+const ARCHETYPE_COPY: Record<BreakArchetype, { label: string; where: string }> = {
+  point: { label: 'Point', where: 'Wraps around the headland and peels down the point' },
+  reef: { label: 'Reef', where: 'Stands up over a fixed bank with deep water either side' },
+  beach: { label: 'Beach', where: 'Peaks shift along the sandbars as they move' },
+}
+
+const HAND_COPY: Record<BreakHand, string> = {
+  left: 'Left',
+  right: 'Right',
   'a-frame': 'A-frame',
 }
 
-function angleDescription(angle: number): string {
-  const abs = Math.abs(angle)
-  if (abs < 12) return 'arriving square to the beach'
-  if (abs < 35) return `arriving ~${Math.round(abs)}° off square`
-  return `wrapping in at a sharp ~${Math.round(abs)}° angle`
-}
-
-// A gently undulating crest line spanning (and slightly overflowing) the
-// ocean zone, tilted by `tiltPx` between its ends to depict the swell's
-// angle relative to the beach. This is a stylized, monotonic — not
-// literal-compass — mapping of relativeSwellAngle's sign: positive angle
-// pushes the right end further toward shore.
-function crestPath(y: number, tiltPx: number): string {
-  const yl = y - tiltPx / 2
-  const yr = y + tiltPx / 2
-  const mid = (yl + yr) / 2
-  return `M-24,${yl.toFixed(1)} Q70,${(mid - 7).toFixed(1)} 160,${mid.toFixed(1)} Q250,${(mid + 7).toFixed(1)} 344,${yr.toFixed(1)}`
-}
-
-// The foam/whitewater peel for a single peak: one arc drawn left-to-right for
-// a right-hand wave, right-to-left for a left-hand wave (dash-offset draw
-// direction follows the path's own start point), or two half-arcs opening
-// from a center peak for an A-frame that breaks both ways at once.
-function peelPaths(centerX: number, y: number, halfWidth: number, dip: number, hand: BreakHand): string[] {
-  const leftX = centerX - halfWidth
-  const rightX = centerX + halfWidth
-  if (hand === 'left') return [`M${rightX},${y} Q${centerX},${y - dip} ${leftX},${y}`]
-  if (hand === 'right') return [`M${leftX},${y} Q${centerX},${y - dip} ${rightX},${y}`]
-  return [
-    `M${centerX},${(y - dip).toFixed(1)} Q${((centerX + leftX) / 2).toFixed(1)},${(y - dip * 0.5).toFixed(1)} ${leftX},${y}`,
-    `M${centerX},${(y - dip).toFixed(1)} Q${((centerX + rightX) / 2).toFixed(1)},${(y - dip * 0.5).toFixed(1)} ${rightX},${y}`,
-  ]
-}
-
-// The headland for a point break: a landmass jutting from one side of the
-// frame to a tip, with the wave peeling along its seaward edge and on down
-// the adjacent beach (the "long peeling ride" a point is known for). Mirrored
-// on the x-axis for a left-hand wave — see the module doc for the screen
-// convention this relies on.
-function pointGeometry(hand: BreakHand) {
-  const mirrored = hand === 'left'
-  const m = (x: number) => (mirrored ? W - x : x)
-  const rockD = [
-    `M${m(0)},200`,
-    `L${m(0)},100`,
-    `C${m(20)},80 ${m(45)},66 ${m(72)},58`,
-    `C${m(92)},78 ${m(96)},108 ${m(86)},138`,
-    `C${m(78)},164 ${m(55)},186 ${m(22)},200`,
-    'Z',
-  ].join(' ')
-  const breakD = [
-    `M${m(72)},58`,
-    `C${m(92)},78 ${m(96)},108 ${m(86)},138`,
-    `C${m(80)},160 ${m(100)},175 ${m(140)},182`,
-    `C${m(190)},188 ${m(240)},190 ${m(290)},190`,
-  ].join(' ')
-  // Short reverse stub off the tip, used only for the rare A-frame point —
-  // most points in the data specify a single hand explicitly.
-  const stubD = `M${m(72)},58 C${m(60)},80 ${m(50)},105 ${m(55)},130`
-  return { rockD, breakD, stubD }
+function angleCopy(angle: number): string {
+  const abs = Math.round(Math.abs(angle))
+  if (abs < 12) return 'Straight in'
+  if (abs < 35) return `${abs}° off square`
+  return `Wrapping ${abs}°`
 }
 
 export function BreakAnimation({ spot, hour }: Props) {
   const archetype = deriveBreakArchetype(spot.bottomType, spot.description)
   const hand = deriveBreakHand(spot.description)
-  const meta = ARCHETYPE_META[archetype]
-  const swatch = BOTTOM_TYPE_STYLE[meta.swatch]
+  const geo = geometryFor(archetype, hand)
 
-  // Degrade to the static frame when the forecast has no usable swell (period
-  // 0/absent) — same code path prefers-reduced-motion uses below, since both
-  // cases need a meaningful non-animated snapshot rather than a blank box.
+  // No usable swell (period 0/absent) degrades to the same static frame
+  // prefers-reduced-motion gets: the base SVG attributes are authored as a
+  // real mid-scene moment, so neither case is ever a blank box.
   const hasSwell = !!hour && hour.swellPeriod > 0
-  const interval = hasSwell ? periodToSetInterval(hour.swellPeriod) : null
+  const period = hasSwell ? hour.swellPeriod : 0
+  const interval = hasSwell ? periodToSetInterval(period) : 0
   const angle = hasSwell ? relativeSwellAngle(hour.swellDirection, spot.facingDirection) : 0
 
-  const tiltFull = Math.max(-46, Math.min(46, (angle / 60) * 46))
-  const tiltNear = tiltFull * 0.35
+  // Period reads twice over: as cadence, and as spacing. Wavelength grows with
+  // period, so a 16 s groundswell shows two widely-spaced lines where a 7 s
+  // windswell shows four tight ones — visible before you read a number.
+  const crestCount = crestCountForPeriod(period)
+  const crestGap = 148 / crestCount
+  const tilt = Math.max(-16, Math.min(16, (angle / 60) * 16))
 
-  const animClass = hasSwell ? 'break-anim-move' : undefined
-  const half = hasSwell && interval ? interval / 2 : 0
-
-  const crestStyle = (delay: number): CSSProperties | undefined =>
+  const marchStyle = (i: number): CSSProperties | undefined =>
     hasSwell
       ? {
-          animationName: 'break-anim-crest',
+          animationName: 'break-march',
           animationDuration: `${interval}s`,
-          animationDelay: `${delay}s`,
-          animationTimingFunction: 'linear',
+          animationDelay: `${-(i * interval) / crestCount}s`,
+          animationTimingFunction: 'cubic-bezier(0.35, 0, 0.7, 1)',
           animationIterationCount: 'infinite',
         }
       : undefined
 
-  const foamStyle = (delay: number): CSSProperties | undefined =>
+  // The peel fires once per set, as a crest reaches the shoal.
+  const peelStyle = (i: number): CSSProperties | undefined =>
     hasSwell
       ? {
-          animationName: 'break-anim-foam',
+          animationName: 'break-peel',
           animationDuration: `${interval}s`,
-          animationDelay: `${delay}s`,
-          animationTimingFunction: 'ease-in',
+          animationDelay: `${i * 0.12}s`,
+          animationTimingFunction: 'cubic-bezier(0.3, 0.1, 0.5, 1)',
           animationIterationCount: 'infinite',
         }
       : undefined
 
-  const ariaLabel = `Diagram of how ${spot.name} breaks: a ${meta.label.toLowerCase()}, ${HAND_LABEL[hand].toLowerCase()}${
-    hasSwell ? `, ${Math.round(hour.swellPeriod)} second swell period` : ''
-  }`
+  const peakStyle: CSSProperties | undefined = hasSwell
+    ? {
+        animationName: 'break-peak',
+        animationDuration: `${interval}s`,
+        animationTimingFunction: 'ease-out',
+        animationIterationCount: 'infinite',
+      }
+    : undefined
 
-  const point = archetype === 'point' ? pointGeometry(hand) : null
+  const label = `Break diagram for ${spot.name}: ${ARCHETYPE_COPY[archetype].label.toLowerCase()} break, ${
+    HAND_COPY[hand].toLowerCase()
+  }${hasSwell ? `, ${Math.round(period)} second swell period` : ', no swell running'}`
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--border)' }}>
-      <div className="px-5 pt-4 pb-1 flex flex-wrap items-center gap-2">
-        <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: swatch.bg, color: swatch.color }}>
-          {meta.label}
-        </span>
-        <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'var(--ocean-100)', color: 'var(--ocean-700)' }}>
-          {HAND_LABEL[hand]}
-        </span>
-        {hasSwell && (
-          <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'var(--sand-100)', color: 'var(--text-2)' }}>
-            {Math.round(hour.swellPeriod)}s period
-          </span>
-        )}
-      </div>
+      {/* The diagram is composed for a 360x232 frame. Left at width:100% it
+          scaled to the card — ~1225x790 on a desktop layout — and the whole
+          thing fell apart: a near-empty field taller than the viewport, the
+          readout row pushed off-screen, and the motion spread so thin across
+          it that a running animation read as a still image. Capping the width
+          keeps the composition at the density it was drawn for. */}
+      <div className="px-4 pt-4" style={{ background: 'var(--sand-50)' }}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          role="img"
+          aria-label={label}
+          style={{ display: 'block', width: '100%', maxWidth: 460, height: 'auto', margin: '0 auto', borderRadius: 12 }}
+        >
+        <defs>
+          {/* Deep offshore water to shallow inshore — the depth gradient the
+              contours annotate. */}
+          <linearGradient id="ba-sea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--ocean-800)" />
+            <stop offset="55%" stopColor="var(--ocean-600)" />
+            <stop offset="100%" stopColor="var(--ocean-400)" />
+          </linearGradient>
+          <linearGradient id="ba-sand" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--sand-300)" />
+            <stop offset="100%" stopColor="var(--sand-400)" />
+          </linearGradient>
+          {/* Crests are faint offshore and firm up as they stand — they have
+              broken by the shoal, where the whitewater takes over. */}
+          <linearGradient id="ba-crest" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="white" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="white" stopOpacity="0.95" />
+          </linearGradient>
+          <clipPath id="ba-sea-clip">
+            <rect x="0" y="0" width={W} height={SHORE_Y} />
+          </clipPath>
+        </defs>
 
-      <div className="px-3 pb-4 pt-2">
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={ariaLabel} style={{ display: 'block' }}>
-          <defs>
-            <linearGradient id="break-anim-ocean" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--ocean-100)" />
-              <stop offset="100%" stopColor="var(--ocean-50)" />
-            </linearGradient>
-            <clipPath id="break-anim-clip">
-              <rect x="-24" y="0" width={W + 48} height={OCEAN_ZONE_H} />
-            </clipPath>
-          </defs>
+        <rect x="0" y="0" width={W} height={H} fill="url(#ba-sea)" />
 
-          <rect x="0" y="0" width={W} height={H} fill="url(#break-anim-ocean)" />
+        <g clipPath="url(#ba-sea-clip)">
+          {/* Bathymetry. Dashed and low contrast — chart annotation, not the
+              subject. */}
+          {geo.contours.map((d, i) => (
+            <path
+              key={`c${i}`}
+              d={d}
+              fill="none"
+              stroke="var(--ocean-300)"
+              strokeOpacity={0.3}
+              strokeWidth={1}
+              strokeDasharray="5 7"
+            />
+          ))}
 
-          {/* Approaching swell — two tiers; the nearshore tier's tilt is
-              damped to suggest refraction as the swell shoals. */}
-          <g clipPath="url(#break-anim-clip)">
-            {[0, 1].map((i) => (
-              <path
-                key={`far-${i}`}
-                d={crestPath(40, tiltFull)}
-                fill="none"
-                stroke="var(--ocean-400)"
-                strokeWidth={2}
-                strokeLinecap="round"
-                opacity={hasSwell ? undefined : 0.45}
-                className={animClass}
-                style={crestStyle(i * half)}
-              />
-            ))}
-            {[0, 1].map((i) => (
-              <path
-                key={`near-${i}`}
-                d={crestPath(104, tiltNear)}
-                fill="none"
-                stroke="var(--ocean-500)"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                opacity={hasSwell ? undefined : 0.6}
-                className={animClass}
-                style={crestStyle(i * half)}
-              />
+          {/* The shoal — lighter water over shallow ground. */}
+          <path d={geo.shoal} fill="var(--ocean-300)" fillOpacity={0.2} fillRule="evenodd" />
+          <path
+            d={geo.shoal}
+            fill="none"
+            stroke="var(--ocean-200)"
+            strokeOpacity={0.45}
+            strokeWidth={1}
+            strokeDasharray="3 5"
+            fillRule="evenodd"
+          />
+
+          {/* Unbroken crests marching in.
+              NOTE: no `transform` attribute here. An SVG presentation attribute
+              and a CSS animation targeting the same property is a silent
+              no-op waiting to happen — the starting offset is baked into `d`
+              instead, so the keyframe is the only thing touching `transform`.
+              Same rule for stroke-dashoffset on the peel below. */}
+          <g transform={`rotate(${tilt * 0.09} ${W / 2} ${H / 2})`}>
+            {Array.from({ length: crestCount }, (_, i) => (
+              // Two strokes per swell, not one. A 2.5-unit hairline drifting
+              // across a large field of flat blue is genuinely hard to see as
+              // movement — it reads as a static line. A wide soft body under a
+              // crisp core gives the swell enough presence that the marching
+              // is unmistakable, which is the whole point of the panel.
+              <g key={`m${i}`}>
+                <path
+                  className="ba-move ba-crest"
+                  d={geo.crest(i * crestGap + crestGap * 0.8)}
+                  fill="none"
+                  stroke="white"
+                  strokeOpacity={0.16}
+                  strokeWidth={11}
+                  strokeLinecap="round"
+                  style={marchStyle(i)}
+                />
+                <path
+                  className="ba-move ba-crest"
+                  d={geo.crest(i * crestGap + crestGap * 0.8)}
+                  fill="none"
+                  stroke="url(#ba-crest)"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  style={marchStyle(i)}
+                />
+              </g>
             ))}
           </g>
 
-          {/* Shore */}
-          <path
-            d="M0,180 C40,173 80,177 120,179 C160,181 200,175 240,178 C280,181 300,176 320,179 L320,200 L0,200 Z"
-            fill="var(--sand-300)"
-            stroke="var(--sand-400)"
-            strokeWidth={1}
-          />
-
-          {/* Archetype-specific seabed feature */}
-          {archetype === 'reef' && (
-            <ellipse
-              cx={172}
-              cy={108}
-              rx={46}
-              ry={15}
-              transform="rotate(-6 172 108)"
-              fill="#9a3412"
-              fillOpacity={0.24}
-              stroke="#9a3412"
-              strokeOpacity={0.55}
-              strokeWidth={1.4}
-              strokeDasharray="3 3"
-            />
-          )}
-          {archetype === 'beach' && (
-            <>
-              <ellipse cx={92} cy={150} rx={36} ry={9} fill="var(--sand-500)" fillOpacity={0.32} />
-              <ellipse cx={222} cy={144} rx={34} ry={9} fill="var(--sand-500)" fillOpacity={0.32} />
-            </>
-          )}
-          {point && (
-            <path d={point.rockD} fill="#4b5563" stroke="#374151" strokeWidth={1.5} strokeLinejoin="round" />
-          )}
-
-          {/* Foam / whitewater peel */}
-          {archetype === 'reef' &&
-            peelPaths(172, 100, 38, 14, hand).map((d, i) => (
+          {/* THE PEEL — whitewater running along the break from the takeoff
+              point outward. The one loud thing in the panel. */}
+          {geo.peels.map((d, i) => (
+            <g key={`p${i}`}>
               <path
-                key={i}
+                className="ba-move ba-peel"
                 d={d}
                 pathLength={100}
                 fill="none"
                 stroke="white"
-                strokeWidth={4}
+                strokeOpacity={0.22}
+                strokeWidth={8}
                 strokeLinecap="round"
-                strokeDasharray={100}
-                strokeDashoffset={35}
-                opacity={0.92}
-                className={animClass}
-                style={foamStyle(i * half)}
+                style={peelStyle(i)}
               />
-            ))}
-          {archetype === 'beach' &&
-            ([
-              [92, 150, 32, 10],
-              [222, 145, 30, 10],
-            ] as const).flatMap(([cx, y, hw, dip], zoneIdx) =>
-              peelPaths(cx, y, hw, dip, hand).map((d, i) => (
-                <path
-                  key={`${zoneIdx}-${i}`}
-                  d={d}
-                  pathLength={100}
-                  fill="none"
-                  stroke="white"
-                  strokeWidth={3.5}
-                  strokeLinecap="round"
-                  strokeDasharray={100}
-                  strokeDashoffset={35}
-                  opacity={0.92}
-                  className={animClass}
-                  style={foamStyle(zoneIdx * 0.4 + i * half)}
-                />
-              ))
-            )}
-          {point && (
-            <>
               <path
-                d={point.breakD}
+                className="ba-move ba-peel"
+                d={d}
                 pathLength={100}
                 fill="none"
                 stroke="white"
-                strokeWidth={4}
+                strokeWidth={3}
                 strokeLinecap="round"
-                strokeDasharray={100}
-                strokeDashoffset={30}
-                opacity={0.92}
-                className={animClass}
-                style={foamStyle(0)}
+                style={peelStyle(i)}
               />
-              {hand === 'a-frame' && (
-                <path
-                  d={point.stubD}
-                  pathLength={100}
-                  fill="none"
-                  stroke="white"
-                  strokeWidth={3.5}
-                  strokeLinecap="round"
-                  strokeDasharray={100}
-                  strokeDashoffset={30}
-                  opacity={0.85}
-                  className={animClass}
-                  style={foamStyle(0)}
-                />
-              )}
-            </>
-          )}
-        </svg>
+            </g>
+          ))}
 
-        <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
-          {hasSwell
-            ? `${Math.round(hour.swellPeriod)}s swell from the ${degreesToCompass(hour.swellDirection)} — ${angleDescription(angle)}. This ${meta.label.toLowerCase()} ${meta.hint}.`
-            : `No swell in the water right now — this shows how ${spot.name}'s ${meta.label.toLowerCase()} typically breaks: it ${meta.hint}.`}
-        </p>
+          {/* Takeoff point. The ring pulses via stroke width/opacity rather
+              than `r`: `r` is a CSS geometry property only some engines
+              animate, and it would clash with the attribute the same way. */}
+          <circle
+            className="ba-move ba-peak"
+            cx={geo.peak.x}
+            cy={geo.peak.y}
+            r={10}
+            fill="none"
+            stroke="white"
+            style={peakStyle}
+          />
+          <circle cx={geo.peak.x} cy={geo.peak.y} r={3.5} fill="white" />
+        </g>
+
+        <path d={geo.land} fill="url(#ba-sand)" />
+        <path d={geo.land} fill="none" stroke="var(--sand-500)" strokeOpacity={0.45} strokeWidth={1} />
+        </svg>
       </div>
+
+      {/* Read-out. Each cell states one thing the diagram is showing, in the
+          same words the derivation used. */}
+      <dl className="grid grid-cols-3 gap-px" style={{ background: 'var(--border)' }}>
+        {[
+          { k: 'Breaks', v: ARCHETYPE_COPY[archetype].label },
+          { k: 'Direction', v: HAND_COPY[hand] },
+          { k: 'Period', v: hasSwell ? `${Math.round(period)}s` : '—' },
+        ].map(({ k, v }) => (
+          <div key={k} style={{ background: 'white' }} className="px-4 py-2.5">
+            <dt className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>
+              {k}
+            </dt>
+            <dd className="text-sm font-semibold mt-0.5" style={{ color: 'var(--text)' }}>
+              {v}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <p className="px-4 py-2.5 text-xs" style={{ color: 'var(--text-3)', borderTop: '1px solid var(--border)' }}>
+        {ARCHETYPE_COPY[archetype].where}
+        {hasSwell ? ` · ${angleCopy(angle)}` : ''}
+      </p>
     </div>
   )
 }
