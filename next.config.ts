@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { SPOT_SLUG_ALIASES } from "./lib/spots/spot-aliases";
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -42,6 +43,16 @@ const nextConfig: NextConfig = {
         headers: securityHeaders,
       },
     ]
+  },
+  // Spot pages are fully prerendered with dynamicParams=false, so a retired
+  // slug would hard-404 rather than fall through. Redirect the duplicates that
+  // were merged away to the record that replaced them.
+  async redirects() {
+    return Object.entries(SPOT_SLUG_ALIASES).map(([from, to]) => ({
+      source: `/spots/${from}`,
+      destination: `/spots/${to}`,
+      permanent: true,
+    }))
   },
 }
 

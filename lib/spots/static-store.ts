@@ -1,6 +1,6 @@
 import 'server-only'
 import { SURF_SPOTS_SEED } from '@/lib/spots-data'
-import { inferBottomType } from '@/lib/bottom-type'
+import { resolveSpotSlug } from './spot-aliases'
 import type { SurfSpot } from '@/types/spot'
 
 // In-memory store for the ~1,490 immutable surf spots.
@@ -17,7 +17,7 @@ import type { SurfSpot } from '@/types/spot'
 // `id := slug`. API responses that carry an `id` keep the field; its value is
 // now the slug.
 
-const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced'])
+const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced', 'expert'])
 
 type SeedSpot = (typeof SURF_SPOTS_SEED)[number]
 
@@ -42,7 +42,10 @@ function toStaticSpot(s: SeedSpot): SurfSpot {
     webcamUrl: s.webcamUrl ?? null,
     webcamType: s.webcamType ?? null,
     parkingOptions: ('parkingOptions' in s ? (s.parkingOptions as SurfSpot['parkingOptions']) : null) ?? null,
-    bottomType: inferBottomType(description, s.name),
+    // Read from the seed, not re-derived from prose on every request: the regex
+    // ran against marketing copy, so an editorial tweak silently re-rated the
+    // spot. scripts/backfill-bottom-type.ts writes the field.
+    bottomType: s.bottomType,
   }
 }
 
@@ -58,8 +61,11 @@ export const SPOT_BY_SLUG: ReadonlyMap<string, SurfSpot> = new Map(
 
 export const SLUGS: readonly string[] = SPOTS.map((s) => s.slug)
 
+// Retired duplicate slugs resolve to the record that replaced them, so a
+// bookmark or a saved-spots entry pointing at a removed duplicate still lands
+// on the right break instead of 404ing.
 export function getSpotBySlug(slug: string): SurfSpot | null {
-  return SPOT_BY_SLUG.get(slug) ?? null
+  return SPOT_BY_SLUG.get(slug) ?? SPOT_BY_SLUG.get(resolveSpotSlug(slug)) ?? null
 }
 
 export interface ListSpotsFilter {
@@ -81,7 +87,11 @@ export function listSpots(filter: ListSpotsFilter = {}): SurfSpot[] {
   const q = filter.q ? filter.q.toLowerCase() : ''
   const difficulty = filter.difficulty ?? ''
   const country = filter.country ?? ''
-  const ids = filter.ids && filter.ids.length ? new Set(filter.ids) : null
+  // Resolve retired duplicate slugs so a saved-spots list built before the
+  // dedupe still returns its spots rather than silently shrinking.
+  const ids = filter.ids && filter.ids.length
+    ? new Set(filter.ids.map(resolveSpotSlug))
+    : null
 
   const result = SPOTS.filter((s) => {
     if (ids && !ids.has(s.id)) return false

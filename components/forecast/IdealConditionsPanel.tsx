@@ -24,6 +24,7 @@ const IDEAL: Record<string, { minFt: number; maxFt: number; period: string; tide
   beginner:     { minFt: 1, maxFt: 4,  period: '8–11s',  tideNote: 'Mid to high tide' },
   intermediate: { minFt: 3, maxFt: 8,  period: '10–14s', tideNote: 'Any tide' },
   advanced:     { minFt: 5, maxFt: 15, period: '12–18s', tideNote: 'Low to mid tide' },
+  expert:       { minFt: 8, maxFt: 40, period: '14–20s', tideNote: 'Low to mid tide' },
 }
 
 // ── Mini compass SVG ───────────────────────────────────────────────────────────
