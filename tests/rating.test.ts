@@ -138,6 +138,28 @@ describe('scoreTide', () => {
     expect(scoreTide(high, 'reef')).toBeGreaterThan(scoreTide(high, 'sand'))
   })
 
+  // 2.4 — `t` used to be a dimensionless rank within the day's range, so the
+  // "ideal reef tide" resolved to 1.31 m at a 2.6 m-range station and 2.72 m at
+  // a 6 m one. A reef sits at a fixed depth: what it needs is an absolute
+  // amount of water over it.
+  it('scores the same water depth the same at stations with different ranges', () => {
+    const small = scoreTide({ height: 1.2, min: 0, max: 2.6 }, 'reef')
+    const large = scoreTide({ height: 1.2, min: 0, max: 6.0 }, 'reef')
+    expect(small).toBe(large)
+  })
+
+  it('scores a pushing tide above the same depth draining', () => {
+    const at = (rising: boolean | null) => scoreTide({ height: 1.9, min: 0, max: 3, rising }, 'reef')
+    expect(at(true)).toBeGreaterThan(at(null))
+    expect(at(null)).toBeGreaterThan(at(false))
+  })
+
+  it('stays neutral below half a metre of range', () => {
+    // Widened from 0.15 m: at a station barely clearing the old guard, 5 cm of
+    // tide swung the factor 75 points.
+    expect(scoreTide({ height: 0.2, min: 0, max: 0.4 }, 'reef')).toBe(50)
+  })
+
   it('penalises the bottom of the range on a reef', () => {
     const range = { min: 0, max: 2 }
     const dryReef = scoreTide({ height: 0.05, ...range }, 'reef')
@@ -387,6 +409,161 @@ describe('rateSurfConditions', () => {
     const gale = rateSurfConditions({ ...CLEAN, windSpeed: 90, windDirection: 90 })
     expect(gale.factors.wind).toBeLessThanOrEqual(40)
     expect(gale.rating).not.toBe('epic')
+  })
+
+  // ── Phase 3: model upgrades (2026-08-05 audit, tier 2) ─────────────────────
+
+  it('adds the secondary swell train in quadrature instead of ignoring it', () => {
+    // Live at Santa Monica: primary 0.54 m @ 6.0 s, secondary 0.34 m @ 11.15 s.
+    // Partitions rank by HEIGHT, so the surfable train was the ignored one —
+    // the reported face was 34% small and the period scored 15 instead of 55-75.
+    const slop = {
+      waveHeight: 0.7, swellHeight: 0.54, swellPeriod: 6, swellDirection: 270,
+      windWaveHeight: 0.1, windSpeed: 3, windDirection: 90, spotFacing: 270,
+    }
+    const primaryOnly = rateSurfConditions(slop)
+    const both = rateSurfConditions({
+      ...slop,
+      secondarySwell: { height: 0.34, period: 11.15, direction: 270 },
+    })
+
+    expect(both.faceHeight).toBeGreaterThan(primaryOnly.faceHeight)
+    // Quadrature, not a sum: the combined face is below the arithmetic total.
+    const secondaryAlone = rateSurfConditions({
+      ...slop, swellHeight: 0.34, swellPeriod: 11.15,
+    })
+    expect(both.faceHeight)
+      .toBeLessThan(primaryOnly.faceHeight + secondaryAlone.faceHeight)
+    // The reported period sits between the two trains, weighted by how much
+    // each actually breaks — never back at the model's 6 s.
+    expect(both.factors.period).toBeGreaterThan(primaryOnly.factors.period)
+    expect(both.combinedSwell!.period).toBeGreaterThan(6)
+    expect(both.combinedSwell!.period).toBeLessThan(11.15)
+  })
+
+  it('blends continuously rather than flipping when the trains are near-equal', () => {
+    // The model's own ranking is by height, and rank flips between comparable
+    // trains produced a 6.7-11.9 s spread across 16 adjacent spots in one
+    // uniform swell. Sweeping the secondary past the primary in size must move
+    // the reported period smoothly, never in a step.
+    const periods = [0.4, 0.5, 0.53, 0.55, 0.6, 0.7].map((h) =>
+      rateSurfConditions({
+        waveHeight: 1.0, swellHeight: 0.54, swellPeriod: 6, swellDirection: 270,
+        secondarySwell: { height: h, period: 12, direction: 270 },
+        windWaveHeight: 0.1, windSpeed: 3, windDirection: 90, spotFacing: 270,
+      }).combinedSwell!.period
+    )
+    for (let i = 1; i < periods.length; i++) {
+      expect(periods[i]).toBeGreaterThan(periods[i - 1])
+      expect(periods[i] - periods[i - 1]).toBeLessThan(1.5)
+    }
+  })
+
+  it('is barely moved by a train the spot is closed out to', () => {
+    const r = rateSurfConditions({
+      ...CLEAN,
+      secondarySwell: { height: 0.2, period: 5, direction: 180 },
+    })
+    expect(r.combinedSwell!.period).toBeCloseTo(16, 1)
+    expect(r.factors.period).toBe(100)
+  })
+
+  it('scores each partition against its own angle to the beach', () => {
+    // A big swell the spot is closed out to plus a small one straight in: the
+    // small one is what breaks, and it must not inherit the big one's exposure.
+    const blocked = { height: 2.0, period: 14, direction: 90 }   // behind the spot
+    const openTo = { height: 0.8, period: 14, direction: 270 }   // straight in
+
+    const r = rateSurfConditions({
+      waveHeight: 2.2, swellHeight: blocked.height, swellPeriod: blocked.period,
+      swellDirection: blocked.direction, secondarySwell: openTo,
+      windWaveHeight: 0.1, windSpeed: 3, windDirection: 90, spotFacing: 270,
+    })
+    expect(r.combinedSwell!.direction).toBe(270)
+    // Energy-weighted: dominated by the train that actually reaches the beach,
+    // not dragged to the wrap floor by the one that doesn't.
+    expect(r.factors.exposure).toBeGreaterThan(0.8)
+  })
+
+  // 2.2 — swell_wave_period is a MEAN period (Tm ≈ 0.8-0.85·Tp) scored against
+  // thresholds written in peak-period language.
+  it('treats a 13.5 s mean period as the full-marks groundswell it is', () => {
+    const groundswell = rateSurfConditions({ ...CLEAN, swellPeriod: 13.5 })
+    expect(groundswell.factors.period).toBe(100)
+  })
+
+  it('interpolates the period score instead of stepping it', () => {
+    // 9.9 s → 79 and 10.0 s → 84 under the old buckets: 0.1 s of model noise.
+    const scores = [8.5, 9.0, 9.5, 9.9, 10.0, 10.1, 11, 12].map(
+      (p) => rateSurfConditions({ ...CLEAN, swellPeriod: p }).factors.period
+    )
+    for (let i = 1; i < scores.length; i++) {
+      expect(scores[i]).toBeGreaterThanOrEqual(scores[i - 1])
+      expect(scores[i] - scores[i - 1]).toBeLessThanOrEqual(11)
+    }
+  })
+
+  // 2.5 — energy combines in quadrature, and on the swell that actually arrives.
+  it('scores cleanliness on the exposure-reduced swell, not the raw partition', () => {
+    // Same sea state at two spots: one square to the swell, one closed out to
+    // it. The closed-out spot's water is windsea-dominated whatever the model's
+    // swell partition says.
+    const square = rateSurfConditions({
+      waveHeight: 1.5, swellHeight: 1.2, swellPeriod: 13, swellDirection: 270,
+      windWaveHeight: 0.6, windSpeed: 3, windDirection: 90, spotFacing: 270,
+    })
+    const offAxis = rateSurfConditions({
+      waveHeight: 1.5, swellHeight: 1.2, swellPeriod: 13, swellDirection: 90,
+      windWaveHeight: 0.6, windSpeed: 3, windDirection: 90, spotFacing: 270,
+    })
+    expect(offAxis.factors.cleanliness!).toBeLessThan(square.factors.cleanliness!)
+  })
+
+  it('does not let genuine victory-at-sea escape the strong chop veto', () => {
+    // 0.6 m of swell under 1.0 m of windsea is a linear ratio of 0.63 — one
+    // bucket short of the veto — but 74% of the energy is chop.
+    expect(scoreCleanliness(0.6, 1.0)).toBeLessThanOrEqual(10)
+  })
+
+  // 2.6 — the hard caps released in three steps.
+  it('releases the small-surf cap continuously rather than in 20-point steps', () => {
+    // 1.59 m → 1.61 m of face (4 cm of model swell) used to be worth 20 points
+    // and moved "good" to "epic".
+    const at = (face: number) =>
+      // Solve backwards: pick swell heights that bracket the old 1.6 m step.
+      rateSurfConditions({ ...CLEAN, swellHeight: face, waveHeight: face })
+    const scores = [0.9, 1.0, 1.1, 1.2, 1.3].map((h) => at(h).score)
+    for (let i = 1; i < scores.length; i++) {
+      expect(scores[i]).toBeGreaterThanOrEqual(scores[i - 1])
+      expect(scores[i] - scores[i - 1]).toBeLessThanOrEqual(12)
+    }
+  })
+
+  it('has no discontinuity where the height curve runs out', () => {
+    // scoreFaceHeight returned a flat 30 past 8 m while the curve it continued
+    // ended at 35 — a 5-point step upward deep inside "closing out".
+    const big = rateSurfConditions({ ...CLEAN, swellHeight: 7.9, waveHeight: 8.0 })
+    const bigger = rateSurfConditions({ ...CLEAN, swellHeight: 8.3, waveHeight: 8.4 })
+    expect(bigger.factors.height).toBeLessThanOrEqual(big.factors.height)
+  })
+
+  it('reads the height curve against the size the spot is rated for', () => {
+    // One universal curve had a beginner beach break and Nazaré sharing a sweet
+    // spot at 2.5-3.5 m. Waist-high is a good day at the former and a
+    // non-event at the latter.
+    const waistHigh = { ...CLEAN, waveHeight: 0.8, swellHeight: 0.8, swellPeriod: 13 }
+    expect(rateSurfConditions({ ...waistHigh, difficulty: 'beginner' }).score)
+      .toBeGreaterThan(rateSurfConditions({ ...waistHigh, difficulty: 'advanced' }).score)
+
+    const solid = { ...CLEAN, waveHeight: 4.0, swellHeight: 4.0, swellPeriod: 14 }
+    expect(rateSurfConditions({ ...solid, difficulty: 'advanced' }).score)
+      .toBeGreaterThan(rateSurfConditions({ ...solid, difficulty: 'beginner' }).score)
+  })
+
+  it('leaves the curve unscaled when difficulty is absent', () => {
+    const base = rateSurfConditions({ ...CLEAN })
+    expect(rateSurfConditions({ ...CLEAN, difficulty: 'intermediate' }).score).toBe(base.score)
+    expect(rateSurfConditions({ ...CLEAN, difficulty: null }).score).toBe(base.score)
   })
 
   it('holds the gale cap through the 45-55 km/h offshore window', () => {

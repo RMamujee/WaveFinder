@@ -46,6 +46,9 @@ function marineEntry(overrides: Partial<NonNullable<MarineCurrentEntry['hourly']
       swell_wave_height: [0.8, 1.2, 1.6],
       swell_wave_period: [12, 13, 14],
       swell_wave_direction: [270, 275, 280],
+      secondary_swell_wave_height: [0.3, 0.35, 0.4],
+      secondary_swell_wave_period: [16, 17, 18],
+      secondary_swell_wave_direction: [200, 205, 210],
       wind_wave_height: [0.2, 0.3, 0.4],
       wind_wave_direction: [180, 185, 190],
       ...overrides,
@@ -64,9 +67,32 @@ describe('parseCurrentConditions', () => {
       swellHeight: 1.2,
       swellPeriod: 13,
       swellDirection: 275,
+      secondarySwellHeight: 0.35,
+      secondarySwellPeriod: 17,
+      secondarySwellDirection: 205,
       windWaveHeight: 0.3,
       windSpeed: 12,
       windDirection: 300,
+    })
+  })
+
+  // Open-Meteo ranks swell partitions by HEIGHT, so the longer-period (more
+  // surfable) train is frequently the second one — and it was never requested.
+  // A response without it must read as "no second train", not as a 0 m one.
+  it('reports a missing secondary partition as null, never 0', () => {
+    const c = parseCurrentConditions(
+      marineEntry({
+        secondary_swell_wave_height: undefined,
+        secondary_swell_wave_period: undefined,
+        secondary_swell_wave_direction: undefined,
+      }),
+      null,
+      NOW
+    )
+    expect(c).toMatchObject({
+      secondarySwellHeight: null,
+      secondarySwellPeriod: null,
+      secondarySwellDirection: null,
     })
   })
 

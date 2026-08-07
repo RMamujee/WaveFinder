@@ -1,15 +1,24 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { listSpots } from '@/lib/spots/static-store'
+import { listSpots, conditionsBucketKey, conditionsBucketPoint } from '@/lib/spots/static-store'
 import { monitor } from '@/lib/monitoring'
 import type { SurfSpot } from '@/types/spot'
 import { fetchCurrentConditionsBatch } from '@/lib/api/open-meteo'
 import type { CurrentMarineConditions } from '@/lib/api/open-meteo'
-import { rateSurfConditions, computeWavePower, degreesToCompass } from '@/lib/forecast/rating'
+import { rateSurfConditions, computeWavePower, degreesToCompass, angleDiff } from '@/lib/forecast/rating'
+import type { SwellPartition } from '@/lib/forecast/rating'
 import { buildSpatialIndex, findNearestInIndex } from '@/lib/forecast/nearest-fallback'
 import { inferBottomType } from '@/lib/bottom-type'
 
 export const maxDuration = 60
+
+// A borrowed reading is an approximation, not a measurement. Past these bounds
+// it is an invention: simulated against the dataset, 94 spots would otherwise
+// borrow from >100 km away, including across basins (Gulf of Thailand ←
+// Andaman Sea, Lake Erie ← Lake Ontario). Facing is the cheap proxy for "is
+// exposed to the same swell window".
+const FALLBACK_MAX_KM = 50
+const FALLBACK_MAX_FACING_DIFF = 45
 
 
 export async function GET(req: Request) {
@@ -123,14 +132,19 @@ export async function GET(req: Request) {
   // forecast you see after clicking through. Offshore buoys with attenuation
   // factors were producing values that diverged from the per-spot forecast.
   //
-  // Spots within ~11 km of each other share one reading (1-decimal lat/lng
-  // bucket). 212 spots → ~100–130 unique buckets, which fetchCurrentConditionsBatch
-  // sends as ~3 multi-location requests rather than ~130 single-location ones.
-  // Its runtime cache turns repeat requests within 5 min into instant hits.
+  // Spots within ~5.5 km of each other share one reading (0.05° lat/lng
+  // bucket, down from 0.1° — see CONDITIONS_BUCKET_DEG). fetchCurrentConditionsBatch
+  // sends the misses as multi-location requests of 50 coordinates each rather
+  // than one request per coordinate, and its runtime cache turns repeat
+  // requests within 5 min into instant hits.
+  //
+  // The representative coordinate comes from the full dataset, so it does not
+  // shift when the caller filters by difficulty/country — which previously
+  // changed both the conditions and the cache key for 229 spots.
   const buckets = new Map<string, { lat: number; lng: number }>()
   for (const spot of spots) {
-    const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
-    if (!buckets.has(key)) buckets.set(key, { lat: spot.lat, lng: spot.lng })
+    const key = conditionsBucketKey(spot.lat, spot.lng)
+    if (!buckets.has(key)) buckets.set(key, conditionsBucketPoint(spot.lat, spot.lng))
   }
   const bucketKeys = [...buckets.keys()]
 
@@ -150,10 +164,25 @@ export async function GET(req: Request) {
     currentWindDirection: number | null
     wavePower: number | null
     _needsFallback: boolean
+    // Internal only — the response projection below is an allow-list, so these
+    // never reach the client. They exist so a fallback borrows the neighbour's
+    // actual sea state rather than a flattened summary of it.
+    _conditions: CurrentMarineConditions | null
+  }
+
+  function secondaryOf(om: CurrentMarineConditions): SwellPartition | null {
+    return om.secondarySwellHeight != null && om.secondarySwellHeight > 0
+      && om.secondarySwellPeriod != null && om.secondarySwellPeriod > 0
+      ? {
+          height: om.secondarySwellHeight,
+          period: om.secondarySwellPeriod,
+          direction: om.secondarySwellDirection,
+        }
+      : null
   }
 
   const enriched: EnrichedSpot[] = spots.map((spot) => {
-    const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
+    const key = conditionsBucketKey(spot.lat, spot.lng)
     const om = omMap.get(key)
 
     if (om && om.waveHeight > 0) {
@@ -164,11 +193,13 @@ export async function GET(req: Request) {
         swellHeight:    om.swellHeight,
         swellPeriod:    om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod,
         swellDirection: om.swellDirection,
+        secondarySwell: secondaryOf(om),
         windWaveHeight: om.windWaveHeight,
         windSpeed:      om.windSpeed,
         windDirection:  om.windDirection,
         spotFacing:     spot.facingDirection,
         bottomType:     spot.bottomType,
+        difficulty:     spot.difficulty,
       })
       return {
         ...spot,
@@ -180,6 +211,7 @@ export async function GET(req: Request) {
         currentWindDirection: om.windDirection,
         wavePower:            computeWavePower(om.waveHeight, om.wavePeriod),
         _needsFallback:       false,
+        _conditions:          om,
       }
     }
 
@@ -195,46 +227,57 @@ export async function GET(req: Request) {
       currentWindDirection: null,
       wavePower:            om ? 0 : null,
       _needsFallback:       om === null,
+      _conditions:          om ?? null,
     }
   })
 
   // ── Nearest-neighbour fallback — no permanently-grey nodes ───────────────────
   // Only fires for spots where Open-Meteo timed out (not for genuine flat days).
   // Spatial-grid lookup keeps this cheap when the upstream API degrades; spots
-  // with no data within ~300 km stay "unknown" rather than borrowing conditions
-  // from a different coastline.
-  const withData = enriched.filter((s) => s.currentWaveHeight !== null)
+  // with no acceptable neighbour stay "unknown" rather than borrowing
+  // conditions from a different coastline.
+  const withData = enriched.filter((s) => s._conditions !== null)
   const dataIndex = buildSpatialIndex(withData)
   for (const spot of enriched) {
     if (spot.currentWaveHeight !== null) continue
-    const closest = findNearestInIndex(dataIndex, spot.lat, spot.lng)
-    if (!closest) continue
-    const wh = closest.currentWaveHeight ?? 0
-    const period = closest.currentPeriod ?? 8
+    const closest = findNearestInIndex(dataIndex, spot.lat, spot.lng, {
+      maxDistanceKm: FALLBACK_MAX_KM,
+      accept: (c) =>
+        angleDiff(c.facingDirection, spot.facingDirection) <= FALLBACK_MAX_FACING_DIFF,
+    })
+    if (!closest?._conditions) continue
+    const om = closest._conditions
+    const period = om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod
     // Borrow the neighbour's *observed* wind direction. This used to hardcode
     // 270, so every fallback spot on Earth was scored against a due-west wind —
     // which reads as perfectly offshore for an east-facing coast and dead
     // onshore for a west-facing one, purely by accident of geography.
-    const windDirection = closest.currentWindDirection
+    const windDirection = om.windDirection
     const { rating, faceHeight } = rateSurfConditions({
-      waveHeight: wh,
-      swellHeight: wh,
+      waveHeight: om.waveHeight,
+      swellHeight: om.swellHeight,
       swellPeriod: period,
-      // Direction is unknown for a borrowed reading: leave it null so the
-      // rating stays directionally neutral instead of inventing an exposure.
-      swellDirection: null,
-      windSpeed: closest.currentWindSpeed ?? 8,
+      // Borrow the neighbour's swell DIRECTION too and score it against THIS
+      // spot's facing — exactly what already happens for the borrowed wind.
+      // Passing null instead handed every fallback spot a neutral exposure of
+      // 1.0, i.e. the maximum possible face height precisely where the data is
+      // least reliable.
+      swellDirection: om.swellDirection,
+      secondarySwell: secondaryOf(om),
+      windWaveHeight: om.windWaveHeight,
+      windSpeed: om.windSpeed,
       windDirection,
       spotFacing: spot.facingDirection,
       bottomType: spot.bottomType,
+      difficulty: spot.difficulty,
     })
     spot.currentRating        = rating
-    spot.currentWaveHeight    = wh
+    spot.currentWaveHeight    = om.waveHeight
     spot.currentFaceHeight    = faceHeight
-    spot.currentPeriod        = period
-    spot.currentWindSpeed     = closest.currentWindSpeed
+    spot.currentPeriod        = om.wavePeriod
+    spot.currentWindSpeed     = om.windSpeed
     spot.currentWindDirection = windDirection
-    spot.wavePower            = computeWavePower(wh, period)
+    spot.wavePower            = computeWavePower(om.waveHeight, om.wavePeriod)
   }
 
   // A marker projection, not a full spot record. /spots merges this onto the
