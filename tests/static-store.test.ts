@@ -158,7 +158,7 @@ describe('static-store: spotsInRegion', () => {
   it('does not match a keyword that lands mid-word', () => {
     // "Ventura" matched "Fuerteventura", so Canary Islands spots were returned
     // for the California region and scored against Californian swell — inside
-    // the Pro-gated best-spots feature.
+    // the best-spots feature.
     expect(regionMatchesKeyword('Fuerteventura, Canary Islands', 'Ventura')).toBe(false)
     expect(regionMatchesKeyword('Ventura County', 'Ventura')).toBe(true)
     expect(regionMatchesKeyword('Ventura', 'Ventura')).toBe(true)

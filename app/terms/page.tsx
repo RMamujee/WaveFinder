@@ -24,40 +24,29 @@ export default function TermsPage() {
         decisions about when, where, or whether to surf.
       </p>
 
-      <h2>Free tier</h2>
+      <h2>Free, with no account</h2>
       <p>
-        Most forecast and spot browsing features are free with no account required. We may rate-limit
-        excessive automated traffic to keep the service available for everyone.
-      </p>
-
-      <h2>Pro trial and subscription</h2>
-      <p>
-        Pro starts with a 7-day free trial and then renews monthly at the price shown on the{' '}
-        <a href="/pricing">pricing page</a>. The subscription renews automatically unless you cancel
-        before the trial or current billing period ends. You can cancel from the Stripe billing portal.
-        Cancellation takes effect at the end of the current trial or paid period. We do not prorate
-        refunds for unused time except where required by law.
+        Every feature is free and none of them requires an account or payment. Saved spots, surf
+        sessions, and your gear locker are stored in your own browser, not on our servers. We may
+        rate-limit excessive automated traffic to keep the service available for everyone.
       </p>
 
       <h2>Acceptable use</h2>
       <p>
-        Do not scrape the API at scale, attempt to bypass rate limits, attack authentication or billing
-        systems, or resell our forecasts as a commercial weather product. The data we display is licensed
-        from third parties; we are not the rights holder, so we cannot grant you those rights either.
+        Do not scrape the API at scale, attempt to bypass rate limits, or resell our forecasts as a
+        commercial weather product. The data we display is licensed from third parties; we are not the
+        rights holder, so we cannot grant you those rights either.
       </p>
 
-      <h2>Account termination</h2>
+      <h2>Enforcement</h2>
       <p>
-        We may suspend or terminate accounts that violate these terms or abuse the service. If we
-        terminate your Pro account without cause, we will refund the unused portion of your current
-        paid billing period.
+        We may block or rate-limit traffic that violates these terms or abuses the service.
       </p>
 
       <h2>Changes to these terms</h2>
       <p>
-        If we make material changes, we will notify Pro subscribers by email at least 14 days before
-        the change takes effect where practical. Continuing to use the service after changes take
-        effect constitutes acceptance.
+        If we make material changes, we will post the updated terms on this page. Continuing to use
+        the service after changes take effect constitutes acceptance.
       </p>
 
       <h2>Contact</h2>

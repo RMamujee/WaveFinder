@@ -6,13 +6,29 @@ import { rateSurfConditions, degreesToCompass } from '@/lib/forecast/rating'
 import type { SwellPartition } from '@/lib/forecast/rating'
 import { distanceKm } from '@/lib/forecast/nearest-fallback'
 import type { SurfSpot } from '@/types/spot'
-import { requireProAccess } from '@/lib/entitlements'
-import { handleRouteError } from '@/lib/route-helpers'
+import { handleRouteError, cdnCacheHeaders } from '@/lib/route-helpers'
 
-// Per-user Pro-gated route: never share-cache. Explicit so the no-cache
-// guarantee survives future refactors even if req.url access changes.
-export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+// The response depends only on (region, date) — no session, no per-user data —
+// so it is share-cacheable. The fresh window matches the hourly cache the
+// Open-Meteo fetches already sit behind: nothing new can appear sooner.
+//
+// The stale window is a compromise between two real costs. Long is good: there
+// are only ~105 (region, date) keys spread thinly over traffic, and a key that
+// goes fully cold costs the next visitor the whole fan-out (up to 4 marine +
+// 4 wind fetches at a 28 s timeout each). But long is also bad in a way that
+// is easy to miss — `date` being in the key guarantees a stale entry is the
+// right DAY, not that it was computed from the right model run. At 24 h, a
+// request for today could be served a ranking computed when today was still
+// tomorrow: a day-2 forecast, less accurate, and visibly disagreeing with the
+// spot pages beside it. That cross-surface disagreement is exactly what the
+// accuracy audit spent four phases removing.
+//
+// 6 h keeps a stale entry within roughly one Open-Meteo model cycle while
+// still covering the traffic gaps this feature actually sees.
+const CACHE_MAX_AGE = 3600
+const CACHE_STALE_WHILE_REVALIDATE = 6 * 3600
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
@@ -162,9 +178,6 @@ export interface BestSpotsSpotEntry {
 }
 
 export async function GET(req: Request) {
-  const gate = await requireProAccess()
-  if (!gate.ok) return NextResponse.json({ error: gate.status === 401 ? 'Sign in required' : 'Pro required' }, { status: gate.status })
-
   try {
   const { searchParams } = new URL(req.url)
   const region = (searchParams.get('region') ?? '').slice(0, 100)
@@ -177,7 +190,10 @@ export async function GET(req: Request) {
   const spots = spotsInRegion(region)
 
   if (!spots.length) {
-    return NextResponse.json({ spots: [], regionalSwell: [], date })
+    return NextResponse.json(
+      { spots: [], regionalSwell: [], date },
+      { headers: cdnCacheHeaders(CACHE_MAX_AGE, CACHE_STALE_WHILE_REVALIDATE) }
+    )
   }
 
   const seeds = buildClusterSeeds(spots, region)
@@ -319,7 +335,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json(
     { spots: spotsData, regionalSwell, date },
-    { headers: { 'Cache-Control': 'private, no-store' } }
+    { headers: cdnCacheHeaders(CACHE_MAX_AGE, CACHE_STALE_WHILE_REVALIDATE) }
   )
   } catch (error) {
     return handleRouteError(error, 'best_spots_error')
