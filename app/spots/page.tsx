@@ -158,7 +158,11 @@ export default function SpotsPage() {
     staleTime: 30 * 60 * 1000,
   })
 
-  // Stage 2: live conditions
+  // Live conditions — issued alongside the base list, not after it. The
+  // conditions payload is a complete marker projection and never needed the
+  // base list to be in flight first; gating on it made time-to-coloured-map the
+  // SUM of both requests (measured 2.8 s + 4.3 s cold against production)
+  // instead of the slower one.
   const condParams = new URLSearchParams(apiParams)
   condParams.set('withConditions', 'true')
   const { data: conditionData } = useQuery<SpotWithRating[]>({
@@ -178,7 +182,6 @@ export default function SpotsPage() {
     // route's edge cache is shorter, s-maxage=180).
     refetchInterval: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    enabled: baseSpots.length > 0,
   })
 
   const spots = useMemo(() => {

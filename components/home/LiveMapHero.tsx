@@ -42,6 +42,11 @@ export function LiveMapHero({ spotCount }: Props) {
     staleTime: 30 * 60 * 1000,
   })
 
+  // Deliberately NOT gated on baseSpots: the conditions payload is a complete
+  // marker projection, so it does not need the base list to render. Chaining it
+  // behind one made time-to-coloured-map the SUM of both requests — measured
+  // against production at 2.8 s + 4.3 s cold, i.e. ~7 s of grey "No data" pins
+  // — where running them together costs only the slower of the two.
   const { data: enrichedSpots, isLoading: conditionsLoading, dataUpdatedAt } = useQuery<SpotWithRating[]>({
     queryKey: ['spots-home-conditions'],
     queryFn: () => fetch('/api/spots?withConditions=true').then((r) => r.json()),
@@ -51,14 +56,10 @@ export function LiveMapHero({ spotCount }: Props) {
     // under the "Live conditions" badge. 5 min matches the om:cond cache TTL.
     refetchInterval: 5 * 60 * 1000,
     refetchOnWindowFocus: true,
-    enabled: baseSpots.length > 0,
   })
 
   const spots = enrichedSpots ?? baseSpots
-  // Gate on data presence: a disabled query reports isLoading=false, so an
-  // empty base list would otherwise show the steady "Live conditions" state
-  // for conditions that were never fetched.
-  const conditionsPending = spotsLoading || (baseSpots.length > 0 && conditionsLoading)
+  const conditionsPending = spotsLoading || conditionsLoading
 
   return (
     <section
