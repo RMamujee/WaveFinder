@@ -4,23 +4,28 @@ import { monitor } from '@/lib/monitoring'
 /**
  * Cache headers for a CDN-cacheable route handler.
  *
- * A plain `Cache-Control: s-maxage=…, stale-while-revalidate=…` on a Next.js
- * route handler does NOT give you stale-while-revalidate on Vercel. Measured
- * against production: the response reaches the browser as
- * `public, max-age=0, must-revalidate`, and polling `/api/spots?withConditions`
- * across the expiry showed `X-Vercel-Cache: HIT` (0.27 s) flip straight to
- * `MISS` (4.67 s) — never `STALE`. So every time an entry expired, one unlucky
- * visitor blocked on the full Open-Meteo fan-out and watched a map of grey
- * "No data" pins for ~5 s.
+ * THE STALE WINDOW IS THE IMPORTANT NUMBER, and it is easy to set far too low.
+ * `stale-while-revalidate` only covers the period *after* `s-maxage` lapses:
+ * once both elapse with no traffic, the entry is gone and the next visitor
+ * blocks on a full regeneration. The conditions payload ran 180 s fresh + 60 s
+ * stale, so any 4-minute gap between requests — routine on a surf app outside
+ * a swell — cost somebody the entire Open-Meteo fan-out. Measured in
+ * production, that is a 4.7 s response staring at grey "No data" pins.
  *
- * `Vercel-CDN-Cache-Control` is the header Vercel's edge actually honours and
- * does not rewrite; `CDN-Cache-Control` covers any CDN in front of it. With
- * these set, an expired entry is served stale immediately and refreshed in the
- * background, so nobody waits for a regeneration.
+ * Polling across an expiry confirms SWR itself does work through Vercel's edge
+ * (`X-Vercel-Cache: STALE`, 0.52 s, at age 185 s). It is the window that was
+ * too tight, not the mechanism that was missing.
+ *
+ * The browser still receives `public, max-age=0, must-revalidate` — Next
+ * rewrites the client-facing header. `Vercel-CDN-Cache-Control` and
+ * `CDN-Cache-Control` are the CDN-tier headers, set explicitly so the caching
+ * intent survives a refactor of the client-facing one and is legible without
+ * knowing that Vercel consumes `s-maxage` from `Cache-Control`.
  *
  * @param maxAge          seconds the entry is fresh
  * @param staleWhileRevalidate  seconds an expired entry may still be served
- *                              while it refreshes behind the request
+ *                              while it refreshes behind the request. Set this
+ *                              well above the expected gap between requests.
  */
 export function cdnCacheHeaders(
   maxAge: number,
