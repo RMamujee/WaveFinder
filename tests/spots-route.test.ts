@@ -45,6 +45,36 @@ async function getSpots(query: string) {
   return res.json() as Promise<Record<string, unknown>[]>
 }
 
+describe('GET /api/spots — CDN caching', () => {
+  // The stale window is what keeps a visitor off the cold path. It only covers
+  // the period after s-maxage lapses, so 180 s fresh + 60 s stale meant any
+  // 4-minute gap in traffic evicted the entry and made the next visitor wait
+  // out the whole Open-Meteo fan-out — 4.7 s of grey "No data" pins, measured
+  // in production. These assertions exist because the defect was invisible for
+  // months: the directive looked right in source.
+  for (const query of ['country=USA', 'slim=true', 'withConditions=true&q=Malibu']) {
+    it(`serves stale while revalidating for ?${query}`, async () => {
+      const res = await GET(new Request(`http://localhost/api/spots?${query}`))
+      for (const header of ['Cache-Control', 'CDN-Cache-Control', 'Vercel-CDN-Cache-Control']) {
+        const value = res.headers.get(header)
+        expect(value, header).toBeTruthy()
+        expect(value, header).toMatch(/stale-while-revalidate=\d+/)
+        expect(value, header).toMatch(/s-maxage=\d+/)
+      }
+    })
+  }
+
+  it('gives the conditions payload a stale window longer than its fresh window', async () => {
+    // The stale window is what absorbs a cold regeneration; a 60 s window
+    // behind a 180 s TTL barely covered one.
+    const res = await GET(new Request('http://localhost/api/spots?withConditions=true&q=Malibu'))
+    const value = res.headers.get('Vercel-CDN-Cache-Control')!
+    const maxAge = Number(/s-maxage=(\d+)/.exec(value)![1])
+    const stale = Number(/stale-while-revalidate=(\d+)/.exec(value)![1])
+    expect(stale).toBeGreaterThan(maxAge)
+  })
+})
+
 describe('GET /api/spots?withConditions=true', () => {
   beforeEach(() => {
     batchCalls.length = 0

@@ -4,7 +4,7 @@ import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
 import { fetchTidePredictions, fetchCoastalWind } from '@/lib/api/noaa-tides'
 import { fetchBuoyData } from '@/lib/api/noaa-buoy'
 import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
-import { handleRouteError } from '@/lib/route-helpers'
+import { handleRouteError, cdnCacheHeaders } from '@/lib/route-helpers'
 
 export const revalidate = 3600
 export const maxDuration = 60
@@ -90,9 +90,7 @@ export async function GET(
       coastalWind,
     },
     {
-      headers: {
-        'Cache-Control': 's-maxage=3600, stale-while-revalidate=600',
-      },
+      headers: cdnCacheHeaders(3600, 3600),
     }
   )
   } catch (error) {
