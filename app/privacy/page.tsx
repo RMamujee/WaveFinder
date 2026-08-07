@@ -18,18 +18,18 @@ export default function PrivacyPage() {
 
       <h2>What we collect</h2>
       <p>
-        WaveFinder is designed to collect as little as possible. Without an account you can use the
-        full free tier with zero saved surf data leaving your device. Saved spots, sessions, and gear
-        logs live in your browser&apos;s local storage.
+        WaveFinder is designed to collect as little as possible. There are no accounts and nothing to
+        pay for, so no saved surf data leaves your device: saved spots, sessions, and gear logs live in
+        your browser&apos;s local storage.
       </p>
 
-      <h3>If you create an account or start a Pro trial</h3>
-      <ul>
-        <li><strong>Email address</strong> - for sign-in, billing, and service messages.</li>
-        <li><strong>Authentication records</strong> - session, account, and verification records handled by Better Auth.</li>
-        <li><strong>Stripe customer and subscription IDs</strong> - to manage the 7-day trial, monthly subscription, invoices, and cancellation. Card details are handled directly by Stripe; we never see them.</li>
-        <li><strong>Saved spots, surf sessions, and gear locker</strong> - synced server-side only when account sync features are enabled.</li>
-      </ul>
+      <h3>Accounts created before WaveFinder went free</h3>
+      <p>
+        Sign-up and paid plans have been withdrawn. Records from that period — an email address,
+        Better Auth session and verification rows, and Stripe customer and subscription IDs — may
+        still exist. Card details were always held by Stripe; we never saw them. Email us to have any
+        of it deleted.
+      </p>
 
       <h3>If you grant location access</h3>
       <p>
@@ -61,8 +61,9 @@ export default function PrivacyPage() {
 
       <h2>Your rights</h2>
       <p>
-        If you have an account, you can request export or deletion of your account data. For free users,
-        clearing your browser&apos;s site data removes locally stored saved spots, sessions, and gear logs.
+        Clearing your browser&apos;s site data removes the saved spots, sessions, and gear logs stored
+        on this device. If you held an account before WaveFinder went free, you can request export or
+        deletion of what remains of it.
       </p>
 
       <h2>Contact</h2>
