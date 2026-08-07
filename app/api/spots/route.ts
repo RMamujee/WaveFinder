@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { listSpots, conditionsBucketKey, conditionsBucketPoint } from '@/lib/spots/static-store'
 import { monitor } from '@/lib/monitoring'
 import type { SurfSpot } from '@/types/spot'
@@ -9,6 +8,7 @@ import { rateSurfConditions, computeWavePower, degreesToCompass, angleDiff } fro
 import type { SwellPartition } from '@/lib/forecast/rating'
 import { buildSpatialIndex, findNearestInIndex } from '@/lib/forecast/nearest-fallback'
 import { inferBottomType } from '@/lib/bottom-type'
+import { cdnCacheHeaders } from '@/lib/route-helpers'
 
 export const maxDuration = 60
 
@@ -63,6 +63,11 @@ export async function GET(req: Request) {
         // much the client-side slug migration has drained so the transitional
         // cuid bridge (and the SurfSpot table) can be retired in a follow-up.
         monitor('info', 'spots.ids.cuid_resolved', { count: unresolved.length })
+        // Imported here, not at module scope. A top-level import constructs a
+        // PrismaClient on every cold start of the app's hottest route — for a
+        // bridge whose telemetry is meant to read ~0 — and the map's first
+        // paint waits on it. Nothing else in this route touches Postgres.
+        const { prisma } = await import('@/lib/prisma')
         const dbSpots = await prisma.surfSpot.findMany({
           where: {
             AND: [
@@ -115,15 +120,11 @@ export async function GET(req: Request) {
         id: s.id, slug: s.slug, name: s.name, region: s.region, country: s.country,
         lat: s.lat, lng: s.lng, difficulty: s.difficulty, facingDirection: s.facingDirection,
       }))
-      return NextResponse.json(slimSpots, {
-        headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=1800' },
-      })
+      return NextResponse.json(slimSpots, { headers: cdnCacheHeaders(600, 1800) })
     }
     // Store spots already carry precomputed bottomType; DB-fallback spots get
     // it set where they're merged above — so no re-map is needed here.
-    return NextResponse.json(spots, {
-      headers: { 'Cache-Control': 's-maxage=600, stale-while-revalidate=1800' },
-    })
+    return NextResponse.json(spots, { headers: cdnCacheHeaders(600, 1800) })
   }
 
   // ── Conditions: Open-Meteo current conditions at actual beach coordinates ─────
@@ -322,7 +323,8 @@ export async function GET(req: Request) {
       : null,
     wavePower:          spot.wavePower,
   }))
-  return NextResponse.json(response, {
-    headers: { 'Cache-Control': 's-maxage=180, stale-while-revalidate=60' },
-  })
+  // A long stale window is the point: conditions up to 15 min old served
+  // instantly beat a 5 s block on a cold Open-Meteo fan-out, and the client
+  // refetches every 5 min anyway.
+  return NextResponse.json(response, { headers: cdnCacheHeaders(180, 900) })
 }
