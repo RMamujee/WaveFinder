@@ -17,13 +17,28 @@ export function PWAInit() {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      // Log the failure rather than swallowing it. A `.catch(() => {})` here is
-      // why a CSP `worker-src blob:` directive silently blocked registration
-      // outright — the precache and cache-first static handling in
-      // public/sw.js never ran, and nothing anywhere said so.
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.warn('[pwa] service worker registration failed', err)
-      })
+      if (process.env.NODE_ENV === 'production') {
+        // Log the failure rather than swallowing it. A `.catch(() => {})` here
+        // is why a CSP `worker-src blob:` directive silently blocked
+        // registration outright — the precache and cache-first static handling
+        // in public/sw.js never ran, and nothing anywhere said so.
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('[pwa] service worker registration failed', err)
+        })
+      } else {
+        // Never in development, and actively tear down anything already there.
+        // sw.js caches /_next/static cache-first; Turbopack reuses chunk names
+        // across rebuilds, so the worker pins the first bundle it ever saw and
+        // serves it forever — surviving reloads, dev-server restarts and a
+        // deleted .next. It surfaces as a hydration mismatch where the client
+        // renders older markup than the server, which sends you hunting
+        // everywhere except the cache that is actually lying to you.
+        navigator.serviceWorker.getRegistrations()
+          .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+          .then(() => (typeof caches !== 'undefined' ? caches.keys() : []))
+          .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+          .catch(() => { /* nothing registered — fine */ })
+      }
     }
 
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches
