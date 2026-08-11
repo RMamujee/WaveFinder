@@ -1,11 +1,12 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { useState, useMemo } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useState, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { SpotCard } from '@/components/spots/SpotCard'
 import { WaveLoader } from '@/components/layout/WaveLoader'
+import type { MapBounds } from '@/components/spots/SpotMap'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 import {
@@ -30,6 +31,22 @@ const SpotMap = dynamic(
 )
 
 type ViewMode = 'map' | 'list'
+
+// Viewport → query key, rounded outward and padded so nudging the map re-uses
+// the cached payload. Mirrors LiveMapHero; see the header on parseBbox in
+// app/api/spots/route.ts for why the map must not ask for the whole world.
+const BBOX_PAD_DEG = 1
+
+function bboxParam(b: MapBounds): string {
+  const lo = (n: number) => Math.floor(n) - BBOX_PAD_DEG
+  const hi = (n: number) => Math.ceil(n) + BBOX_PAD_DEG
+  return [
+    Math.max(lo(b.minLat), -90),
+    lo(b.minLng),
+    Math.min(hi(b.maxLat), 90),
+    hi(b.maxLng),
+  ].join(',')
+}
 
 // ── Region map centers ────────────────────────────────────────────────────────
 
@@ -96,6 +113,13 @@ export default function SpotsPage() {
   const [selectedRegion, setSelectedRegion]   = useState(initialRegion)
   const [view, setView] = useState<ViewMode>(() => initialRegion ? 'list' : 'map')
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [bbox, setBbox] = useState<string | null>(null)
+  const handleBoundsChange = useCallback((b: MapBounds) => {
+    setBbox((prev) => {
+      const next = bboxParam(b)
+      return prev === next ? prev : next
+    })
+  }, [])
 
   function handleGpsResult(lat: number, lng: number) {
     setUserLocation({ lat, lng })
@@ -163,14 +187,27 @@ export default function SpotsPage() {
   // base list to be in flight first; gating on it made time-to-coloured-map the
   // SUM of both requests (measured 2.8 s + 4.3 s cold against production)
   // instead of the slower one.
+  //
+  // In map view the request is additionally scoped to the visible area. An
+  // unfiltered sweep is ~2,388 Open-Meteo calls against a 5,000/hour
+  // allowance, which gets the whole fan-out refused and every pin rendered
+  // grey — see the header on parseBbox in app/api/spots/route.ts. The list view
+  // keeps the filtered fetch, since a list has no viewport to scope to.
   const condParams = new URLSearchParams(apiParams)
   condParams.set('withConditions', 'true')
+  const scoped = view === 'map' && bbox !== null
+  if (scoped) condParams.set('bbox', bbox)
   const { data: conditionData } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry],
+    queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry, scoped ? bbox : null],
     queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     }),
+    // Map view must wait for the first viewport report rather than firing an
+    // unscoped global sweep in the gap before it arrives.
+    enabled: view !== 'map' || bbox !== null,
+    // A pan must not repaint the map grey while the next box loads.
+    placeholderData: keepPreviousData,
     // Match the route's edge cache (s-maxage=180): refetching sooner than that
     // just re-downloads the same cached payload, and a focus refetch on a cold
     // edge re-runs the whole Open-Meteo fan-out.
@@ -184,10 +221,17 @@ export default function SpotsPage() {
     refetchOnWindowFocus: false,
   })
 
+  // In map view this payload covers only the viewport, so it is merged onto the
+  // base list rather than substituted for it — a substitution would delete
+  // every off-screen pin. Spots outside the box keep their marker and carry no
+  // rating until panned into view.
   const spots = useMemo(() => {
-    if (!conditionData || !Array.isArray(conditionData)) return baseSpots
+    if (!Array.isArray(conditionData) || !conditionData.length) return baseSpots
     const condMap = new Map(conditionData.map((s) => [s.id, s]))
-    return baseSpots.map((s) => ({ ...s, ...condMap.get(s.id) }))
+    return baseSpots.map((s) => {
+      const cond = condMap.get(s.id)
+      return cond ? { ...s, ...cond } : s
+    })
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   }, [baseSpots, conditionData])
 
@@ -359,6 +403,7 @@ export default function SpotsPage() {
             zoom={mapCenter.zoom}
             userLocation={userLocation}
             onLocate={handleGpsResult}
+            onBoundsChange={handleBoundsChange}
           />
 
           {/* Condition summary bar */}

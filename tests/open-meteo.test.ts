@@ -335,3 +335,117 @@ describe('fetchCurrentConditionsBatch', () => {
     expect(calls).toHaveLength(0)
   })
 })
+
+// ── Load shedding ────────────────────────────────────────────────────────────
+//
+// Open-Meteo does not queue when it is over capacity, it refuses:
+// `429 {"error":true,"reason":"Too many concurrent requests"}`. Measured against
+// the live API, firing the map's 24 chunks at once had 11 of them refused — and
+// because these requests are multi-location, one refusal is 50 spots' worth of
+// grey pins, in a contiguous run that the route's nearest-neighbour fallback
+// then cannot patch either. Real timers here: the backoff is the behaviour
+// under test.
+describe('fetchCurrentConditionsBatch — refused chunks', () => {
+  beforeEach(async () => {
+    vi.useRealTimers()
+    await getCache().expireTag('open-meteo')
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function tooManyRequests() {
+    return {
+      ok: false,
+      status: 429,
+      text: async () => '{"error":true,"reason":"Too many concurrent requests"}',
+    } as unknown as Response
+  }
+
+  const wind = () => ({ current: { wind_speed_10m: 10, wind_direction_10m: 270 } })
+
+  it('retries a refused chunk instead of greying out every spot behind it', async () => {
+    let marineAttempts = 0
+    installFetch((url) => {
+      if (!url.includes(MARINE)) return echo(url, wind)
+      marineAttempts++
+      return marineAttempts === 1 ? tooManyRequests() : echo(url, () => marinePayload(1.4))
+    })
+
+    const [result] = await fetchCurrentConditionsBatch([{ lat: 40.1, lng: -73.9 }])
+
+    expect(marineAttempts).toBe(2)
+    expect(result?.waveHeight).toBe(1.4)
+  })
+
+  it('gives up after a bounded number of attempts rather than retrying forever', async () => {
+    let marineAttempts = 0
+    installFetch((url) => {
+      if (!url.includes(MARINE)) return echo(url, wind)
+      marineAttempts++
+      return tooManyRequests()
+    })
+
+    const [result] = await fetchCurrentConditionsBatch([{ lat: 42.3, lng: -70.8 }])
+
+    expect(marineAttempts).toBe(3)
+    expect(result).toBeNull()
+  })
+
+  // The asymmetry this closes: fetchMarineForecast has always kept a
+  // last-known-good copy, so a spot page rides out an upstream refusal. The map
+  // had no floor at all — a refused chunk resolved null, null is deliberately
+  // not cached so it retries, and the pin went grey. That is why the map could
+  // sit blank while clicking a pin showed a full forecast.
+  it('falls back to the last known good reading when every attempt is refused', async () => {
+    const point = { lat: 41.25, lng: -70.5 }
+    await getCache().set(
+      'om:cond:v6:41.25,-70.50:last-good',
+      {
+        waveHeight: 2.2, wavePeriod: 9, swellHeight: 1.8, swellPeriod: 12,
+        swellDirection: 180, secondarySwellHeight: null, secondarySwellPeriod: null,
+        secondarySwellDirection: null, windWaveHeight: 0.4, windWavePeriod: 4,
+        windSpeed: 12, windDirection: 200,
+      },
+      { ttl: 3600, tags: ['open-meteo'] }
+    )
+    installFetch(() => tooManyRequests())
+
+    const [result] = await fetchCurrentConditionsBatch([point])
+
+    expect(result?.waveHeight).toBe(2.2)
+  })
+
+  it('records a last known good copy alongside every successful reading', async () => {
+    installFetch((url) => echo(url, () => (url.includes(MARINE) ? marinePayload(0.9) : wind())))
+
+    await fetchCurrentConditionsBatch([{ lat: 36.95, lng: -122.02 }])
+
+    const lastGood = await getCache().get('om:cond:v6:36.95,-122.02:last-good')
+    expect(lastGood).toBeTruthy()
+  })
+
+  it('caps how many chunks it puts on the wire at once', async () => {
+    let inFlight = 0
+    let peak = 0
+    installFetch(async (url) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise((r) => setTimeout(r, 10))
+      inFlight--
+      return echo(url, () => (url.includes(MARINE) ? marinePayload(1.1) : wind()))
+    })
+
+    // 400 distinct buckets = 8 chunks. Uncapped, that is 16 requests at once
+    // (each chunk opens a marine AND a weather call); capped at 6 chunks it is
+    // at most 12.
+    const points = Array.from({ length: 400 }, (_, i) => ({ lat: 10 + i * 0.1, lng: 20 + i * 0.1 }))
+    const results = await fetchCurrentConditionsBatch(points)
+
+    expect(results.every((r) => r?.waveHeight === 1.1)).toBe(true)
+    expect(peak).toBeLessThanOrEqual(12)
+    // Still parallel — capping must not turn the sweep into a serial crawl.
+    expect(peak).toBeGreaterThan(2)
+  })
+})

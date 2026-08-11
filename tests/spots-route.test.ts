@@ -10,6 +10,10 @@ vi.mock('@/lib/prisma', () => ({
 
 const batchCalls: GeoPoint[][] = []
 
+// Flipped by the degraded-response tests: `null` is what a refused Open-Meteo
+// chunk resolves to, and every spot behind it renders grey.
+let batchFails = false
+
 const CONDITIONS: CurrentMarineConditions = {
   waveHeight: 1.6,
   wavePeriod: 11,
@@ -31,7 +35,7 @@ vi.mock('@/lib/api/open-meteo', async (importOriginal) => {
     ...actual,
     fetchCurrentConditionsBatch: vi.fn(async (points: GeoPoint[]) => {
       batchCalls.push(points)
-      return points.map(() => CONDITIONS)
+      return points.map(() => (batchFails ? null : CONDITIONS))
     }),
   }
 })
@@ -161,5 +165,110 @@ describe('GET /api/spots?withConditions=true', () => {
     expect(spot).toHaveProperty('description')
     expect(spot).not.toHaveProperty('currentRating')
     expect(batchCalls).toHaveLength(0)
+  })
+})
+
+// Open-Meteo bills a multi-location request PER LOCATION, so an unscoped sweep
+// is ~1,194 marine + 1,194 weather calls against a free tier of 5,000/hour.
+// With the route's own s-maxage that is ~9.6x the hourly allowance: the fan-out
+// gets refused wholesale and every pin on the map renders grey while individual
+// spot pages — one location each — keep working. `bbox` is the control that
+// keeps a sweep inside the budget, so these assertions are about cost, not
+// cosmetics.
+describe('GET /api/spots?withConditions=true&bbox=', () => {
+  beforeEach(() => {
+    batchCalls.length = 0
+  })
+
+  it('asks Open-Meteo for far fewer coordinates than an unscoped sweep', async () => {
+    await getSpots('withConditions=true')
+    const unscoped = batchCalls[0].length
+
+    batchCalls.length = 0
+    await getSpots('withConditions=true&bbox=32,-118,34,-117')
+    const scoped = batchCalls[0].length
+
+    expect(scoped).toBeGreaterThan(0)
+    expect(scoped).toBeLessThan(unscoped / 10)
+  })
+
+  it('returns only the spots inside the box', async () => {
+    const spots = await getSpots('withConditions=true&bbox=32,-118,34,-117')
+    expect(spots.length).toBeGreaterThan(0)
+    for (const s of spots) {
+      expect(s.lat as number).toBeGreaterThanOrEqual(32)
+      expect(s.lat as number).toBeLessThanOrEqual(34)
+      expect(s.lng as number).toBeGreaterThanOrEqual(-118)
+      expect(s.lng as number).toBeLessThanOrEqual(-117)
+    }
+  })
+
+  it('still rates the spots it does return', async () => {
+    const spots = await getSpots('withConditions=true&bbox=32,-118,34,-117')
+    expect(spots.every((s) => s.currentRating !== 'unknown')).toBe(true)
+  })
+
+  // Leaflet reports bounds off the edge of the world after a pan across the
+  // dateline, so a box round the Pacific arrives as minLng > maxLng. Matching
+  // that as a single span yields nothing and blanks the entire region.
+  it('matches a box that crosses the antimeridian as two spans', async () => {
+    const spots = await getSpots('withConditions=true&bbox=-25,170,-10,-170')
+    expect(spots.length).toBeGreaterThan(0)
+    expect(spots.some((s) => (s.lng as number) > 170)).toBe(true)
+    expect(spots.some((s) => (s.lng as number) < -170)).toBe(true)
+    for (const s of spots) {
+      expect(Math.abs(s.lng as number)).toBeGreaterThan(170)
+    }
+  })
+
+  it('normalises longitudes reported past the edge of the world', async () => {
+    // Same California box, expressed as Leaflet would after wrapping east.
+    const wrapped = await getSpots('withConditions=true&bbox=32,242,34,243')
+    const plain = await getSpots('withConditions=true&bbox=32,-118,34,-117')
+    expect(wrapped.map((s) => s.id)).toEqual(plain.map((s) => s.id))
+  })
+
+  for (const bad of ['nonsense', '1,2,3', '34,-117,32,-118', '10,20,30']) {
+    it(`ignores an unusable bbox (${bad}) rather than returning nothing`, async () => {
+      const spots = await getSpots(`withConditions=true&bbox=${encodeURIComponent(bad)}`)
+      expect(spots.length).toBeGreaterThan(100)
+    })
+  }
+
+  it('ignores a bbox spanning a full turn of longitude', async () => {
+    const spots = await getSpots('withConditions=true&bbox=-90,-180,90,180')
+    const all = await getSpots('withConditions=true')
+    expect(spots.length).toBe(all.length)
+  })
+})
+
+describe('GET /api/spots?withConditions=true — degraded sweeps', () => {
+  beforeEach(() => {
+    batchCalls.length = 0
+    batchFails = false
+  })
+
+  // A refused fan-out used to be cached exactly like a good one, so a single
+  // bad sweep was pinned at the edge and served to every visitor for up to 15
+  // minutes — and the client refetching could not clear it, because the
+  // response looked successful. That is what made the grey map look permanent.
+  it('caches a mostly-empty sweep only briefly', async () => {
+    batchFails = true
+    const res = await GET(new Request('http://localhost/api/spots?withConditions=true&q=Malibu'))
+    const spots = await res.json() as Record<string, unknown>[]
+    expect(spots.every((s) => s.currentRating === 'unknown')).toBe(true)
+
+    const degraded = Number(/s-maxage=(\d+)/.exec(res.headers.get('Vercel-CDN-Cache-Control')!)![1])
+
+    batchFails = false
+    const okRes = await GET(new Request('http://localhost/api/spots?withConditions=true&q=Malibu'))
+    const healthy = Number(/s-maxage=(\d+)/.exec(okRes.headers.get('Vercel-CDN-Cache-Control')!)![1])
+
+    expect(degraded).toBeLessThan(healthy)
+  })
+
+  it('keeps the full cache window when the sweep succeeded', async () => {
+    const res = await GET(new Request('http://localhost/api/spots?withConditions=true&q=Malibu'))
+    expect(res.headers.get('Vercel-CDN-Cache-Control')).toContain('s-maxage=180')
   })
 })
