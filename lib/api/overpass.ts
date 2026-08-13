@@ -61,16 +61,24 @@ out center;
     if (!res.ok) return []
     const json = await res.json()
 
-    const results: Amenity[] = (json.elements ?? [])
-      .map((el: any) => {
-        const elLat: number = el.lat ?? el.center?.lat
-        const elLng: number = el.lon ?? el.center?.lon
+    const elements: unknown[] = json?.elements ?? []
+    const results: Amenity[] = elements
+      .map((element: unknown) => {
+        const el = element as {
+          id?: number
+          lat?: number
+          lon?: number
+          center?: { lat?: number; lon?: number }
+          tags?: Record<string, string | undefined>
+        }
+        const elLat = el.lat ?? el.center?.lat
+        const elLng = el.lon ?? el.center?.lon
         if (!elLat || !elLng) return null
         const amenityType: string =
           el.tags?.amenity ?? el.tags?.leisure ?? el.tags?.emergency ?? 'unknown'
         const meta = TYPE_META[amenityType] ?? { label: amenityType, emoji: '📍' }
         return {
-          id: el.id,
+          id: el.id ?? 0,
           lat: elLat,
           lng: elLng,
           name: el.tags?.name ?? null,

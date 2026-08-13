@@ -57,7 +57,8 @@ function drawBackdrop(
     ctx.beginPath()
     for (let x = 0; x <= w; x += 3) {
       const y = baseY + Math.sin((x / waveLen) * 2 * Math.PI + offset) * line.amp
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+      if (x === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
     }
     ctx.strokeStyle = OCEAN_700
     ctx.globalAlpha = line.opacity

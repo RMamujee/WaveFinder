@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 import { fetchSeasonalClimate } from '@/lib/api/nasa-power'
 
 export const revalidate = 2592000 // 30 days — climatology data is stable
@@ -13,10 +13,7 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
 
-  const spot = await prisma.surfSpot.findUnique({
-    where: { slug },
-    select: { lat: true, lng: true },
-  })
+  const spot = getSpotBySlug(slug)
   if (!spot) return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
 
   const climate = await fetchSeasonalClimate(spot.lat, spot.lng)

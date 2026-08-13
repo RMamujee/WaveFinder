@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 import { fetchNearbyAmenities } from '@/lib/api/overpass'
 
 export const revalidate = 86400 // 24h — amenities change infrequently
@@ -13,10 +13,7 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
 
-  const spot = await prisma.surfSpot.findUnique({
-    where: { slug },
-    select: { lat: true, lng: true },
-  })
+  const spot = getSpotBySlug(slug)
   if (!spot) return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
 
   const amenities = await fetchNearbyAmenities(spot.lat, spot.lng)

@@ -29,15 +29,24 @@ export async function fetchNearbyEarthquakes(lat: number, lng: number): Promise<
     })
     if (!res.ok) return []
     const json = await res.json()
-    return (json.features ?? []).map((f: any) => ({
-      id: f.id,
-      magnitude: f.properties.mag,
-      place: f.properties.place ?? 'Unknown location',
-      time: new Date(f.properties.time).toISOString(),
-      depth: Math.round(f.geometry?.coordinates?.[2] ?? 0),
-      url: f.properties.url ?? '',
-      tsunami: f.properties.tsunami ?? 0,
-    }))
+    const features: unknown[] = json?.features ?? []
+    return features.map((feature: unknown) => {
+      const f = feature as {
+        id?: string
+        properties?: { mag?: number; place?: string; time?: number; url?: string; tsunami?: number }
+        geometry?: { coordinates?: number[] }
+      }
+      const p = f.properties ?? {}
+      return {
+        id: f.id ?? '',
+        magnitude: p.mag ?? 0,
+        place: p.place ?? 'Unknown location',
+        time: new Date(p.time ?? 0).toISOString(),
+        depth: Math.round(f.geometry?.coordinates?.[2] ?? 0),
+        url: p.url ?? '',
+        tsunami: p.tsunami ?? 0,
+      } satisfies EarthquakeEvent
+    })
   } catch {
     return []
   }

@@ -48,22 +48,21 @@ export async function fetchCoastalAlerts(lat: number, lng: number): Promise<NWSA
     if (!res.ok) return []
 
     const json = await res.json()
-    const features: any[] = json.features ?? []
+    const features: unknown[] = json?.features ?? []
 
     return features
-      .filter((f) => SURF_EVENTS.has(f.properties?.event))
-      .map((f) => ({
-        id: f.properties.id ?? String(Math.random()),
-        headline: f.properties.headline ?? f.properties.event,
-        description: (f.properties.description ?? '').slice(0, 600),
-        severity: f.properties.severity ?? 'Unknown',
-        urgency: f.properties.urgency ?? 'Unknown',
-        event: f.properties.event ?? '',
-        onset: f.properties.onset ?? '',
-        expires: f.properties.expires ?? '',
-        instruction: f.properties.instruction
-          ? (f.properties.instruction as string).slice(0, 300)
-          : null,
+      .map((f: unknown) => (f as { properties?: Record<string, unknown> }).properties ?? {})
+      .filter((p) => SURF_EVENTS.has(String(p.event ?? '')))
+      .map((p) => ({
+        id: String(p.id ?? Math.random()),
+        headline: String(p.headline ?? p.event ?? ''),
+        description: String(p.description ?? '').slice(0, 600),
+        severity: (p.severity as NWSAlert['severity']) ?? 'Unknown',
+        urgency: (p.urgency as NWSAlert['urgency']) ?? 'Unknown',
+        event: String(p.event ?? ''),
+        onset: String(p.onset ?? ''),
+        expires: String(p.expires ?? ''),
+        instruction: p.instruction ? String(p.instruction).slice(0, 300) : null,
       }))
   } catch {
     return []

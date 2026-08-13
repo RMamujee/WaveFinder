@@ -34,15 +34,19 @@ export async function fetchRiverRunoff(lat: number, lng: number): Promise<RiverS
     })
     if (!res.ok) return []
     const json = await res.json()
-    const series: any[] = json?.value?.timeSeries ?? []
+    const series: unknown[] = json?.value?.timeSeries ?? []
 
     return series
       .slice(0, 5)
-      .map((s: any) => {
-        const vals: any[] = s.values?.[0]?.value ?? []
+      .map((entry: unknown) => {
+        const s = entry as {
+          sourceInfo?: { siteName?: string; siteCode?: { value?: string }[] }
+          values?: { value?: { value?: string; dateTime?: string }[] }[]
+        }
+        const vals = s.values?.[0]?.value ?? []
         const latest = vals[vals.length - 1]
         if (!latest) return null
-        const cfs = parseFloat(latest.value)
+        const cfs = parseFloat(latest.value ?? '')
         if (isNaN(cfs) || cfs < 0) return null
         return {
           siteId: s.sourceInfo?.siteCode?.[0]?.value ?? '',

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 import { fetchCoastalAlerts } from '@/lib/api/nws-alerts'
 
 export const revalidate = 900 // 15 min
@@ -13,10 +13,7 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
 
-  const spot = await prisma.surfSpot.findUnique({
-    where: { slug },
-    select: { lat: true, lng: true },
-  })
+  const spot = getSpotBySlug(slug)
   if (!spot) return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
 
   const alerts = await fetchCoastalAlerts(spot.lat, spot.lng)

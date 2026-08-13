@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import type { CurrentAirQuality } from '@/lib/api/open-meteo-air'
+import { Icon } from '@/components/ui/Icon'
 
 interface Props { spotSlug: string }
 
@@ -65,7 +66,7 @@ export function AirQualityPanel({ spotSlug }: Props) {
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span style={{ fontSize: 18 }}>🌬️</span>
+          <Icon name="wind" size={18} style={{ color: 'var(--text-3)' }} />
           <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Air Quality</span>
         </div>
         {aqi !== null && (
