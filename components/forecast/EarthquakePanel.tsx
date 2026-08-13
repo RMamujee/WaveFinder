@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { EarthquakeEvent } from '@/lib/api/usgs-earthquake'
 import { formatDistanceToNow, parseISO } from 'date-fns'
+import { Icon } from '@/components/ui/Icon'
 
 interface Props { spotSlug: string }
 
@@ -28,7 +29,7 @@ export function EarthquakePanel({ spotSlug }: Props) {
   return (
     <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <span style={{ fontSize: 18 }}>🌍</span>
+        <Icon name="layers" size={18} style={{ color: 'var(--text-3)' }} />
         <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
           Nearby Seismic Activity
         </span>

@@ -31,19 +31,28 @@ export async function geocodeQuery(query: string): Promise<GeocodedPlace[]> {
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return []
-    const json: any[] = await res.json()
-    return json.map((r) => {
+    const json: unknown[] = await res.json()
+    return json.map((entry: unknown) => {
+      const r = entry as {
+        display_name?: string
+        lat?: string
+        lon?: string
+        type?: string
+        class?: string
+        importance?: number
+        address?: Record<string, string | undefined>
+      }
       const addr = r.address ?? {}
       const shortName =
         addr.city ?? addr.town ?? addr.village ?? addr.county ?? addr.state ?? r.display_name
       return {
-        displayName: r.display_name,
-        shortName,
-        lat: parseFloat(r.lat),
-        lng: parseFloat(r.lon),
+        displayName: r.display_name ?? '',
+        shortName: shortName ?? '',
+        lat: parseFloat(r.lat ?? ''),
+        lng: parseFloat(r.lon ?? ''),
         type: r.type ?? r.class ?? 'place',
         importance: r.importance ?? 0,
-      }
+      } satisfies GeocodedPlace
     })
   } catch {
     return []

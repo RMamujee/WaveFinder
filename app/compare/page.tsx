@@ -95,13 +95,10 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
   const [query, setQuery]             = useState('')
   const [open, setOpen]               = useState(false)
   const [highlighted, setHighlighted] = useState(0)
-  const [mounted, setMounted]         = useState(false)
   const [ddStyle, setDdStyle]         = useState<React.CSSProperties>({})
   const inputRef     = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const dropdownRef  = useRef<HTMLDivElement>(null)
-
-  useEffect(() => { setMounted(true) }, [])
 
   // Close on outside tap — pointerdown covers mouse and touch on all modern
   // browsers; the dropdown is portalled, so it needs its own containment check
@@ -243,7 +240,8 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
 
       {/* Dropdown — portal-rendered at document.body so it escapes sticky/overflow
           clipping and stays inside the visual viewport even when the keyboard is open */}
-      {mounted && open && createPortal(
+      {/* `open` only becomes true on interaction, so this never runs during SSR */}
+      {open && typeof document !== 'undefined' && createPortal(
         <div
           ref={dropdownRef}
           className="rounded-xl overflow-hidden"

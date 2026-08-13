@@ -60,7 +60,8 @@ function drawFrame(
   ctx.beginPath()
   for (let x = 0; x <= w; x += 2) {
     const y = mid + Math.sin((x / waveLen) * 2 * Math.PI - t * speed) * amp
-    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    if (x === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
   }
   ctx.strokeStyle = OCEAN_COLORS.secondary + 'ee'
   ctx.lineWidth = 1.5
@@ -69,12 +70,15 @@ function drawFrame(
   // ── Layer 3: wind chop ripple (only if wind > 5 kt) ────────────────────
   if (wind > 5) {
     const ripAmp = Math.min(3, (wind - 5) * 0.18) * (h / 48)
-    const ripLen = 28 + Math.random() * 4
+    // Derived from wind, not Math.random() — a fresh wavelength every frame made
+    // the chop layer strobe instead of travel.
+    const ripLen = 28 + (wind % 4)
     ctx.beginPath()
     for (let x = 0; x <= w; x += 2) {
       const base = mid + Math.sin((x / waveLen) * 2 * Math.PI - t * speed) * amp
       const rip  = Math.sin((x / ripLen) * 2 * Math.PI - t * 2.1) * ripAmp
-      x === 0 ? ctx.moveTo(x, base + rip) : ctx.lineTo(x, base + rip)
+      if (x === 0) ctx.moveTo(x, base + rip)
+      else ctx.lineTo(x, base + rip)
     }
     ctx.strokeStyle = OCEAN_COLORS.highlight + '88'
     ctx.lineWidth = 0.8

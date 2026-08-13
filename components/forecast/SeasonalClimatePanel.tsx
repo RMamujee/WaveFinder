@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import type { MonthlyClimate } from '@/lib/api/nasa-power'
+import { Icon } from '@/components/ui/Icon'
 
 interface Props { spotSlug: string }
 
@@ -33,7 +34,7 @@ export function SeasonalClimatePanel({ spotSlug }: Props) {
   return (
     <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
       <div className="flex items-center gap-2 mb-4">
-        <span style={{ fontSize: 18 }}>🌐</span>
+        <Icon name="calendar" size={18} style={{ color: 'var(--text-3)' }} />
         <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
           Seasonal Climate
         </span>
@@ -45,7 +46,6 @@ export function SeasonalClimatePanel({ spotSlug }: Props) {
         {months.map((m) => {
           const isNow = m.month === currentMonth
           const windH = Math.round((m.avgWindSpeedMs / maxWind) * 40)
-          const precipH = Math.round((m.avgPrecipMmDay / maxPrecip) * 40)
           const tempNorm = (m.avgTempC - minTemp) / tempRange
 
           return (

@@ -105,6 +105,7 @@ export function SolarPanel({ spotSlug, selectedDate }: Props) {
               key={label}
               className="absolute -top-6 flex flex-col items-center"
               style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}
+              title={`${label} — ${time}`}
             >
               <span style={{ fontSize: 9, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{label}</span>
             </div>
