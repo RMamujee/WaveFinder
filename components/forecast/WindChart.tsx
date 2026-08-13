@@ -21,10 +21,16 @@ function getWindColor(speed: number): string {
 }
 
 export function WindChart({ days, activeDayData }: Props) {
-  const [mode, setMode] = useState<'7day' | 'daily'>('7day')
+  const [mode, setMode] = useState<'7day' | 'daily'>('daily')
   const { unit } = useUnits()
 
-  const sevenDayData = days.flatMap((day) =>
+  // 7-day window anchored at the selected day so the chart matches the
+  // 16-day strip's currently-active day instead of always starting on day 0.
+  const anchorIdx = activeDayData ? days.findIndex((d) => d.date === activeDayData.date) : 0
+  const startIdx = Math.max(0, Math.min(anchorIdx, days.length - 7))
+  const sevenDayWindow = days.slice(startIdx, startIdx + 7)
+
+  const sevenDayData = sevenDayWindow.flatMap((day) =>
     day.hours
       .filter((_, i) => i % 3 === 0)
       .map((h) => ({

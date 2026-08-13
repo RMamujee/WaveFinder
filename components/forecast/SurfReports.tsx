@@ -29,7 +29,7 @@ function StatCard({ label, value, unit, sub }: { label: string; value: string | 
       {value != null ? (
         <>
           <div className="flex items-baseline gap-1">
-            <span className="text-xl font-bold" style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+            <span className="text-xl font-bold" style={{ color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}>
               {value}
             </span>
             {unit && <span className="text-xs" style={{ color: 'var(--text-3)' }}>{unit}</span>}
@@ -83,9 +83,7 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
           <WaveLoader compact label="Checking buoy…" />
         ) : !report || report.source === 'none' ? (
           <div className="py-6 text-center">
-            <div className="flex justify-center mb-2">
-              <Icon name="buoy" size={36} strokeWidth={1.4} style={{ color: 'var(--text-3)' }} />
-            </div>
+            <div className="flex justify-center mb-3"><Icon name="buoy" size={28} style={{ color: 'var(--text-3)' }} /></div>
             <p className="text-sm font-medium mb-1" style={{ color: 'var(--text)' }}>No buoy nearby</p>
             <p className="text-xs" style={{ color: 'var(--text-3)' }}>
               {report?.summary ?? 'No live buoy data available. Check the forecast charts.'}
@@ -154,9 +152,7 @@ export function SurfReports({ spotSlug }: { spotSlug: string }) {
               className="rounded-xl px-4 py-3 mb-3"
               style={{ background: 'var(--ocean-50)', border: '1px solid var(--ocean-100)' }}
             >
-              <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: 'var(--ocean-700)' }}>
-                <Icon name="pin" size={12} strokeWidth={1.8} style={{ flexShrink: 0 }} /> Station Report
-              </p>
+              <p className="text-xs font-medium mb-1" style={{ color: 'var(--ocean-700)' }}>Station Report</p>
               <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{report.summary}</p>
             </div>
 

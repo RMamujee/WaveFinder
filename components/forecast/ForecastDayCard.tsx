@@ -3,8 +3,8 @@
 import type { ForecastDay, ConditionRating } from '@/types/forecast'
 import { format, parseISO } from 'date-fns'
 import { degreesToCompass } from '@/lib/forecast/rating'
-import { Icon } from '@/components/ui/Icon'
 import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
+import { Icon } from '@/components/ui/Icon'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 
@@ -15,7 +15,7 @@ interface Props {
 }
 
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; dot: string; bar: string }> = {
-  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af', bar: '#d1d5db' },
+  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#4b5563', dot: '#9ca3af', bar: '#d1d5db' },
   fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', dot: '#f59e0b', bar: '#fbbf24' },
   good:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', dot: '#16a34a', bar: '#22c55e' },
   epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', dot: '#7c3aed', bar: '#8b5cf6' },
@@ -27,24 +27,27 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
   const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
   const styles = RATING_STYLES[day.dominantRating]
 
-  const waterTemps = day.hours.filter((h) => h.waterTemp != null).map((h) => h.waterTemp!)
+  const hours = day.hours ?? []
+  const waterTemps = hours.filter((h) => h.waterTemp != null).map((h) => h.waterTemp!)
   const avgWaterTempC = waterTemps.length > 0
     ? waterTemps.reduce((a, b) => a + b, 0) / waterTemps.length
     : null
-  const minWaveHeight = day.hours.length > 0 ? Math.min(...day.hours.map((h) => h.waveHeight)) : 0
-  const waveMax = fmtHeight(day.maxWaveHeight, unit)
-  const waveMin = fmtHeight(minWaveHeight, unit)
-  // Show range if different, e.g. "2–5ft" or "0.6–1.5m"
+  // Headline size is the breaking (face) height, not the raw model sea height —
+  // that is the number the rating badge beside it is derived from, and the size
+  // a surfer would actually call it. Raw sea/swell stay in the swell panel.
+  const minFaceHeight = hours.length > 0 ? Math.min(...hours.map((h) => h.faceHeight)) : 0
+  const waveMax = fmtHeight(day.maxFaceHeight, unit)
+  const waveMin = fmtHeight(minFaceHeight, unit)
   const waveRange = waveMin !== waveMax ? `${waveMin.replace(/ft|m$/, '')}–${waveMax}` : waveMax
 
-  const avgWindKmh = day.hours.length > 0
-    ? day.hours.reduce((s, h) => s + h.wind.speed, 0) / day.hours.length
+  const avgWindKmh = hours.length > 0
+    ? hours.reduce((s, h) => s + h.wind.speed, 0) / hours.length
     : null
 
   return (
     <button
       onClick={onClick}
-      className="w-full h-full rounded-2xl text-left transition-all overflow-hidden flex flex-col"
+      className="w-full h-full rounded-2xl text-left transition-all overflow-hidden flex flex-col hover:scale-[1.02] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ocean-400)]"
       style={{
         background: isSelected ? styles.bg : 'white',
         border: `1.5px solid ${isSelected ? styles.bar : 'var(--border)'}`,
@@ -69,9 +72,9 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
       >
         <span
           title={day.weatherCode != null ? weatherLabel(day.weatherCode) : undefined}
-          style={{ fontSize: 20, lineHeight: 1 }}
+          style={{ lineHeight: 1 }}
         >
-          {day.weatherCode != null ? weatherIcon(day.weatherCode) : <Icon name="wave" size={20} strokeWidth={1.5} style={{ color: 'var(--ocean-400)' }} />}
+          <Icon name={day.weatherCode != null ? weatherIcon(day.weatherCode) : 'wave'} size={20} />
         </span>
         <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
           {day.maxTempC !== null && (
@@ -103,7 +106,7 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
         {/* Wave height */}
         <p
           style={{
-            fontFamily: 'Playfair Display, serif',
+            fontFamily: 'var(--font-playfair), serif',
             fontSize: 22,
             fontWeight: 700,
             lineHeight: 1,
@@ -127,27 +130,27 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
 
         {/* Swell */}
         <p style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 3 }}>
-          {Math.round(day.avgPeriod)}s {day.hours[0] ? degreesToCompass(day.hours[0].swellDirection) : ''}
+          {Math.round(day.avgPeriod)}s {hours[0] ? degreesToCompass(hours[0].swellDirection) : ''}
         </p>
 
         {/* Wind */}
         {avgWindKmh !== null && (
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>
-            💨 {fmtWind(avgWindKmh, unit)}
+            <Icon name="wind" size={12} className="inline mr-1" style={{ color: 'var(--text-3)' }} />{fmtWind(avgWindKmh, unit)}
           </p>
         )}
 
         {/* Water temp */}
         {avgWaterTempC !== null && (
-          <p style={{ fontSize: 11, color: '#0e7490', marginBottom: 2 }}>
-            <Icon name="wave" size={10} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle', color: '#0e7490' }} /> {fmtTemp(avgWaterTempC, unit)}
+          <p style={{ fontSize: 11, color: '#0c5f74', fontWeight: 600, marginBottom: 2 }}>
+            <Icon name="wave" size={12} className="inline mr-1" style={{ color: '#0c5f74' }} />{fmtTemp(avgWaterTempC, unit)}
           </p>
         )}
 
         {/* Rain chance */}
         {day.maxPrecipProb !== null && day.maxPrecipProb >= 20 && (
           <p style={{ fontSize: 11, color: '#1b7fcb', fontWeight: 600 }}>
-            💧 {day.maxPrecipProb}%
+            <Icon name="droplet" size={12} className="inline mr-1" style={{ color: '#1b7fcb' }} />{day.maxPrecipProb}%
           </p>
         )}
       </div>

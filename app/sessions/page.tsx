@@ -81,7 +81,10 @@ interface FormState {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayISO() {
-  return new Date().toISOString().split('T')[0]
+  // Local date — toISOString() returns UTC, which gives "tomorrow" for users
+  // in negative offsets after late afternoon and breaks the date picker default.
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function formatDuration(minutes: number): string {
@@ -94,10 +97,10 @@ function formatDuration(minutes: number): string {
 
 function WaveRating({ value, max = 5 }: { value: number; max?: number }) {
   return (
-    <span style={{ letterSpacing: '1px', fontSize: '14px' }}>
+    <span style={{ letterSpacing: '1px', display: 'inline-flex', gap: '2px' }}>
       {Array.from({ length: max }, (_, i) => (
-        <span key={i} style={{ opacity: i < value ? 1 : 0.2, color: 'var(--ocean-500)' }}>
-          <Icon name="wave" size={14} strokeWidth={1.6} />
+        <span key={i} style={{ opacity: i < value ? 1 : 0.2 }}>
+          <Icon name="wave" size={14} />
         </span>
       ))}
     </span>
@@ -360,7 +363,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
       borderRadius: '4px', padding: '1px 5px', marginLeft: '6px',
       verticalAlign: 'middle',
     }}>
-      ⚡ AUTO
+      AUTO
     </span>
   )
 
@@ -412,7 +415,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
               </p>
               <h2
                 style={{
-                  fontFamily: 'Playfair Display, serif',
+                  fontFamily: 'var(--font-playfair), serif',
                   fontSize: '22px',
                   fontWeight: 700,
                   color: 'var(--text)',
@@ -618,7 +621,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                     gap: '5px',
                   }}
                 >
-                  ⚡ Auto-fill from forecast
+                  Auto-fill from forecast
                 </button>
               ) : null}
             </div>
@@ -795,7 +798,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                       }}
                       title={`${n} star${n !== 1 ? 's' : ''}`}
                     >
-                      <Icon name="wave" size={16} strokeWidth={1.6} />
+                      <Icon name="wave" size={22} />
                     </button>
                   ))}
                   {form.rating > 0 && (
@@ -829,7 +832,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
                   style={{
                     ...inputStyle(),
                     resize: 'vertical',
-                    fontFamily: 'DM Sans, sans-serif',
+                    fontFamily: 'var(--font-dm-sans), sans-serif',
                     minHeight: '72px',
                   }}
                 />
@@ -869,10 +872,10 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
               opacity: mutation.isPending ? 0.6 : 1,
               width: '100%',
               transition: 'opacity 0.2s',
-              fontFamily: 'DM Sans, sans-serif',
+              fontFamily: 'var(--font-dm-sans), sans-serif',
             }}
           >
-            {mutation.isPending ? 'Logging session…' : <><Icon name="wave" size={14} strokeWidth={1.8} /> Log Session</>}
+            {mutation.isPending ? 'Logging session…' : 'Log Session'}
           </button>
         </form>
       </div>
@@ -928,7 +931,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
               padding: '3px 9px',
               fontSize: '12px',
               fontWeight: 700,
-              fontFamily: 'DM Sans, sans-serif',
+              fontFamily: 'var(--font-dm-sans), sans-serif',
               letterSpacing: '0.02em',
             }}
           >
@@ -990,7 +993,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
                 transition: 'color 0.15s',
               }}
             >
-              🗑
+              <Icon name="close" size={14} />
             </button>
           )}
         </div>
@@ -1003,7 +1006,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
           <div>
             <h3
               style={{
-                fontFamily: 'Playfair Display, serif',
+                fontFamily: 'var(--font-playfair), serif',
                 fontSize: '18px',
                 fontWeight: 700,
                 color: 'var(--text)',
@@ -1015,7 +1018,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
             </h3>
             {session.region && (
               <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>
-                <Icon name="pin" size={11} strokeWidth={1.6} style={{ display: 'inline', verticalAlign: 'middle' }} /> {session.region}
+                <Icon name="pin" size={12} className="inline mr-1" /> {session.region}
               </p>
             )}
           </div>
@@ -1032,7 +1035,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
                 flexShrink: 0,
               }}
             >
-              ⏱ {formatDuration(session.duration)}
+              <Icon name="clock" size={12} className="inline mr-1" /> {formatDuration(session.duration)}
             </span>
           )}
         </div>
@@ -1048,17 +1051,17 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
           >
             {session.waveHeightFt !== null && (
               <Chip>
-                <Icon name="wave" size={12} strokeWidth={1.6} style={{ display: 'inline', verticalAlign: 'middle' }} /> {session.waveHeightFt}ft
+                <Icon name="wave" size={12} className="inline mr-1" /> {session.waveHeightFt}ft
                 {session.wavePeriod !== null ? ` @ ${session.wavePeriod}s` : ''}
               </Chip>
             )}
             {session.windSpeed !== null && (
               <Chip>
-                💨 {session.windSpeed} km/h{session.windDir ? ` ${session.windDir}` : ''}
+                <Icon name="wind" size={12} className="inline mr-1" /> {session.windSpeed} km/h{session.windDir ? ` ${session.windDir}` : ''}
               </Chip>
             )}
             {session.waterTempC !== null && (
-              <Chip>🌡 {session.waterTempC}°C</Chip>
+              <Chip><Icon name="temp" size={12} className="inline mr-1" /> {session.waterTempC}°C</Chip>
             )}
           </div>
         )}
@@ -1066,8 +1069,8 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
         {/* Equipment row */}
         {(session.boardType || session.wetsuitMm) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {session.boardType && <Chip variant="sand"><Icon name="surfer" size={12} strokeWidth={1.6} style={{ display: 'inline', verticalAlign: 'middle' }} /> {session.boardType}</Chip>}
-            {session.wetsuitMm && <Chip variant="sand">🤿 {session.wetsuitMm}</Chip>}
+            {session.boardType && <Chip variant="sand"><Icon name="surfer" size={12} className="inline mr-1" /> {session.boardType}</Chip>}
+            {session.wetsuitMm && <Chip variant="sand"><Icon name="board" size={12} className="inline mr-1" /> {session.wetsuitMm}</Chip>}
           </div>
         )}
 
@@ -1092,7 +1095,7 @@ function SessionCard({ session, index, total, onDelete, isDeleting }: SessionCar
         {/* Buddies */}
         {session.buddies && (
           <p style={{ fontSize: '12px', color: 'var(--text-3)', margin: 0 }}>
-            🤙 With {session.buddies}
+            With {session.buddies}
           </p>
         )}
       </div>
@@ -1128,8 +1131,8 @@ function Chip({
 
 function SessionsPageInner() {
   const searchParams = useSearchParams()
-  const [sessions, setSessions] = useState<SurfSession[]>([])
-  const [modalOpen, setModalOpen] = useState(false)
+  const [sessions, setSessions] = useState<SurfSession[]>(() => typeof window === 'undefined' ? [] : getSessions())
+  const [modalOpen, setModalOpen] = useState(() => !!searchParams.get('spot'))
   const [successBanner, setSuccessBanner] = useState(false)
 
   // Pre-fill from ?spot=&region=&slug= when coming from a spot page
@@ -1140,13 +1143,10 @@ function SessionsPageInner() {
   const prefillSlug = searchParams.get('slug') ?? undefined
   const hasPrefill = !!searchParams.get('spot')
 
-  useEffect(() => {
-    if (hasPrefill) setModalOpen(true)
-  }, [hasPrefill])
+  if (hasPrefill && !modalOpen) setModalOpen(true)
 
   // Load & sync from localStorage
   useEffect(() => {
-    setSessions(getSessions())
     const handler = () => setSessions(getSessions())
     window.addEventListener('storage', handler)
     return () => window.removeEventListener('storage', handler)
@@ -1196,7 +1196,7 @@ function SessionsPageInner() {
               boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
             }}
           >
-            <Icon name="wave" size={14} strokeWidth={1.6} style={{ display: 'inline', verticalAlign: 'middle' }} /> Session logged!
+            Session logged!
           </div>
         )}
 
@@ -1219,7 +1219,7 @@ function SessionsPageInner() {
                 </p>
                 <h1
                   style={{
-                    fontFamily: 'Playfair Display, serif',
+                    fontFamily: 'var(--font-playfair), serif',
                     fontSize: '30px',
                     fontWeight: 700,
                     color: 'var(--text)',
@@ -1247,7 +1247,7 @@ function SessionsPageInner() {
                   fontWeight: 700,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
-                  fontFamily: 'DM Sans, sans-serif',
+                  fontFamily: 'var(--font-dm-sans), sans-serif',
                   transition: 'opacity 0.2s',
                   flexShrink: 0,
                 }}
@@ -1271,10 +1271,10 @@ function SessionsPageInner() {
                 textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📔</div>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}><Icon name="log" size={48} style={{ color: 'var(--text-3)' }} /></div>
               <h2
                 style={{
-                  fontFamily: 'Playfair Display, serif',
+                  fontFamily: 'var(--font-playfair), serif',
                   fontSize: '22px',
                   fontWeight: 700,
                   color: 'var(--text)',
@@ -1297,7 +1297,7 @@ function SessionsPageInner() {
                   fontSize: '14px',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  fontFamily: 'DM Sans, sans-serif',
+                  fontFamily: 'var(--font-dm-sans), sans-serif',
                 }}
               >
                 Log your first session
@@ -1309,11 +1309,11 @@ function SessionsPageInner() {
               <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
                 {(
                   [
-                    { label: 'Sessions', value: sessions.length.toString(), icon: '📔' },
+                    { label: 'Sessions', value: sessions.length.toString(), iconName: 'log' as const },
                     {
                       label: 'Hours in water',
                       value: ((sessions.reduce((a, s) => a + (s.duration ?? 0), 0)) / 60).toFixed(1),
-                      icon: '⏱',
+                      iconName: 'clock' as const,
                     },
                     {
                       label: 'Fav break',
@@ -1324,7 +1324,7 @@ function SessionsPageInner() {
                         }, {})
                         return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
                       })(),
-                      icon: 'pin',
+                      iconName: 'pin' as const,
                     },
                     {
                       label: 'Fav board',
@@ -1335,9 +1335,9 @@ function SessionsPageInner() {
                         }, {})
                         return Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '—'
                       })(),
-                      icon: 'surfer',
+                      iconName: 'surfer' as const,
                     },
-                  ] as { label: string; value: string; icon: string }[]
+                  ] as { label: string; value: string; iconName: import('@/components/ui/Icon').WFIconName }[]
                 ).map((stat) => (
                   <div
                     key={stat.label}
@@ -1349,15 +1349,13 @@ function SessionsPageInner() {
                       textAlign: 'center',
                     }}
                   >
-                    <div style={{ marginBottom: '3px', color: 'var(--ocean-500)', display: 'flex', justifyContent: 'center' }}>
-                      <Icon name={stat.icon as import('@/components/ui/Icon').IconName} size={18} strokeWidth={1.6} />
-                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '3px' }}><Icon name={stat.iconName} size={18} style={{ color: 'var(--text-3)' }} /></div>
                     <div
                       style={{
                         fontSize: '16px',
                         fontWeight: 700,
                         color: 'var(--text)',
-                        fontFamily: 'Playfair Display, serif',
+                        fontFamily: 'var(--font-playfair), serif',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',

@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
+import { Icon, type WFIconName } from '@/components/ui/Icon'
 import { TimelineSkyStrip } from '@/components/ui/TimelineSkyStrip'
 
 // ── Solar helper (NOAA approximation) — no external lib ──────────────────────
@@ -58,22 +59,22 @@ const REGION_COORDS: Record<string, [number, number]> = {
 
 // ── Region config ─────────────────────────────────────────────────────────────
 
-const REGIONS = [
-  { name: 'San Diego',             icon: '🌊', short: 'San Diego'   },
-  { name: 'Orange County',         icon: '🌴', short: 'O.C.'        },
-  { name: 'Los Angeles',           icon: '🌆', short: 'L.A.'        },
-  { name: 'Ventura',               icon: '🏄', short: 'Ventura'     },
-  { name: 'Santa Barbara',         icon: '🌸', short: 'S.B.'        },
-  { name: 'Central Coast',         icon: '🌾', short: 'Cen. Coast'  },
-  { name: 'Monterey',              icon: '🦭', short: 'Monterey'    },
-  { name: 'NorCal',                icon: '🌉', short: 'NorCal'      },
-  { name: 'North Shore',           icon: '🌺', short: 'N. Shore'    },
-  { name: 'South Shore',           icon: '🤙', short: 'S. Shore'    },
-  { name: 'Gold Coast',            icon: '🦘', short: 'Gold Coast'  },
-  { name: 'Sydney Northern Beaches', icon: '🏖️', short: 'Sydney'   },
-  { name: 'Uluwatu',               icon: '🌿', short: 'Uluwatu'     },
-  { name: 'Hossegor',              icon: '🥖', short: 'Hossegor'    },
-  { name: "Jeffrey's Bay",         icon: '🦁', short: "J-Bay"       },
+const REGIONS: { name: string; icon: WFIconName; short: string }[] = [
+  { name: 'San Diego',             icon: 'wave',    short: 'San Diego'   },
+  { name: 'Orange County',         icon: 'wave',    short: 'O.C.'        },
+  { name: 'Los Angeles',           icon: 'wave',    short: 'L.A.'        },
+  { name: 'Ventura',               icon: 'wave',    short: 'Ventura'     },
+  { name: 'Santa Barbara',         icon: 'wave',    short: 'S.B.'        },
+  { name: 'Central Coast',         icon: 'wave',    short: 'Cen. Coast'  },
+  { name: 'Monterey',              icon: 'wave',    short: 'Monterey'    },
+  { name: 'NorCal',                icon: 'wave',    short: 'NorCal'      },
+  { name: 'North Shore',           icon: 'wave',    short: 'N. Shore'    },
+  { name: 'South Shore',           icon: 'wave',    short: 'S. Shore'    },
+  { name: 'Gold Coast',            icon: 'wave',    short: 'Gold Coast'  },
+  { name: 'Sydney Northern Beaches', icon: 'wave',  short: 'Sydney'      },
+  { name: 'Uluwatu',               icon: 'wave',    short: 'Uluwatu'     },
+  { name: 'Hossegor',              icon: 'wave',    short: 'Hossegor'    },
+  { name: "Jeffrey's Bay",         icon: 'wave',    short: "J-Bay"       },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -139,18 +140,14 @@ interface SwellHour {
 
 export default function TimelinePage() {
   const { unit } = useUnits()
-  const [mounted,  setMounted]  = useState(false)
-  const [hour,     setHour]     = useState(10)
+  const mounted = true
+  const [hour,     setHour]     = useState(() => {
+    const h = new Date().getHours()
+    return Math.max(6, Math.min(21, h))
+  })
   const [region,   setRegion]   = useState('Los Angeles')
   const [dayIdx,   setDayIdx]   = useState(0)
-  const [dates,    setDates]    = useState<string[]>([])
-
-  useEffect(() => {
-    const h = new Date().getHours()
-    setHour(Math.max(6, Math.min(21, h)))
-    setDates(Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)))
-    setMounted(true)
-  }, [])
+  const dates = useMemo(() => Array.from({ length: 7 }, (_, i) => getLocalDateStr(i)), [])
 
   const selectedDate = dates[dayIdx] ?? ''
 
@@ -169,7 +166,7 @@ export default function TimelinePage() {
     staleTime: 30 * 60 * 1000,
   })
 
-  const spots: Spot[]      = data?.spots        ?? []
+  const spots: Spot[] = useMemo(() => data?.spots ?? [], [data?.spots])
   const swell: SwellHour[] = data?.regionalSwell ?? []
 
   const swellNow = swell.find(s => hrFromTime(s.time) === hour) ?? swell[0]
@@ -209,7 +206,7 @@ export default function TimelinePage() {
           <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--ocean-500)' }}>
             Interactive
           </p>
-          <h1 className="text-3xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+          <h1 className="text-3xl font-bold" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
             Timeline
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-2)' }}>
@@ -240,7 +237,7 @@ export default function TimelinePage() {
                     transform:   active ? 'translateY(-1px)' : 'none',
                   }}
                 >
-                  <span style={{ fontSize: '22px', lineHeight: 1 }}>{r.icon}</span>
+                  <Icon name={r.icon} size={22} style={{ color: active ? 'white' : 'var(--text-2)' }} />
                   <span
                     className="text-center font-semibold leading-tight"
                     style={{
@@ -294,7 +291,7 @@ export default function TimelinePage() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <div className="text-4xl font-bold"
-                style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ocean-700)', letterSpacing: '-0.02em' }}>
+                style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--ocean-700)', letterSpacing: '-0.02em' }}>
                 {hrLabel(hour)}
               </div>
               <div className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>
@@ -308,7 +305,7 @@ export default function TimelinePage() {
               {waterTemp !== null && (
                 <div className="rounded-xl px-3 py-2 text-sm font-semibold"
                   style={{ background: 'var(--ocean-50)', color: 'var(--ocean-700)', border: '1px solid var(--ocean-100)' }}>
-                  💧 {fmtTemp(waterTemp, unit)} water
+                  <Icon name="droplet" size={12} className="inline mr-1" />{fmtTemp(waterTemp, unit)} water
                 </div>
               )}
               {!isLoading && !isError && topScore > 0 && (
@@ -357,7 +354,7 @@ export default function TimelinePage() {
         {/* ── Spot rows ── */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+            <h2 className="text-xl font-bold" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
               Best at {hrLabel(hour)}
             </h2>
             {!isLoading && !isError && sorted.length > 0 && (
@@ -407,7 +404,7 @@ export default function TimelinePage() {
                     {/* Name + stats */}
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold truncate"
-                        style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+                        style={{ color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}>
                         {spot.name}
                       </div>
                       <div className="flex items-center gap-3 mt-1 flex-wrap">

@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
 import { fetchTidePredictions, fetchCoastalWind } from '@/lib/api/noaa-tides'
 import { fetchBuoyData } from '@/lib/api/noaa-buoy'
 import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
+import { handleRouteError, cdnCacheHeaders } from '@/lib/route-helpers'
+import { monitor } from '@/lib/monitoring'
 
 export const revalidate = 3600
 export const maxDuration = 60
@@ -16,7 +18,8 @@ export async function GET(
   if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
-  const spot = await prisma.surfSpot.findUnique({ where: { slug } })
+  try {
+  const spot = getSpotBySlug(slug)
 
   if (!spot) {
     return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
@@ -31,6 +34,11 @@ export async function GET(
   ])
 
   if (marineResult.status === 'rejected') {
+    // This is the only fatal fetch on the page, and it used to return 502 with
+    // no record of why — so "some spots fail to load" was unanswerable. It now
+    // means upstream failed AND there was no last-known-good copy within
+    // STALE_IF_ERROR_TTL (see withCache), which is a genuinely notable event.
+    monitor('error', 'forecast.marine_unavailable', { slug, error: marineResult.reason })
     return NextResponse.json(
       { error: 'Failed to fetch wave forecast data' },
       { status: 502 }
@@ -42,23 +50,45 @@ export async function GET(
     ? windResult.value
     : { hourly: { time: [] as string[], wind_speed_10m: [] as number[], wind_direction_10m: [] as number[], wind_gusts_10m: [] as number[], temperature_2m: [] as number[], weather_code: [] as number[], precipitation_probability: [] as number[] } }
 
-  const hours = mergeForecastData(
-    marineResult.value,
-    windData,
-    spot.facingDirection,
-    spot.lat
-  )
-
-  const forecast = groupHoursByDay(hours)
+  // Resolved before the merge: tide height now feeds the surf rating, not just
+  // the tide chart.
   const tides = tidesResult.status === 'fulfilled' ? tidesResult.value : []
   const buoy = buoyResult.status === 'fulfilled' ? buoyResult.value : null
+
+  let hours, forecast
+  try {
+    hours = mergeForecastData(marineResult.value, windData, {
+      spotFacing: spot.facingDirection,
+      lat: spot.lat,
+      tides,
+      bottomType: spot.bottomType,
+      difficulty: spot.difficulty,
+      // The buoy was already fetched for display; the rating now uses it too,
+      // for the handful of hours a point observation actually describes.
+      buoy,
+    })
+    forecast = groupHoursByDay(hours)
+  } catch (mergeErr) {
+    return NextResponse.json(
+      { error: 'Failed to process forecast data', detail: String(mergeErr) },
+      { status: 502 }
+    )
+  }
   const coastalWind = coastalWindResult.status === 'fulfilled' ? coastalWindResult.value : null
-  const currentCondition = findNearestFutureHour(hours)
+  const currentCondition = findNearestFutureHour(hours, marineResult.value.utc_offset_seconds)
 
   return NextResponse.json(
     {
       spotId: spot.id,
       fetchedAt: new Date().toISOString(),
+      // Lets the client re-derive the current hour from forecast[] on its own
+      // clock — the server-computed currentCondition freezes into CDN-cached
+      // JSON for up to s-maxage+swr and silently drifts stale. Omitted (not 0)
+      // when the upstream lacks it, so the client's == null guard falls back to
+      // currentCondition instead of silently deriving with a fake UTC offset.
+      ...(marineResult.value.utc_offset_seconds != null
+        ? { utcOffsetSeconds: marineResult.value.utc_offset_seconds }
+        : {}),
       forecast,
       tides,
       buoy,
@@ -66,9 +96,10 @@ export async function GET(
       coastalWind,
     },
     {
-      headers: {
-        'Cache-Control': 's-maxage=3600, stale-while-revalidate=600',
-      },
+      headers: cdnCacheHeaders(3600, 3600),
     }
   )
+  } catch (error) {
+    return handleRouteError(error, 'forecast_error')
+  }
 }

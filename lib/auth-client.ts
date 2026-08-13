@@ -1,2 +1,5 @@
-// All user data is stored locally on the device — no server-side accounts
-export {}
+'use client'
+
+import { createAuthClient } from 'better-auth/react'
+
+export const { signIn, signUp, signOut, useSession } = createAuthClient()

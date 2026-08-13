@@ -1,27 +1,30 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ForecastDay, ConditionRating } from '@/types/forecast'
-import { WaveChart } from '@/components/forecast/WaveChart'
-import { WindChart } from '@/components/forecast/WindChart'
-import { WindRoseChart } from '@/components/forecast/WindRoseChart'
-import { TideChart } from '@/components/forecast/TideChart'
-import { UVChart } from '@/components/forecast/UVChart'
+const WaveChart = dynamic(() => import('@/components/forecast/WaveChart').then((m) => m.WaveChart), { ssr: false, loading: () => null })
+const WindChart = dynamic(() => import('@/components/forecast/WindChart').then((m) => m.WindChart), { ssr: false, loading: () => null })
+const WindRoseChart = dynamic(() => import('@/components/forecast/WindRoseChart').then((m) => m.WindRoseChart), { ssr: false, loading: () => null })
+const TideChart = dynamic(() => import('@/components/forecast/TideChart').then((m) => m.TideChart), { ssr: false, loading: () => null })
+const UVChart = dynamic(() => import('@/components/forecast/UVChart').then((m) => m.UVChart), { ssr: false, loading: () => null })
 import { GearPanel } from '@/components/forecast/GearPanel'
 import { ForecastDayCard } from '@/components/forecast/ForecastDayCard'
 import { BuoyReadings } from '@/components/forecast/BuoyReadings'
 import { SwellPanel } from '@/components/forecast/SwellPanel'
-import { WebcamPanel } from '@/components/webcam/WebcamPanel'
+import { StormAlerts } from '@/components/forecast/StormAlerts'
 import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
+import { SwellAlertButton } from '@/components/forecast/SwellAlertButton'
+import type { NWSAlert } from '@/lib/api/noaa-alerts'
 import { SurfReports } from '@/components/forecast/SurfReports'
 import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
 import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
 import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
-import { CoastalAlertsPanel } from '@/components/forecast/CoastalAlertsPanel'
 import { AirQualityPanel } from '@/components/forecast/AirQualityPanel'
 import { EarthquakePanel } from '@/components/forecast/EarthquakePanel'
 import { AmenitiesPanel } from '@/components/forecast/AmenitiesPanel'
@@ -29,17 +32,20 @@ import { RiverRunoffPanel } from '@/components/forecast/RiverRunoffPanel'
 import { SeasonalClimatePanel } from '@/components/forecast/SeasonalClimatePanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
+import { BOTTOM_TYPE_STYLE } from '@/lib/bottom-type'
 import { SeasonCalendar } from '@/components/spots/SeasonCalendar'
+import { LazyMount } from '@/components/util/LazyMount'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { weatherIcon, weatherLabel } from '@/lib/forecast/weather-code'
+import { Icon } from '@/components/ui/Icon'
 import { format, parseISO } from 'date-fns'
 import { useUnits } from '@/contexts/UnitsContext'
-import { fmtHeight, fmtWind, fmtTemp, fmtTide } from '@/lib/units'
+import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 
 interface Props { spot: SurfSpot }
 
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; accent: string }> = {
-  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', accent: '#9ca3af' },
+  poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#4b5563', accent: '#9ca3af' },
   fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', accent: '#f59e0b' },
   good:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', accent: '#16a34a' },
   epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', accent: '#7c3aed' },
@@ -71,6 +77,7 @@ const DIFFICULTY_STYLES = {
   beginner:     { color: '#15803d', bg: '#f0fdf4' },
   intermediate: { color: '#b45309', bg: '#fffbeb' },
   advanced:     { color: '#b91c1c', bg: '#fef2f2' },
+  expert:       { color: '#6b21a8', bg: '#faf5ff' },
 }
 
 export function SpotForecastView({ spot }: Props) {
@@ -86,21 +93,53 @@ export function SpotForecastView({ spot }: Props) {
     router.replace(`/spots/${spot.slug}?date=${date}`, { scroll: false })
   }
 
-  const { data: forecast, isPending, error } = useQuery<SpotForecast>({
+  const { data: forecast, isPending, isFetching, error, dataUpdatedAt } = useQuery<SpotForecast>({
     queryKey: ['forecast', spot.slug],
     queryFn: async () => {
       const r = await fetch(`/api/forecast/${spot.slug}`)
       if (!r.ok) throw new Error(`forecast-${r.status}`)
       return r.json() as Promise<SpotForecast>
     },
-    staleTime: 60 * 60 * 1000,
-    retry: 1,
+    staleTime: 30 * 60 * 1000,
+    // A tab left open must not show dawn conditions at noon: nothing else in
+    // the app triggers a refetch (focus-refetch is globally off), so this
+    // interval is the only thing keeping a long-lived page current.
+    refetchInterval: 30 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    retry: 2,
+    retryDelay: (n) => Math.min(1000 * 2 ** n, 4000),
+  })
+
+  const { data: alerts = [] } = useQuery<NWSAlert[]>({
+    queryKey: ['alerts', spot.slug],
+    queryFn: () => fetch(`/api/alerts/${spot.slug}`).then((r) => r.json()),
+    staleTime: 30 * 60 * 1000,
   })
 
   const activeDayData: ForecastDay | undefined =
     forecast?.forecast?.find((d) => d.date === selectedDay) ?? forecast?.forecast?.[0]
 
-  const current = forecast?.currentCondition
+  // Re-derive "current" client-side: the server-computed currentCondition is
+  // frozen into CDN-cached JSON (s-maxage=3600+swr=600) at generation time and
+  // can be ~2 h stale by the time it renders. The payload's utcOffsetSeconds
+  // lets us pick the spot's in-progress hour from forecast[] on our own clock;
+  // payloads cached before that field existed fall back to the server's pick.
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+  const current = useMemo(() => {
+    if (forecast?.utcOffsetSeconds == null) return forecast?.currentCondition ?? null
+    const nowHour = new Date(nowTick + forecast.utcOffsetSeconds * 1000)
+      .toISOString()
+      .slice(0, 13)
+    for (const d of forecast.forecast ?? []) {
+      const hit = d.hours.find((h) => h.time.slice(0, 13) >= nowHour)
+      if (hit) return hit
+    }
+    return forecast.currentCondition ?? null
+  }, [forecast, nowTick])
   const ratingStyle = current ? RATING_STYLES[current.rating] : RATING_STYLES.poor
 
   const bestTimes = useMemo(() => {
@@ -132,7 +171,7 @@ export function SpotForecastView({ spot }: Props) {
         <div className="mx-auto max-w-7xl px-5 py-8 relative">
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 text-xs mb-4" style={{ color: 'var(--text-3)' }}>
-            <a href="/spots" style={{ color: 'var(--ocean-600)' }}>Spots</a>
+            <Link href="/spots" style={{ color: 'var(--ocean-600)' }}>Spots</Link>
             <span>/</span>
             <span>{spot.region}</span>
             <span>/</span>
@@ -142,10 +181,10 @@ export function SpotForecastView({ spot }: Props) {
           <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
             {/* Left: name + current reading */}
             <div>
-              <div className="flex items-center gap-3 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h1
                   style={{
-                    fontFamily: 'Playfair Display, serif',
+                    fontFamily: 'var(--font-playfair), serif',
                     fontSize: 'clamp(24px, 4vw, 36px)',
                     fontWeight: 700,
                     color: 'var(--text)',
@@ -160,6 +199,17 @@ export function SpotForecastView({ spot }: Props) {
                 >
                   {spot.difficulty}
                 </span>
+                {spot.bottomType && (() => {
+                  const bt = BOTTOM_TYPE_STYLE[spot.bottomType] ?? BOTTOM_TYPE_STYLE.mixed
+                  return (
+                    <span
+                      className="rounded-full px-2.5 py-1 text-xs font-semibold shrink-0"
+                      style={{ background: bt.bg, color: bt.color }}
+                    >
+                      {bt.label} bottom
+                    </span>
+                  )
+                })()}
               </div>
               <p className="text-sm mb-5" style={{ color: 'var(--text-2)' }}>
                 {spot.region}, {spot.country}
@@ -170,7 +220,7 @@ export function SpotForecastView({ spot }: Props) {
                   {/* Wave height — hero stat, larger */}
                   <div style={{ minWidth: '52px' }}>
                     <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>Height</p>
-                    <p style={{ fontSize: '34px', fontWeight: 700, lineHeight: 1, color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}>
+                    <p style={{ fontSize: '34px', fontWeight: 700, lineHeight: 1, color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}>
                       {fmtHeight(current.waveHeight, unit)}
                     </p>
                   </div>
@@ -208,6 +258,17 @@ export function SpotForecastView({ spot }: Props) {
               ) : error ? (
                 <p className="text-sm" style={{ color: '#ef4444' }}>Failed to load forecast data.</p>
               ) : null}
+              {!isPending && current && (forecast?.fetchedAt || dataUpdatedAt > 0) && (
+                <p className="text-xs mt-3" style={{ color: 'var(--text-3)' }}>
+                  {/* fetchedAt is when the ORIGIN generated this payload — a CDN
+                      hit can serve data older than the fetch, so the fetch time
+                      would manufacture the appearance of freshness. */}
+                  Updated {forecast?.fetchedAt
+                    ? format(parseISO(forecast.fetchedAt), 'h:mm a')
+                    : format(dataUpdatedAt, 'h:mm a')}
+                  {isFetching ? ' · refreshing…' : ''}
+                </p>
+              )}
             </div>
 
             {/* Right: wind rose + rating badge + actions */}
@@ -215,7 +276,7 @@ export function SpotForecastView({ spot }: Props) {
               {forecast && (
                 <div className="hidden sm:flex flex-col items-center">
                   <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>
-                    Wind — {activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : '7 day'}
+                    Wind — {activeDayData ? format(parseISO(activeDayData.date), 'EEE, MMM d') : '16 day'}
                   </p>
                   <WindRoseChart days={activeDayData ? [activeDayData] : forecast.forecast} size={175} showLegend={false} />
                   <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 mt-1.5" style={{ maxWidth: 150 }}>
@@ -248,10 +309,10 @@ export function SpotForecastView({ spot }: Props) {
                       style={{
                         fontSize: current.rating === 'epic' ? '22px' : '20px',
                         color: ratingStyle.text,
-                        fontFamily: 'Playfair Display, serif',
+                        fontFamily: 'var(--font-playfair), serif',
                       }}
                     >
-                      {current.rating === 'epic' ? '🏆 EPIC' : current.rating.charAt(0).toUpperCase() + current.rating.slice(1)}
+                      {current.rating === 'epic' ? 'EPIC' : current.rating.charAt(0).toUpperCase() + current.rating.slice(1)}
                     </span>
                     <div
                       className="mt-1.5 h-1.5 w-full rounded-full"
@@ -268,6 +329,7 @@ export function SpotForecastView({ spot }: Props) {
                   </div>
                 )}
                 <SaveSpotButton spotId={spot.id} />
+                <SwellAlertButton spotSlug={spot.slug} spotName={spot.name} forecastDays={forecast?.forecast} />
                 <a
                   href={`/sessions?spot=${encodeURIComponent(spot.name)}&region=${encodeURIComponent(spot.region)}&slug=${spot.slug}`}
                   className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
@@ -291,12 +353,12 @@ export function SpotForecastView({ spot }: Props) {
         </div>
       )}
 
-      {/* NWS coastal alerts — renders its own container only when active alerts exist */}
-      <CoastalAlertsPanel spotSlug={spot.slug} />
+      {/* Storm / coastal alerts from NOAA Weather.gov */}
+      {alerts.length > 0 && <StormAlerts alerts={alerts} />}
 
       {/* Body */}
       {isPending && <WaveLoader label="Fetching forecast…" />}
-      {error && !isPending && (
+      {error && !isPending && !isFetching && (
         <div className="mx-auto max-w-7xl px-5 pt-4">
           <div className="rounded-2xl p-6 text-center" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
             <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>Failed to load forecast data.</p>
@@ -306,22 +368,35 @@ export function SpotForecastView({ spot }: Props) {
       )}
       <div className="mx-auto max-w-7xl px-5 py-4 space-y-4" style={{ display: isPending ? 'none' : undefined }}>
 
-        {/* 7-day strip — full width */}
+        {/* 16-day strip — horizontally scrollable, snap-aligned */}
         <div>
-          <SectionTitle>7-Day Forecast</SectionTitle>
+          <SectionTitle>16-Day Forecast</SectionTitle>
           {forecast?.forecast ? (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
-              {forecast.forecast.map((day) => (
-                <ForecastDayCard
-                  key={day.date}
-                  day={day}
-                  isSelected={
-                    selectedDay === day.date ||
-                    (!selectedDay && day === forecast.forecast[0])
-                  }
-                  onClick={() => selectDay(day.date)}
-                />
-              ))}
+            <div
+              className="overflow-x-auto overflow-y-hidden -mx-5 px-5 snap-x snap-mandatory"
+              style={{
+                scrollbarWidth: 'none',
+                WebkitOverflowScrolling: 'touch',
+                scrollPaddingLeft: '1.25rem',
+              }}
+            >
+              <div className="flex gap-2 pb-1" style={{ width: 'max-content' }}>
+                {forecast.forecast.map((day) => (
+                  <div
+                    key={day.date}
+                    className="snap-start w-[88px] sm:w-[108px] flex-shrink-0"
+                  >
+                    <ForecastDayCard
+                      day={day}
+                      isSelected={
+                        selectedDay === day.date ||
+                        (!selectedDay && day === forecast.forecast[0])
+                      }
+                      onClick={() => selectDay(day.date)}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
         </div>
@@ -383,28 +458,16 @@ export function SpotForecastView({ spot }: Props) {
                 className="rounded-2xl overflow-hidden isolate"
                 style={{ border: '1px solid var(--border)', flex: 1, minHeight: '260px' }}
               >
-                <SpotSatelliteMap
-                  lat={spot.lat}
-                  lng={spot.lng}
-                  spotName={spot.name}
-                  facingDirection={spot.facingDirection}
-                />
+                <LazyMount minHeight={280} style={{ height: '100%' }}>
+                  <SpotSatelliteMap
+                    lat={spot.lat}
+                    lng={spot.lng}
+                    spotName={spot.name}
+                    facingDirection={spot.facingDirection}
+                  />
+                </LazyMount>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Live cam — only shown when the spot has a webcam URL */}
-        {spot.webcamType !== 'none' && !!spot.webcamUrl && (
-          <div>
-            <SectionTitle>Live Cam</SectionTitle>
-            <WebcamPanel
-              webcamUrl={spot.webcamUrl}
-              webcamType={spot.webcamType}
-              spotName={spot.name}
-              lat={spot.lat}
-              lng={spot.lng}
-            />
           </div>
         )}
 
@@ -461,8 +524,8 @@ export function SpotForecastView({ spot }: Props) {
                             {fmtWind(h.wind.speed, unit)} {h.wind.directionLabel}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <span title={weatherLabel(h.weatherCode)} style={{ fontSize: 16, lineHeight: 1 }}>
-                              {h.weatherCode !== null ? weatherIcon(h.weatherCode) : '—'}
+                            <span title={weatherLabel(h.weatherCode)} style={{ lineHeight: 1 }}>
+                              {h.weatherCode !== null ? <Icon name={weatherIcon(h.weatherCode)} size={16} /> : '—'}
                             </span>
                             {h.precipProb !== null && h.precipProb >= 20 && (
                               <span className="ml-1 text-xs" style={{ color: '#1b7fcb' }}>
@@ -559,7 +622,9 @@ export function SpotForecastView({ spot }: Props) {
           {/* Left — Community Reports at natural full height */}
           <div>
             <SectionTitle>Community Reports</SectionTitle>
-            <SurfReports spotSlug={spot.slug} />
+            <LazyMount minHeight={160}>
+              <SurfReports spotSlug={spot.slug} />
+            </LazyMount>
           </div>
 
           {/* Right — Buoy Data (compact) then Season Calendar directly below */}
@@ -577,21 +642,27 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         </div>
 
-        {/* Water quality + river runoff — render only when data exists */}
-        <WaterQualityPanel spotSlug={spot.slug} />
-        <RiverRunoffPanel spotSlug={spot.slug} />
+        {/* Water Quality — only renders when USGS/EPA data exists within 20 miles */}
+        <LazyMount minHeight={0}>
+          <WaterQualityPanel spotSlug={spot.slug} />
+        </LazyMount>
+
+        {/* River runoff — renders its own container only when a gauge is nearby */}
+        <LazyMount minHeight={0}>
+          <RiverRunoffPanel spotSlug={spot.slug} />
+        </LazyMount>
 
         {/* Nearby facilities from OpenStreetMap */}
-        <div>
+        <LazyMount>
           <SectionTitle>Nearby Facilities</SectionTitle>
           <AmenitiesPanel spotSlug={spot.slug} />
-        </div>
+        </LazyMount>
 
         {/* Seismic activity — only shows when M4.5+ quakes found within 800 km */}
-        <div>
+        <LazyMount>
           <SectionTitle>Seismic Activity</SectionTitle>
           <EarthquakePanel spotSlug={spot.slug} />
-        </div>
+        </LazyMount>
 
       </div>
     </div>
@@ -617,6 +688,7 @@ function ShareButton({ slug, selectedDay }: { slug: string; selectedDay: string 
   return (
     <button
       onClick={share}
+      aria-label={copied ? 'Link copied' : 'Share this spot'}
       className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition hover:opacity-80"
       style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
     >
@@ -633,7 +705,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2
       className="mb-2 font-semibold text-sm"
-      style={{ color: 'var(--text-2)', fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
+      style={{ color: 'var(--text-2)', fontFamily: 'var(--font-dm-sans), sans-serif', letterSpacing: '0.03em', textTransform: 'uppercase' }}
     >
       {children}
     </h2>

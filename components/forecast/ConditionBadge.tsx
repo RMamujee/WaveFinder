@@ -15,7 +15,7 @@ const CONFIG: Record<ConditionRating, { label: string; className: string }> = {
   },
   epic: {
     label: 'EPIC',
-    className: 'bg-purple-500 text-white',
+    className: 'bg-purple-700 text-white animate-pulse',
   },
 }
 
@@ -33,12 +33,8 @@ export function ConditionBadge({ rating, size = 'md' }: Props) {
         ? 'px-4 py-1.5 text-lg font-bold'
         : 'px-3 py-1 text-sm font-semibold'
 
-  const epicStyle = rating === 'epic'
-    ? { boxShadow: '0 0 0 3px rgba(124,58,237,0.2)' }
-    : undefined
-
   return (
-    <span className={`inline-block rounded-full ${sizeClass} ${className}`} style={epicStyle}>
+    <span className={`inline-block rounded-full ${sizeClass} ${className}`}>
       {label}
     </span>
   )

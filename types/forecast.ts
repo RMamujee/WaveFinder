@@ -16,7 +16,12 @@ export interface WindData {
 
 export interface ForecastHour {
   time: string
+  /** Significant height of the combined sea from the model (m). */
   waveHeight: number
+  /** Estimated breaking wave height at the spot (m) — the model swell shoaled
+   *  by period and reduced by how square-on it hits this beach. This is the
+   *  number that corresponds to the size a surfer would call it. */
+  faceHeight: number
   wavePeriod: number
   waveDirection: number
   swellHeight: number
@@ -32,12 +37,17 @@ export interface ForecastHour {
   airTempC: number | null
   weatherCode: number | null
   precipProb: number | null
+  // True for hours past day ~10 where the long-range model substitutes total
+  // wave for swell components; consumers (alerts, ratings UI) can treat these
+  // as lower-confidence and avoid triggering hard notifications on them.
+  isLongRange?: boolean
 }
 
 export interface ForecastDay {
   date: string
   hours: ForecastHour[]
   maxWaveHeight: number
+  maxFaceHeight: number
   avgPeriod: number
   dominantRating: ConditionRating
   minTempC: number | null
@@ -57,7 +67,7 @@ export interface BuoyReading {
   waveHeight: number | null   // null when WVHT sensor is offline/missing (MM)
   dominantPeriod: number | null
   averagePeriod: number | null
-  meanDirection: number
+  meanDirection: number | null  // null when MWD sensor is offline/missing (MM)
   waterTemp: number | null
   airTemp: number | null
   windSpeed: number | null
@@ -75,6 +85,10 @@ export interface CoastalWindReading {
 export interface SpotForecast {
   spotId: string
   fetchedAt: string
+  /** Spot's UTC offset from Open-Meteo — lets the client pick the current hour
+   *  from forecast[] instead of trusting the CDN-frozen currentCondition.
+   *  Optional: absent on payloads cached before 2026-08-05. */
+  utcOffsetSeconds?: number
   forecast: ForecastDay[]
   tides: TidePoint[]
   buoy: BuoyReading | null

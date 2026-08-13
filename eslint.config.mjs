@@ -12,7 +12,24 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent worktrees are full checkouts of another branch living inside this
+    // one; linting them reports that branch's problems against this one.
+    ".claude/**",
   ]),
+  // Disallow stray console.log; allow console.warn/console.error everywhere.
+  {
+    rules: {
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  // The monitoring helper, scripts, and the Prisma seed script intentionally
+  // use all console methods (CLI/dev tooling, not application source).
+  {
+    files: ["lib/monitoring.ts", "scripts/**", "prisma/seed.ts"],
+    rules: {
+      "no-console": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

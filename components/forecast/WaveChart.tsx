@@ -18,12 +18,18 @@ export function WaveChart({ days, activeDayData }: Props) {
   const [mode, setMode] = useState<'7day' | 'daily'>('daily')
   const { unit } = useUnits()
 
-  const sevenDayData = days.flatMap((day) =>
+  // 7-day window anchored at the selected day so the chart aligns with the
+  // strip selection rather than always starting on day 0 of the 16-day range.
+  const anchorIdx = activeDayData ? days.findIndex((d) => d.date === activeDayData.date) : 0
+  const startIdx = Math.max(0, Math.min(anchorIdx, days.length - 7))
+  const sevenDayWindow = days.slice(startIdx, startIdx + 7)
+
+  const sevenDayData = sevenDayWindow.flatMap((day) =>
     day.hours
       .filter((_, i) => i % 3 === 0)
       .map((h) => ({
         time: h.time,
-        waveHeight: Math.round(h.waveHeight * 10) / 10,
+        faceHeight: Math.round(h.faceHeight * 10) / 10,
         swellHeight: Math.round(h.swellHeight * 10) / 10,
         label: format(parseISO(h.time), 'EEE ha'),
       }))
@@ -32,7 +38,7 @@ export function WaveChart({ days, activeDayData }: Props) {
   const dailyData = activeDayData
     ? activeDayData.hours.map((h) => ({
         time: h.time,
-        waveHeight: Math.round(h.waveHeight * 10) / 10,
+        faceHeight: Math.round(h.faceHeight * 10) / 10,
         swellHeight: Math.round(h.swellHeight * 10) / 10,
         label: format(parseISO(h.time), 'ha'),
       }))
@@ -93,7 +99,7 @@ export function WaveChart({ days, activeDayData }: Props) {
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => fmtHeightDec(v, unit)}
-              width={34}
+              width={unit === 'metric' ? 40 : 34}
             />
             <Tooltip
               contentStyle={{
@@ -106,11 +112,15 @@ export function WaveChart({ days, activeDayData }: Props) {
               labelStyle={{ color: '#4a4a6a', marginBottom: '4px' }}
               formatter={(value, name) => [
                 fmtHeightDec(value as number, unit),
-                name === 'waveHeight' ? 'Wave' : 'Swell',
+                // "Surf" is the breaking face height; "Swell" is the offshore
+                // groundswell it comes from. The raw combined-sea height is not
+                // plotted — it folds in wind chop and reads as size that is not
+                // there.
+                name === 'faceHeight' ? 'Surf' : 'Swell',
               ]}
             />
             <Area type="monotone" dataKey="swellHeight" stroke="#7c3aed" strokeWidth={1.5} fill="url(#swellGrad)" />
-            <Area type="monotone" dataKey="waveHeight"  stroke="#1b7fcb" strokeWidth={2}   fill="url(#waveGrad)" />
+            <Area type="monotone" dataKey="faceHeight"  stroke="#1b7fcb" strokeWidth={2}   fill="url(#waveGrad)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>

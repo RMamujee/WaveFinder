@@ -1,0 +1,32 @@
+name: Uptime
+
+# Free uptime monitor: polls /api/health and fails the run (GitHub emails the
+# repo owner on workflow failure) when the app is down or degraded. GitHub
+# schedules are best-effort — expect ~10-30 min granularity, which is fine for
+# a solo project. Replace with a dedicated monitor (UptimeRobot/BetterStack)
+# if tighter alerting is ever needed.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe /api/health
+        run: |
+          body=$(curl -sS --max-time 15 -w '\n%{http_code}' https://wave-finder.vercel.app/api/health)
+          code=$(echo "$body" | tail -n1)
+          json=$(echo "$body" | sed '$d')
+          echo "HTTP $code: $json"
+          if [ "$code" != "200" ]; then
+            echo "::error::Health check returned HTTP $code"
+            exit 1
+          fi
+          status=$(echo "$json" | jq -r .status)
+          if [ "$status" != "ok" ]; then
+            echo "::error::Health status is '$status' (db=$(echo "$json" | jq -r .db), redis=$(echo "$json" | jq -r .redis))"
+            exit 1
+          fi

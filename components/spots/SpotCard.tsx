@@ -21,6 +21,7 @@ const DIFFICULTY_STYLES = {
   beginner:     { color: '#15803d', bg: '#f0fdf4' },
   intermediate: { color: '#b45309', bg: '#fffbeb' },
   advanced:     { color: '#b91c1c', bg: '#fef2f2' },
+  expert:       { color: '#6b21a8', bg: '#faf5ff' },
 }
 
 const RATING_DOTS: Record<ConditionRating, string> = {
@@ -124,6 +125,7 @@ export function SpotCard({ spot, rating, waveHeight, period, wind, tempF }: Prop
           </div>
         )}
       </div>
+
     </Link>
   )
 }

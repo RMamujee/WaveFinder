@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { fetchBuoyData } from '@/lib/api/noaa-buoy'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 import { degreesToCompass, computeWavePower } from '@/lib/forecast/rating'
 
 export const revalidate = 1800
@@ -75,9 +74,13 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
 
-  const spot = await prisma.surfSpot.findUnique({ where: { slug: spotSlug } })
+  const spot = getSpotBySlug(spotSlug)
 
-  if (!spot?.noaaBuoyId) {
+  if (!spot) {
+    return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
+  }
+
+  if (!spot.noaaBuoyId) {
     const report: LiveConditionReport = {
       source: 'none',
       time: new Date().toISOString(),
@@ -156,7 +159,9 @@ export async function GET(
       : 'unknown'
 
     const wavePower = current.waveHeight != null && current.dominantPeriod != null
-      ? computeWavePower(current.waveHeight, current.dominantPeriod)
+      // A buoy reports one total height and one dominant period, with no
+      // partitioning available — that pair IS the single partition here.
+      ? computeWavePower([{ height: current.waveHeight, period: current.dominantPeriod }])
       : null
 
     const windDir = current.windDirection != null ? degreesToCompass(current.windDirection) : null

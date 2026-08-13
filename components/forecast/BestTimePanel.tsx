@@ -2,29 +2,16 @@
 
 import type { BestTimeSlot } from '@/lib/forecast/best-time'
 import type { ConditionRating, TidePoint } from '@/types/forecast'
-import { Icon } from '@/components/ui/Icon'
+import { Icon, type WFIconName } from '@/components/ui/Icon'
 
 interface Props {
   slots: BestTimeSlot[]
   tides?: TidePoint[]
 }
 
-// Window icons mapped to Icon component names
-const WINDOW_ICON_NAMES: Record<string, import('@/components/ui/Icon').IconName> = {
-  dawn:      'moon',
-  morning:   'sun',
-  midday:    'sun',
-  afternoon: 'wave',
-  evening:   'moon',
+const WINDOW_ICONS: Record<string, WFIconName> = {
+  dawn: 'moon', morning: 'sun', midday: 'sun', afternoon: 'wave', evening: 'moon',
 }
-
-const WIND_ICONS: Record<string, string> = {
-  glassy: '🪞',
-  'light offshore': '💨',
-  'light onshore': '〰️',
-  choppy: '🌬️',
-}
-
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; bar: string }> = {
   poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#6b7280', bar: '#d1d5db' },
   fair:  { bg: '#fffbeb', border: '#fde68a', text: '#92400e', bar: '#f59e0b' },
@@ -51,7 +38,7 @@ export function BestTimePanel({ slots, tides }: Props) {
           <div>
             <h3
               className="font-semibold"
-              style={{ fontFamily: 'Playfair Display, serif', fontSize: '16px', color: 'var(--text)' }}
+              style={{ fontFamily: 'var(--font-playfair), serif', fontSize: '16px', color: 'var(--text)' }}
             >
               Best Times to Surf Today
             </h3>
@@ -68,7 +55,7 @@ export function BestTimePanel({ slots, tides }: Props) {
                 color: RATING_STYLES[best.rating].text,
               }}
             >
-              ✦ Best: {best.label}
+              Best: {best.label}
             </div>
           )}
         </div>
@@ -91,9 +78,7 @@ export function BestTimePanel({ slots, tides }: Props) {
               <div className="flex items-start gap-4">
                 {/* Icon + window label */}
                 <div className="shrink-0 text-center" style={{ minWidth: '56px' }}>
-                  <div style={{ color: 'var(--ocean-400)' }}>
-                    <Icon name={WINDOW_ICON_NAMES[slot.window] ?? 'wave'} size={20} strokeWidth={1.5} />
-                  </div>
+                  <div className="flex justify-center"><Icon name={WINDOW_ICONS[slot.window] ?? 'clock'} size={20} style={{ color: 'var(--text-3)' }} /></div>
                   <div className="text-xs font-medium mt-0.5" style={{ color: 'var(--text-2)' }}>
                     {slot.label}
                   </div>

@@ -6,7 +6,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import type { SurfSpot } from '@/types/spot'
 import type { SpotForecast, ConditionRating, ForecastDay, ForecastHour } from '@/types/forecast'
 import { degreesToCompass } from '@/lib/forecast/rating'
-import { weatherIcon, tempF } from '@/lib/forecast/weather-code'
+import { weatherIcon } from '@/lib/forecast/weather-code'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
@@ -103,7 +103,9 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
 
   useEffect(() => { setMounted(true) }, [])
 
-  // Close on outside tap — checks both the trigger and the portal dropdown
+  // Close on outside tap — pointerdown covers mouse and touch on all modern
+  // browsers; the dropdown is portalled, so it needs its own containment check
+
   useEffect(() => {
     const close = (e: Event) => {
       const t = e.target as Node
@@ -113,10 +115,8 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
       }
     }
     document.addEventListener('pointerdown', close)
-    document.addEventListener('touchstart', close, { passive: true })
     return () => {
       document.removeEventListener('pointerdown', close)
-      document.removeEventListener('touchstart', close)
     }
   }, [])
 
@@ -183,9 +183,10 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
     else if (e.key === 'Escape') { setOpen(false); setQuery('') }
   }
 
-  useEffect(() => { setHighlighted(0) }, [query])
-
-  const isSelected = !!value
+  // Selected only when both a slug is set AND the matching spot has loaded.
+  // Without the second clause, an in-flight spots query causes selectedSpot
+  // to be null while value is set, leading to selectedSpot!.name crashes.
+  const isSelected = !!value && !!selectedSpot
 
   return (
     <div className="flex flex-col gap-1.5" ref={containerRef} style={{ position: 'relative' }}>
@@ -203,9 +204,9 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
           ref={inputRef}
           type="text"
           disabled={isLoading}
-          placeholder={isSelected ? selectedSpot!.name : 'Search spots…'}
-          value={open ? query : (isSelected ? selectedSpot!.name : '')}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+          placeholder={selectedSpot ? selectedSpot.name : 'Search spots…'}
+          value={open ? query : (selectedSpot ? selectedSpot.name : '')}
+          onChange={(e) => { setQuery(e.target.value); setHighlighted(0); setOpen(true) }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           autoComplete="off"
@@ -266,8 +267,10 @@ function SpotSearchInput({ index, value, spots, onChange, isLoading }: SpotSearc
               <button
                 key={spot.slug}
                 type="button"
-                onPointerDown={(e) => { e.preventDefault(); handleSelect(spot) }}
-                onTouchEnd={(e) => { e.preventDefault(); handleSelect(spot) }}
+                // stopPropagation prevents the document pointerdown close-handler from
+                // seeing this event — on Android e.target can mis-resolve, causing the
+                // dropdown to close before handleSelect fires
+                onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handleSelect(spot) }}
                 onMouseEnter={() => setHighlighted(i)}
                 className="w-full text-left px-4 py-3 flex items-center justify-between gap-3"
                 style={{
@@ -382,7 +385,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
           <a
             href={`/spots/${spot.slug}`}
             className="font-bold text-base leading-tight hover:underline"
-            style={{ color: 'var(--text)', fontFamily: 'Playfair Display, serif' }}
+            style={{ color: 'var(--text)', fontFamily: 'var(--font-playfair), serif' }}
           >
             {spot.name}
           </a>
@@ -416,16 +419,23 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
         <div className="px-4 pt-3 pb-2" style={{ borderBottom: '1px solid var(--sand-100)' }}>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-3)' }}>Select day</p>
           <div
-            className="flex gap-1 pb-0.5"
-            style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
+            className="flex gap-1 pb-0.5 snap-x snap-mandatory overflow-x-auto overflow-y-hidden -mx-4 px-4"
+            data-no-swipe="true"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              scrollPaddingLeft: '1rem',
+              touchAction: 'pan-x',
+            }}
           >
             {days.map((day) => (
-              <MiniDayCard
-                key={day.date}
-                day={day}
-                isSelected={(selectedDay ?? days[0]?.date) === day.date}
-                onClick={() => onDayChange(day.date)}
-              />
+              <div key={day.date} className="snap-start">
+                <MiniDayCard
+                  day={day}
+                  isSelected={(selectedDay ?? days[0]?.date) === day.date}
+                  onClick={() => onDayChange(day.date)}
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -450,7 +460,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                 <p className="text-xs font-medium mb-0.5" style={{ color: ratingStyle.text }}>
                   {activeDayObj ? shortDay(activeDayObj.date) : 'Now'}
                 </p>
-                <p className="font-black uppercase tracking-wide" style={{ color: ratingStyle.text, fontSize: '18px', fontFamily: 'Playfair Display, serif' }}>
+                <p className="font-black uppercase tracking-wide" style={{ color: ratingStyle.text, fontSize: '18px', fontFamily: 'var(--font-playfair), serif' }}>
                   {displayHour.rating === 'epic' ? 'EPIC' : displayHour.rating.charAt(0).toUpperCase() + displayHour.rating.slice(1)}
                 </p>
               </div>
@@ -498,7 +508,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                     <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide" style={{ background: 'var(--sand-100)', color: 'var(--text-3)' }}>
                       Hourly — {shortDay(activeDayObj.date)}
                     </div>
-                    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <div data-no-swipe="true" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                       <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--sand-50)' }}>
@@ -593,17 +603,13 @@ function MobileSwipeCompare({
   setExpandedSlugs: React.Dispatch<React.SetStateAction<Set<string>>>
 }) {
   const [idx, setIdx] = useState(0)
+  const clampedIdx = Math.min(idx, Math.max(0, activeSlugs.length - 1))
   const containerRef  = useRef<HTMLDivElement>(null)
   // Store mutable gesture state in a ref so event handlers don't go stale
-  const gesture = useRef({ startX: 0, startY: 0, decided: false, isHoriz: false })
+  const gesture = useRef({ startX: 0, startY: 0, decided: false, isHoriz: false, skip: false })
   // Keep a ref of the count so the touchend closure always has the latest value
   const countRef = useRef(activeSlugs.length)
   useEffect(() => { countRef.current = activeSlugs.length }, [activeSlugs.length])
-
-  // Clamp index when spot list shrinks
-  useEffect(() => {
-    setIdx((i) => Math.min(i, Math.max(0, activeSlugs.length - 1)))
-  }, [activeSlugs.length])
 
   // Native touch listeners with passive:false on touchmove so we can call preventDefault
   // — this is the only reliable way to block page scroll during a horizontal swipe on iOS
@@ -612,11 +618,14 @@ function MobileSwipeCompare({
     if (!el) return
 
     const onStart = (e: TouchEvent) => {
-      gesture.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, decided: false, isHoriz: false }
+      // Don't intercept touches that start inside a scrollable child (day picker, hourly table)
+      const skip = !!(e.target as HTMLElement).closest?.('[data-no-swipe]')
+      gesture.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, decided: false, isHoriz: false, skip }
     }
 
     const onMove = (e: TouchEvent) => {
       const g = gesture.current
+      if (g.skip) return
       if (!g.decided) {
         const dx = Math.abs(e.touches[0].clientX - g.startX)
         const dy = Math.abs(e.touches[0].clientY - g.startY)
@@ -669,7 +678,8 @@ function MobileSwipeCompare({
             onExpandToggle={() =>
               setExpandedSlugs((prev) => {
                 const next = new Set(prev)
-                next.has(slug) ? next.delete(slug) : next.add(slug)
+                if (next.has(slug)) next.delete(slug)
+                else next.add(slug)
                 return next
               })
             }
@@ -681,7 +691,7 @@ function MobileSwipeCompare({
       <div className="flex items-center justify-between mt-4 px-1">
         <button
           onClick={() => setIdx((i) => Math.max(i - 1, 0))}
-          disabled={idx === 0}
+          disabled={clampedIdx === 0}
           className="rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-30"
           style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)', WebkitTapHighlightColor: 'transparent' }}
         >
@@ -703,13 +713,13 @@ function MobileSwipeCompare({
                 <div
                   className="rounded-full transition-all"
                   style={{
-                    width:      i === idx ? 10 : 7,
-                    height:     i === idx ? 10 : 7,
-                    background: i === idx ? 'var(--ocean-600)' : 'var(--border)',
+                    width:      i === clampedIdx ? 10 : 7,
+                    height:     i === clampedIdx ? 10 : 7,
+                    background: i === clampedIdx ? 'var(--ocean-600)' : 'var(--border)',
                   }}
                 />
                 {spot && (
-                  <span className="text-xs font-medium" style={{ color: i === idx ? 'var(--ocean-600)' : 'var(--text-3)', fontSize: 10 }}>
+                  <span className="text-xs font-medium" style={{ color: i === clampedIdx ? 'var(--ocean-600)' : 'var(--text-3)', fontSize: 10 }}>
                     {spot.name.split(' ')[0]}
                   </span>
                 )}
@@ -720,7 +730,7 @@ function MobileSwipeCompare({
 
         <button
           onClick={() => setIdx((i) => Math.min(i + 1, activeSlugs.length - 1))}
-          disabled={idx === activeSlugs.length - 1}
+          disabled={clampedIdx === activeSlugs.length - 1}
           className="rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-30"
           style={{ background: 'var(--sand-100)', border: '1px solid var(--border)', color: 'var(--text-2)', WebkitTapHighlightColor: 'transparent' }}
         >
@@ -742,7 +752,22 @@ const STORAGE_KEY = 'wavefinder-compare-slugs'
 const SLUG_RE     = /^[a-z0-9-]{1,120}$/
 
 export default function ComparePage() {
-  const [selectedSlugs, setSelectedSlugs] = useState<string[]>(['', '', ''])
+  const [selectedSlugs, setSelectedSlugs] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return ['', '', '']
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return ['', '', '']
+      const parsed = JSON.parse(raw)
+      if (
+        Array.isArray(parsed) &&
+        parsed.length === MAX_SPOTS &&
+        parsed.every((s) => typeof s === 'string' && (s === '' || SLUG_RE.test(s)))
+      ) {
+        return parsed
+      }
+    } catch { /* corrupt storage - ignore */ }
+    return ['', '', '']
+  })
   const [selectedDays,  setSelectedDays]  = useState<Record<string, string>>({})
   const [expandedSlugs, setExpandedSlugs] = useState<Set<string>>(new Set())
 
@@ -757,7 +782,7 @@ export default function ComparePage() {
         parsed.length === MAX_SPOTS &&
         parsed.every((s) => typeof s === 'string' && (s === '' || SLUG_RE.test(s)))
       ) {
-        setSelectedSlugs(parsed)
+        queueMicrotask(() => setSelectedSlugs(parsed))
       }
     } catch { /* corrupt storage — ignore */ }
   }, [])
@@ -798,7 +823,7 @@ export default function ComparePage() {
             <div>
               <h1
                 className="text-xl sm:text-2xl font-bold leading-tight"
-                style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}
+                style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}
               >
                 Compare Spots
               </h1>
@@ -844,7 +869,7 @@ export default function ComparePage() {
                   stroke="var(--seafoam)" strokeWidth="2" strokeLinecap="round" opacity="0.7" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+            <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
               Select at least 2 spots to compare
             </h2>
             <p className="text-sm max-w-sm" style={{ color: 'var(--text-3)' }}>
@@ -880,7 +905,8 @@ export default function ComparePage() {
                   onExpandToggle={() =>
                     setExpandedSlugs((prev) => {
                       const next = new Set(prev)
-                      next.has(slug) ? next.delete(slug) : next.add(slug)
+                      if (next.has(slug)) next.delete(slug)
+                      else next.add(slug)
                       return next
                     })
                   }

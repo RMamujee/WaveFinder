@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { getSpotBySlug } from '@/lib/spots/static-store'
 
 export const revalidate = 43200 // 12 hours — bacterial data updates daily at most
 
@@ -69,7 +69,7 @@ export async function GET(
   if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 })
   }
-  const spot = await prisma.surfSpot.findUnique({ where: { slug }, select: { lat: true, lng: true, name: true } })
+  const spot = getSpotBySlug(slug)
 
   if (!spot) return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
 
@@ -89,10 +89,18 @@ export async function GET(
   // Step 1 — find BEACH program monitoring stations within 25 miles
   const stationUrl = `https://www.waterqualitydata.us/data/Station/search?lat=${spot.lat}&long=${spot.lng}&within=25&${charParam}&mimeType=csv`
   const stationCSV = await fetchText(stationUrl)
-  if (!stationCSV) return NextResponse.json(noData)
+  if (!stationCSV) {
+    return NextResponse.json(noData, {
+      headers: { 'Cache-Control': 's-maxage=43200, stale-while-revalidate=86400' },
+    })
+  }
 
   const stations = parseCSV(stationCSV)
-  if (stations.length === 0) return NextResponse.json(noData)
+  if (stations.length === 0) {
+    return NextResponse.json(noData, {
+      headers: { 'Cache-Control': 's-maxage=43200, stale-while-revalidate=86400' },
+    })
+  }
 
   // Use up to 5 nearest stations (CSV is already sorted by distance)
   const siteIds = stations
@@ -100,7 +108,11 @@ export async function GET(
     .map(s => s['MonitoringLocationIdentifier'])
     .filter((id): id is string => typeof id === 'string' && /^[\w:.-]{1,60}$/.test(id))
 
-  if (siteIds.length === 0) return NextResponse.json(noData)
+  if (siteIds.length === 0) {
+    return NextResponse.json(noData, {
+      headers: { 'Cache-Control': 's-maxage=43200, stale-while-revalidate=86400' },
+    })
+  }
 
   const beachName = stations[0]['MonitoringLocationName'] ?? null
 
@@ -109,10 +121,18 @@ export async function GET(
   const sinceStr = `${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}-${since.getFullYear()}`
   const resultUrl = `https://www.waterqualitydata.us/data/Result/search?siteid=${siteIds.map(encodeURIComponent).join(';')}&${charParam}&startDateLo=${sinceStr}&mimeType=csv`
   const resultCSV = await fetchText(resultUrl)
-  if (!resultCSV) return NextResponse.json(noData)
+  if (!resultCSV) {
+    return NextResponse.json(noData, {
+      headers: { 'Cache-Control': 's-maxage=43200, stale-while-revalidate=86400' },
+    })
+  }
 
   const rows = parseCSV(resultCSV)
-  if (rows.length === 0) return NextResponse.json(noData)
+  if (rows.length === 0) {
+    return NextResponse.json(noData, {
+      headers: { 'Cache-Control': 's-maxage=43200, stale-while-revalidate=86400' },
+    })
+  }
 
   // Parse readings — keep only rows with numeric values
   const readings: WaterQualityReading[] = rows
@@ -129,15 +149,22 @@ export async function GET(
     .sort((a, b) => b.date.localeCompare(a.date))  // newest first
     .slice(0, 10)
 
-  if (readings.length === 0) return NextResponse.json(noData)
+  if (readings.length === 0) {
+    return NextResponse.json(noData, {
+      headers: { 'Cache-Control': 's-maxage=43200, stale-while-revalidate=86400' },
+    })
+  }
 
   const latest = readings[0]
-  return NextResponse.json({
-    source: 'usgs',
-    beachName,
-    latestReading: latest,
-    history: readings,
-    status: getStatus(latest.value),
-    lastUpdated: new Date().toISOString(),
-  } satisfies WaterQualityResponse)
+  return NextResponse.json(
+    {
+      source: 'usgs',
+      beachName,
+      latestReading: latest,
+      history: readings,
+      status: getStatus(latest.value),
+      lastUpdated: new Date().toISOString(),
+    } satisfies WaterQualityResponse,
+    { headers: { 'Cache-Control': 's-maxage=43200, stale-while-revalidate=86400' } }
+  )
 }

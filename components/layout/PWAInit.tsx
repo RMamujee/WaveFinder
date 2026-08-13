@@ -8,41 +8,39 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+// Handles service worker registration + Chrome/Android "Add to Home Screen" banner.
+// iOS is handled separately by InstallPrompt.
 export function PWAInit() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showBanner, setShowBanner] = useState(false)
-  const [isIOS, setIsIOS] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    // Register service worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {})
+      // Log the failure rather than swallowing it. A `.catch(() => {})` here is
+      // why a CSP `worker-src blob:` directive silently blocked registration
+      // outright — the precache and cache-first static handling in
+      // public/sw.js never ran, and nothing anywhere said so.
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('[pwa] service worker registration failed', err)
+      })
     }
 
-    // Check if already installed
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches
     if (isStandalone) return
 
-    // Check dismissed flag
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    if (isIOS) return // iOS handled by InstallPrompt
+
     if (sessionStorage.getItem('pwa-dismissed')) return
 
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
-    setIsIOS(ios)
-
-    if (ios) {
-      // Show iOS instructions after 8 seconds
-      setTimeout(() => setShowBanner(true), 8000)
-    } else {
-      // Listen for Chrome/Android install prompt
-      const handler = (e: Event) => {
-        e.preventDefault()
-        setInstallPrompt(e as BeforeInstallPromptEvent)
-        setTimeout(() => setShowBanner(true), 5000)
-      }
-      window.addEventListener('beforeinstallprompt', handler)
-      return () => window.removeEventListener('beforeinstallprompt', handler)
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setInstallPrompt(e as BeforeInstallPromptEvent)
+      setTimeout(() => setShowBanner(true), 5000)
     }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
   function dismiss() {
@@ -78,7 +76,6 @@ export function PWAInit() {
         gap: '12px',
       }}
     >
-      {/* Icon */}
       <div
         style={{
           width: 44,
@@ -89,50 +86,40 @@ export function PWAInit() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 22,
-        color: 'white',
         }}
       >
-        <Icon name="wave" size={22} strokeWidth={1.6} />
+        <Icon name="wave" size={24} style={{ color: 'white' }} />
       </div>
 
-      {/* Text */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', margin: 0 }}>
           Add WaveFinder to home screen
         </p>
-        {isIOS ? (
-          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-            Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong>
-          </p>
-        ) : (
-          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-            Get instant access to forecasts offline
-          </p>
-        )}
+        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
+          Get instant access to forecasts offline
+        </p>
       </div>
 
-      {/* Actions */}
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-        {!isIOS && (
-          <button
-            onClick={install}
-            style={{
-              background: 'var(--ocean-600)',
-              color: 'white',
-              border: 'none',
-              borderRadius: 8,
-              padding: '8px 14px',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Install
-          </button>
-        )}
+        <button
+          onClick={install}
+          style={{
+            background: 'var(--ocean-600)',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            padding: '8px 14px',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Install
+        </button>
         <button
           onClick={dismiss}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--sand-200)' }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--sand-100)' }}
           style={{
             background: 'var(--sand-100)',
             color: 'var(--text-2)',
@@ -141,9 +128,10 @@ export function PWAInit() {
             padding: '8px 12px',
             fontSize: 13,
             cursor: 'pointer',
+            transition: 'background 0.15s',
           }}
         >
-          {isIOS ? 'OK' : 'Not now'}
+          Not now
         </button>
       </div>
     </div>

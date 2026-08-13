@@ -37,7 +37,7 @@ export function BuoyReadings({ buoy, buoyId }: Props) {
         <Stat label="Wave Height" value={buoy.waveHeight != null ? fmtHeightDec(buoy.waveHeight, unit) : '—'} />
         <Stat label="Dom. Period" value={buoy.dominantPeriod != null ? `${buoy.dominantPeriod}s` : '—'} />
         <Stat label="Avg Period"  value={buoy.averagePeriod != null  ? `${buoy.averagePeriod}s`  : '—'} />
-        <Stat label="Swell Dir"   value={degreesToCompass(buoy.meanDirection)} />
+        <Stat label="Swell Dir"   value={buoy.meanDirection != null ? degreesToCompass(buoy.meanDirection) : '—'} />
         {buoy.waterTemp !== null && (
           <Stat label="Water Temp" value={fmtTemp(buoy.waterTemp, unit)} />
         )}

@@ -18,12 +18,12 @@ export interface BestTimeSlot {
   recommended: boolean
 }
 
-const WINDOWS: Record<SessionWindow, { label: string; start: number; end: number; emoji: string }> = {
-  dawn:      { label: 'Dawn Patrol', start: 5,  end: 8,  emoji: '🌅' },
-  morning:   { label: 'Morning',     start: 8,  end: 12, emoji: '☀️' },
-  midday:    { label: 'Midday',      start: 12, end: 15, emoji: '🌤️' },
-  afternoon: { label: 'Afternoon',   start: 15, end: 18, emoji: '🌊' },
-  evening:   { label: 'Evening',     start: 18, end: 21, emoji: '🌇' },
+const WINDOWS: Record<SessionWindow, { label: string; start: number; end: number }> = {
+  dawn:      { label: 'Dawn Patrol', start: 5,  end: 8  },
+  morning:   { label: 'Morning',     start: 8,  end: 12 },
+  midday:    { label: 'Midday',      start: 12, end: 15 },
+  afternoon: { label: 'Afternoon',   start: 15, end: 18 },
+  evening:   { label: 'Evening',     start: 18, end: 21 },
 }
 
 function isOffshore(avgWindDir: number, spotFacing: number): boolean {
