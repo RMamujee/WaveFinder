@@ -1,20 +1,20 @@
 'use client'
 
 import Link from 'next/link'
+import { Icon, type WFIconName } from '@/components/ui/Icon'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { REGION_HIERARCHY } from '@/lib/region-hierarchy'
-import { Icon } from '@/components/ui/Icon'
 
 // ── Visual config ─────────────────────────────────────────────────────────────
 
-const WORLD_REGION_COLORS: Record<string, { color: string; bg: string; border: string; icon: string }> = {
+const WORLD_REGION_COLORS: Record<string, { color: string; bg: string; border: string; icon: WFIconName }> = {
   'North America': { color: '#1b7fcb', bg: '#eff6ff', border: '#bfdbfe', icon: 'wave' },
   'South America': { color: '#059669', bg: '#ecfdf5', border: '#a7f3d0', icon: 'surfer' },
-  'Europe':        { color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', icon: '🌅' },
-  'Oceania':       { color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', icon: '🤙' },
-  'Asia':          { color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: '🐉' },
-  'Africa':        { color: '#b45309', bg: '#fef3c7', border: '#fde68a', icon: '🌍' },
+  'Europe':        { color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', icon: 'sun' },
+  'Oceania':       { color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', icon: 'surfer' },
+  'Asia':          { color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: 'compass' },
+  'Africa':        { color: '#b45309', bg: '#fef3c7', border: '#fde68a', icon: 'map' },
 }
 
 const CARD_COLORS: string[] = [
@@ -78,7 +78,7 @@ function Breadcrumb({ worldRegion, country, state, onSelectWorld, onSelectRegion
 interface CardProps {
   title: string
   subtitle?: string
-  icon: string
+  icon: WFIconName
   color: string
   bg: string
   border: string
@@ -96,19 +96,14 @@ function RegionCard({ title, subtitle, icon, color, bg, border, description, onC
     >
       <div className="px-5 pt-5 pb-4" style={{ background: bg, borderBottom: `1px solid ${border}` }}>
         <div className="flex items-start justify-between gap-2 mb-2">
-          <span style={{ lineHeight: 1 }}>
-            {['wave','surfer','map','pin','star','buoy','tide','wind','sun','moon','compass','temp'].includes(icon)
-              ? <Icon name={icon as import('@/components/ui/Icon').IconName} size={28} strokeWidth={1.4} style={{ color }} />
-              : <span style={{ fontSize: '28px' }}>{icon}</span>
-            }
-          </span>
+          <Icon name={icon} size={28} style={{ color }} />
           {subtitle && (
             <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: border, color }}>
               {subtitle}
             </span>
           )}
         </div>
-        <h2 className="font-bold text-lg leading-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+        <h2 className="font-bold text-lg leading-tight" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
           {title}
         </h2>
       </div>
@@ -188,7 +183,7 @@ export default function RegionsPage() {
           <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--ocean-500)' }}>
             {selectedState ? selectedCountry : selectedCountry ? selectedWorldRegion : 'Worldwide'}
           </p>
-          <h1 className="text-4xl font-bold leading-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--text)' }}>
+          <h1 className="text-4xl font-bold leading-tight" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--text)' }}>
             {pageTitle}
           </h1>
           <p className="mt-2 text-base" style={{ color: 'var(--text-2)', maxWidth: '520px' }}>
@@ -203,7 +198,7 @@ export default function RegionsPage() {
         {!selectedWorldRegion && (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {worldRegions.map((wr) => {
-              const cfg = WORLD_REGION_COLORS[wr] ?? { color: '#374151', bg: '#f9fafb', border: '#e5e7eb', icon: '🌐' }
+              const cfg = WORLD_REGION_COLORS[wr] ?? { color: '#374151', bg: '#f9fafb', border: '#e5e7eb', icon: 'map' as WFIconName }
               const countries = Object.keys(REGION_HIERARCHY[wr])
               return (
                 <RegionCard
@@ -301,7 +296,7 @@ export default function RegionsPage() {
             className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
             style={{ background: 'var(--ocean-600)' }}
           >
-            <Icon name="map" size={14} strokeWidth={1.8} /> Open live map — all spots
+            Open live map — all spots
           </Link>
         </div>
       </div>

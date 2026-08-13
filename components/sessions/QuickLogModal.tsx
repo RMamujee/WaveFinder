@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { Icon } from '@/components/ui/Icon'
 
 const SESSIONS_KEY = 'wavefinder_sessions'
 
@@ -107,15 +108,15 @@ export function QuickLogModal({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+      className="fixed inset-0 flex items-end sm:items-center justify-center p-4"
+      style={{ zIndex: 9999, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="w-full max-w-md rounded-2xl" style={{ background: 'white', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
-            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>
+            <h2 style={{ fontFamily: 'var(--font-playfair), serif', fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>
               Log a Session
             </h2>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Saved to this device</p>
@@ -129,8 +130,8 @@ export function QuickLogModal({ open, onClose }: Props) {
 
         {saved ? (
           <div className="px-6 py-10 text-center">
-            <div className="text-4xl mb-3">🤙</div>
-            <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '20px', fontWeight: 700, color: 'var(--text)' }}>
+            <div className="flex justify-center mb-3"><Icon name="surfer" size={36} style={{ color: 'var(--ocean-600)' }} /></div>
+            <p style={{ fontFamily: 'var(--font-playfair), serif', fontSize: '20px', fontWeight: 700, color: 'var(--text)' }}>
               Session logged!
             </p>
             <div className="mt-5 flex gap-2 justify-center">
@@ -143,7 +144,7 @@ export function QuickLogModal({ open, onClose }: Props) {
             </div>
           </div>
         ) : (
-          <div className="px-6 py-5 space-y-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+          <div className="px-6 py-5 space-y-4" style={{ maxHeight: 'min(80vh, calc(100dvh - 140px))', overflowY: 'auto' }}>
             {/* Spot */}
             <div style={{ position: 'relative', zIndex: 10 }}>
               <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-2)' }}>
@@ -155,10 +156,8 @@ export function QuickLogModal({ open, onClose }: Props) {
                 onChange={(e) => { setSpotName(e.target.value); setSpotSlug(''); setRegion(''); setShowSuggestions(true) }}
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => {
-                  setTimeout(() => {
-                    if (!spotSlug && spotName.trim()) { setSpotName(''); setSuggestions([]) }
-                    setShowSuggestions(false)
-                  }, 200)
+                  if (!spotSlug && spotName.trim()) { setSpotName(''); setSuggestions([]) }
+                  setShowSuggestions(false)
                 }}
                 placeholder="Search WaveFinder spots…"
                 className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none"
@@ -167,7 +166,7 @@ export function QuickLogModal({ open, onClose }: Props) {
               {showSuggestions && suggestions.length > 0 && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999, marginTop: '4px', borderRadius: '12px', overflow: 'hidden', background: 'white', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
                   {suggestions.map((s) => (
-                    <button key={s.id} onClick={() => handleSpotSelect(s)} className="w-full text-left px-4 py-2.5 hover:bg-[var(--sand-50)] transition-colors">
+                    <button key={s.id} onMouseDown={(e) => { e.preventDefault(); handleSpotSelect(s) }} className="w-full text-left px-4 py-2.5 hover:bg-[var(--sand-50)] transition-colors">
                       <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>{s.name}</span>
                       <span className="text-xs ml-2" style={{ color: 'var(--text-3)' }}>{s.region}</span>
                     </button>

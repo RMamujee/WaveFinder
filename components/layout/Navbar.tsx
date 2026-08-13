@@ -14,13 +14,13 @@ export function Navbar() {
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   const navLinks = [
-    { href: '/spots',      label: 'Browse Spots' },
-    { href: '/timeline',   label: 'Timeline' },
-    { href: '/regions',    label: 'Regions' },
-    { href: '/compare',    label: 'Compare' },
-    { href: '/sessions',   label: 'My Log' },
-    { href: '/dashboard',  label: 'My Spots' },
-    { href: '/gear',       label: 'Gear Locker' },
+    { href: '/spots',     label: 'Browse Spots' },
+    { href: '/timeline',  label: 'Timeline' },
+    { href: '/regions',   label: 'Regions' },
+    { href: '/compare',   label: 'Compare' },
+    { href: '/sessions',  label: 'My Log' },
+    { href: '/dashboard', label: 'My Spots' },
+    { href: '/gear',      label: 'Gear Locker' },
   ]
 
   return (
@@ -32,7 +32,7 @@ export function Navbar() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group" onClick={() => setMobileOpen(false)}>
           <Image src="/logo.png" alt="WaveFinder" width={36} height={36} className="rounded-lg" />
-          <span className="text-lg font-bold tracking-tight" style={{ fontFamily: 'Playfair Display, serif', color: 'var(--ocean-700)' }}>
+          <span className="text-lg font-bold tracking-tight" style={{ fontFamily: 'var(--font-playfair), serif', color: 'var(--ocean-700)' }}>
             Wave<span style={{ color: 'var(--seafoam)', fontStyle: 'italic' }}>Finder</span>
           </span>
         </Link>
@@ -108,6 +108,10 @@ export function Navbar() {
                 style={{
                   color: isActive(l.href) ? 'var(--ocean-600)' : 'var(--text)',
                   background: isActive(l.href) ? 'var(--ocean-50)' : 'transparent',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {l.label}

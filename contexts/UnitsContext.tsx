@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 import type { UnitSystem } from '@/lib/units'
 
 interface UnitsContextValue {
@@ -13,12 +13,11 @@ const UnitsContext = createContext<UnitsContextValue>({ unit: 'imperial', toggle
 const STORAGE_KEY = 'wavefinder-units'
 
 export function UnitsProvider({ children }: { children: ReactNode }) {
-  const [unit, setUnit] = useState<UnitSystem>('imperial')
-
-  useEffect(() => {
+  const [unit, setUnit] = useState<UnitSystem>(() => {
+    if (typeof window === 'undefined') return 'imperial'
     const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved === 'metric' || saved === 'imperial') setUnit(saved)
-  }, [])
+    return saved === 'metric' || saved === 'imperial' ? saved : 'imperial'
+  })
 
   const toggle = () => {
     setUnit((u) => {

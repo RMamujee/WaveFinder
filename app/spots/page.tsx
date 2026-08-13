@@ -1,22 +1,25 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { useState, useMemo, useEffect } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useState, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { SpotCard } from '@/components/spots/SpotCard'
 import { WaveLoader } from '@/components/layout/WaveLoader'
+import type { MapBounds } from '@/components/spots/SpotMap'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 import {
+  REGION_HIERARCHY,
   getStatesForCountry,
   getRegionsForState,
   getAllRegionsForCountry,
 } from '@/lib/region-hierarchy'
-import { Icon } from '@/components/ui/Icon'
 
 interface SpotWithRating extends SurfSpot {
   currentRating?: ConditionRating | 'unknown'
   currentWaveHeight?: number | null
+  currentFaceHeight?: number | null
   currentPeriod?: number | null
   currentWindSpeed?: number | null
   wavePower?: number | null
@@ -28,6 +31,22 @@ const SpotMap = dynamic(
 )
 
 type ViewMode = 'map' | 'list'
+
+// Viewport → query key, rounded outward and padded so nudging the map re-uses
+// the cached payload. Mirrors LiveMapHero; see the header on parseBbox in
+// app/api/spots/route.ts for why the map must not ask for the whole world.
+const BBOX_PAD_DEG = 1
+
+function bboxParam(b: MapBounds): string {
+  const lo = (n: number) => Math.floor(n) - BBOX_PAD_DEG
+  const hi = (n: number) => Math.ceil(n) + BBOX_PAD_DEG
+  return [
+    Math.max(lo(b.minLat), -90),
+    lo(b.minLng),
+    Math.min(hi(b.maxLat), 90),
+    hi(b.maxLng),
+  ].join(',')
+}
 
 // ── Region map centers ────────────────────────────────────────────────────────
 
@@ -54,27 +73,64 @@ const COUNTRY_MAP_CENTERS: Record<string, { lat: number; lng: number; zoom: numb
   'Japan':          { lat: 36.0,  lng: 138.0,  zoom: 5 },
 }
 
+// ── GPS → nearest country / state / region ───────────────────────────────────
+
+function geoAutoSelect(
+  lat: number,
+  lng: number,
+  spots: SpotWithRating[]
+): { country: string; state: string; region: string } | null {
+  if (!spots.length) return null
+  let nearest = spots[0]
+  let minDist = Infinity
+  for (const s of spots) {
+    const d = Math.hypot(s.lat - lat, s.lng - lng)
+    if (d < minDist) { minDist = d; nearest = s }
+  }
+  const { country } = nearest
+  for (const worldRegion of Object.values(REGION_HIERARCHY)) {
+    const countryData = worldRegion[country]
+    if (!countryData) continue
+    for (const [state, regions] of Object.entries(countryData)) {
+      for (const region of regions) {
+        if (nearest.region.includes(region)) return { country, state, region }
+      }
+    }
+  }
+  return { country, state: '', region: '' }
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SpotsPage() {
+  const searchParams = useSearchParams()
+  const initialRegion = searchParams.get('region') ?? ''
+  const initialCountry = searchParams.get('country') ?? ''
   const [search, setSearch]           = useState('')
   const [difficulty, setDifficulty]   = useState('')
-  const [selectedCountry, setSelectedCountry] = useState('')
+  const [selectedCountry, setSelectedCountry] = useState(initialCountry)
   const [selectedState, setSelectedState]     = useState('')
-  const [selectedRegion, setSelectedRegion]   = useState('')
-  const [view, setView] = useState<ViewMode>('map')
-
-  // Pre-populate from ?region= URL param (from /regions page links)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const region = params.get('region')
-    if (region) {
-      setSelectedRegion(decodeURIComponent(region))
-      setView('list')
-    }
-    const country = params.get('country')
-    if (country) setSelectedCountry(decodeURIComponent(country))
+  const [selectedRegion, setSelectedRegion]   = useState(initialRegion)
+  const [view, setView] = useState<ViewMode>(() => initialRegion ? 'list' : 'map')
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [bbox, setBbox] = useState<string | null>(null)
+  const handleBoundsChange = useCallback((b: MapBounds) => {
+    setBbox((prev) => {
+      const next = bboxParam(b)
+      return prev === next ? prev : next
+    })
   }, [])
+
+  function handleGpsResult(lat: number, lng: number) {
+    setUserLocation({ lat, lng })
+    const match = geoAutoSelect(lat, lng, baseSpots)
+    if (match) {
+      setSelectedCountry(match.country)
+      setSelectedState(match.state)
+      setSelectedRegion(match.region)
+      setSearch('')
+    }
+  }
 
   // Fetch distinct countries from DB
   const { data: metaData } = useQuery<{ countries: string[] }>({
@@ -119,24 +175,64 @@ export default function SpotsPage() {
   // Stage 1: base spots
   const { data: baseSpots = [], isLoading } = useQuery<SpotWithRating[]>({
     queryKey: ['spots', effectiveSearch, difficulty, selectedCountry],
-    queryFn: () => fetch(`/api/spots?${apiParams}`).then((r) => r.json()),
+    queryFn: () => fetch(`/api/spots?${apiParams}`).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json()
+    }),
     staleTime: 30 * 60 * 1000,
   })
 
-  // Stage 2: live conditions
+  // Live conditions — issued alongside the base list, not after it. The
+  // conditions payload is a complete marker projection and never needed the
+  // base list to be in flight first; gating on it made time-to-coloured-map the
+  // SUM of both requests (measured 2.8 s + 4.3 s cold against production)
+  // instead of the slower one.
+  //
+  // In map view the request is additionally scoped to the visible area. An
+  // unfiltered sweep is ~2,388 Open-Meteo calls against a 5,000/hour
+  // allowance, which gets the whole fan-out refused and every pin rendered
+  // grey — see the header on parseBbox in app/api/spots/route.ts. The list view
+  // keeps the filtered fetch, since a list has no viewport to scope to.
   const condParams = new URLSearchParams(apiParams)
   condParams.set('withConditions', 'true')
+  const scoped = view === 'map' && bbox !== null
+  if (scoped) condParams.set('bbox', bbox)
   const { data: conditionData } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry],
-    queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => r.json()),
-    staleTime: 30 * 60 * 1000,
-    enabled: baseSpots.length > 0,
+    queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry, scoped ? bbox : null],
+    queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json()
+    }),
+    // Map view must wait for the first viewport report rather than firing an
+    // unscoped global sweep in the gap before it arrives.
+    enabled: view !== 'map' || bbox !== null,
+    // A pan must not repaint the map grey while the next box loads.
+    placeholderData: keepPreviousData,
+    // Match the route's edge cache (s-maxage=180): refetching sooner than that
+    // just re-downloads the same cached payload, and a focus refetch on a cold
+    // edge re-runs the whole Open-Meteo fan-out.
+    staleTime: 180 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: 1,
+    // A browse tab left open must keep its ratings current — nothing else in
+    // the app triggers a refetch. 5 min ≈ the om:cond runtime-cache TTL (the
+    // route's edge cache is shorter, s-maxage=180).
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 
+  // In map view this payload covers only the viewport, so it is merged onto the
+  // base list rather than substituted for it — a substitution would delete
+  // every off-screen pin. Spots outside the box keep their marker and carry no
+  // rating until panned into view.
   const spots = useMemo(() => {
-    if (!conditionData || !Array.isArray(conditionData)) return baseSpots
+    if (!Array.isArray(conditionData) || !conditionData.length) return baseSpots
     const condMap = new Map(conditionData.map((s) => [s.id, s]))
-    return baseSpots.map((s) => ({ ...s, ...condMap.get(s.id) }))
+    return baseSpots.map((s) => {
+      const cond = condMap.get(s.id)
+      return cond ? { ...s, ...cond } : s
+    })
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   }, [baseSpots, conditionData])
 
   // Map center
@@ -158,7 +254,7 @@ export default function SpotsPage() {
   const hasFilter = !!(selectedCountry || selectedState || selectedRegion || search)
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 57px)' }}>
+    <div className="flex flex-col" style={{ height: 'calc(100dvh - var(--navbar-height, 57px))' }}>
       {/* Top bar */}
       <div
         className="shrink-0 px-5 py-3"
@@ -166,7 +262,7 @@ export default function SpotsPage() {
       >
         <div className="mx-auto max-w-7xl flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Search */}
-          <div className="relative w-full sm:flex-1 sm:min-w-0 sm:max-w-[180px]">
+          <div className="relative w-full sm:flex-1 sm:min-w-0 sm:max-w-[220px]">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2"
               width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -265,6 +361,7 @@ export default function SpotsPage() {
               <option value="beginner">Beginner</option>
               <option value="intermediate">Intermediate</option>
               <option value="advanced">Advanced</option>
+              <option value="expert">Expert</option>
             </select>
             <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
           </div>
@@ -284,7 +381,7 @@ export default function SpotsPage() {
                   color: view === v ? 'white' : 'var(--text-2)',
                 }}
               >
-                {v === 'map' ? <><Icon name="map" size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'middle' }} /> Map</> : '☰ List'}
+                {v === 'map' ? 'Map' : 'List'}
               </button>
             ))}
           </div>
@@ -304,6 +401,9 @@ export default function SpotsPage() {
             centerLat={mapCenter.lat}
             centerLng={mapCenter.lng}
             zoom={mapCenter.zoom}
+            userLocation={userLocation}
+            onLocate={handleGpsResult}
+            onBoundsChange={handleBoundsChange}
           />
 
           {/* Condition summary bar */}
@@ -314,10 +414,10 @@ export default function SpotsPage() {
             >
               <span className="text-xs font-semibold" style={{ color: 'var(--text-3)' }}>Live:</span>
               {conditionsSummary.epic > 0 && (
-                <span className="text-xs font-bold" style={{ color: '#7c3aed' }}>⚡ {conditionsSummary.epic} Epic</span>
+                <span className="text-xs font-bold" style={{ color: '#7c3aed' }}>{conditionsSummary.epic} Epic</span>
               )}
               {conditionsSummary.good > 0 && (
-                <span className="text-xs font-bold" style={{ color: '#16a34a' }}>✓ {conditionsSummary.good} Good</span>
+                <span className="text-xs font-bold" style={{ color: '#16a34a' }}>{conditionsSummary.good} Good</span>
               )}
               {conditionsSummary.fair > 0 && (
                 <span className="text-xs font-semibold" style={{ color: '#b45309' }}>{conditionsSummary.fair} Fair</span>
@@ -363,14 +463,13 @@ export default function SpotsPage() {
             </div>
           </div>
 
+
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center z-[999]">
-              <div
-                className="rounded-xl px-4 py-3 text-sm"
-                style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-2)' }}
-              >
-                Loading spots…
-              </div>
+            <div
+              className="absolute inset-0 flex items-center justify-center z-[999]"
+              style={{ background: 'var(--sand-50)' }}
+            >
+              <WaveLoader compact label="Loading spots…" />
             </div>
           )}
           {!isLoading && !conditionData && (
@@ -402,7 +501,7 @@ export default function SpotsPage() {
                     key={spot.id}
                     spot={spot}
                     rating={spot.currentRating && spot.currentRating !== 'unknown' ? spot.currentRating as ConditionRating : undefined}
-                    waveHeight={spot.currentWaveHeight ?? undefined}
+                    waveHeight={spot.currentFaceHeight ?? undefined}
                   />
                 ))}
               </div>

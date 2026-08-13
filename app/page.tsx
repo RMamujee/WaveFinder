@@ -1,8 +1,8 @@
-import { prisma } from '@/lib/prisma'
 import { LiveMapHero } from '@/components/home/LiveMapHero'
+import { SURF_SPOTS_SEED } from '@/lib/spots-data'
 
 export default async function HomePage() {
-  const spotCount = await prisma.surfSpot.count().catch(() => 0)
+  const spotCount = SURF_SPOTS_SEED.length
 
   return (
     <div style={{ background: 'var(--sand-50)' }}>

@@ -32,9 +32,13 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # local SQLite database
 prisma/*.db
+
+# oh-my-claudecode local state
+.omc/
 
 # vercel
 .vercel
@@ -44,3 +48,10 @@ prisma/*.db
 next-env.d.ts
 
 .vercel
+.env*.local
+
+# Claude Code agent worktrees and local session artifacts. These live inside the
+# repo, so without this a `git add -A` sweeps an entire second checkout into a
+# commit — and ESLint walks them and reports another branch's warnings as ours.
+.claude/
+.playwright-mcp/

@@ -1,10 +1,34 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { spotsInRegion } from '@/lib/spots/static-store'
 import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
+import type { OpenMeteoMarineResponse, OpenMeteoWindResponse } from '@/lib/api/open-meteo'
 import { rateSurfConditions, degreesToCompass } from '@/lib/forecast/rating'
+import type { SwellPartition } from '@/lib/forecast/rating'
+import { distanceKm } from '@/lib/forecast/nearest-fallback'
+import type { SurfSpot } from '@/types/spot'
+import { handleRouteError, cdnCacheHeaders } from '@/lib/route-helpers'
 
-export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+// The response depends only on (region, date) — no session, no per-user data —
+// so it is share-cacheable. The fresh window matches the hourly cache the
+// Open-Meteo fetches already sit behind: nothing new can appear sooner.
+//
+// The stale window is a compromise between two real costs. Long is good: there
+// are only ~105 (region, date) keys spread thinly over traffic, and a key that
+// goes fully cold costs the next visitor the whole fan-out (up to 4 marine +
+// 4 wind fetches at a 28 s timeout each). But long is also bad in a way that
+// is easy to miss — `date` being in the key guarantees a stale entry is the
+// right DAY, not that it was computed from the right model run. At 24 h, a
+// request for today could be served a ranking computed when today was still
+// tomorrow: a day-2 forecast, less accurate, and visibly disagreeing with the
+// spot pages beside it. That cross-surface disagreement is exactly what the
+// accuracy audit spent four phases removing.
+//
+// 6 h keeps a stale entry within roughly one Open-Meteo model cycle while
+// still covering the traffic gaps this feature actually sees.
+const CACHE_MAX_AGE = 3600
+const CACHE_STALE_WHILE_REVALIDATE = 6 * 3600
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
@@ -27,6 +51,91 @@ const REGION_CENTERS: Record<string, { lat: number; lng: number }> = {
   'Uluwatu':        { lat: -8.83,  lng: 115.09 },
   'Hossegor':       { lat: 43.66,  lng: -1.43  },
   'Jeffrey\'s Bay': { lat: -34.05, lng: 24.93  },
+}
+
+// Scoring a whole region off ONE marine cell is a real error where regions are
+// long: NorCal spans 52 spots, 307 km and 85° of coastal facing. Up to four
+// cells are fetched and each spot is scored against its nearest one. Four is
+// the ceiling because each cell costs a 16-day marine fetch (2 upstream calls)
+// plus a wind fetch — all hourly-cached, but the route still has to finish.
+const MAX_REGION_CLUSTERS = 4
+// Two cells closer than this describe the same swell; spend the budget further
+// along the coast instead.
+const MIN_CLUSTER_SEPARATION_KM = 40
+
+interface ClusterSeed { lat: number; lng: number }
+
+function buildClusterSeeds(spots: SurfSpot[], region: string): ClusterSeed[] {
+  const seeds: ClusterSeed[] = []
+  // A hand-authored region centre is a known-good marine cell — keep it first.
+  const named = REGION_CENTERS[region]
+  if (named) seeds.push(named)
+
+  // Densest 1° cells first, so seeds land where the spots actually are rather
+  // than at an arithmetic centroid that can sit inland or offshore.
+  const cells = new Map<string, SurfSpot[]>()
+  for (const s of spots) {
+    const key = `${Math.floor(s.lat)}:${Math.floor(s.lng)}`
+    const bucket = cells.get(key)
+    if (bucket) bucket.push(s)
+    else cells.set(key, [s])
+  }
+
+  for (const cell of [...cells.values()].sort((a, b) => b.length - a.length)) {
+    if (seeds.length >= MAX_REGION_CLUSTERS) break
+    const meanLat = cell.reduce((sum, s) => sum + s.lat, 0) / cell.length
+    const meanLng = cell.reduce((sum, s) => sum + s.lng, 0) / cell.length
+    // The real spot nearest the cell's mean — a real coastal coordinate always
+    // has marine data; a computed midpoint can land on land.
+    let rep = cell[0]
+    let repDist = Infinity
+    for (const s of cell) {
+      const d = distanceKm(meanLat, meanLng, s.lat, s.lng)
+      if (d < repDist) { repDist = d; rep = s }
+    }
+    if (seeds.every((seed) => distanceKm(seed.lat, seed.lng, rep.lat, rep.lng) >= MIN_CLUSTER_SEPARATION_KM)) {
+      seeds.push({ lat: rep.lat, lng: rep.lng })
+    }
+  }
+
+  if (!seeds.length) seeds.push({ lat: spots[0].lat, lng: spots[0].lng })
+  return seeds
+}
+
+interface Cluster {
+  seed: ClusterSeed
+  marine: OpenMeteoMarineResponse
+  /** Wind speed/direction by local-clock time. An entry exists only when the
+   *  API reported a speed — `?? 0` scored a missing hour as a perfect calm. */
+  windByTime: Map<string, { speed: number; dir: number | null }>
+  /** Marine hourly index by local-clock time, so a spot scored against a
+   *  neighbouring cluster still lines up on the primary cluster's time axis. */
+  indexByTime: Map<string, number>
+}
+
+function buildWindMap(wind: OpenMeteoWindResponse | null): Cluster['windByTime'] {
+  const map = new Map<string, { speed: number; dir: number | null }>()
+  if (!wind) return map
+  wind.hourly.time.forEach((t, i) => {
+    if (wind.hourly.wind_speed_10m[i] != null) {
+      map.set(t, {
+        speed: wind.hourly.wind_speed_10m[i],
+        dir: wind.hourly.wind_direction_10m[i] ?? null,
+      })
+    }
+  })
+  return map
+}
+
+function secondaryAt(marine: OpenMeteoMarineResponse, i: number): SwellPartition | null {
+  const height = marine.hourly.secondary_swell_wave_height?.[i] ?? null
+  const period = marine.hourly.secondary_swell_wave_period?.[i] ?? null
+  if (height == null || height <= 0 || period == null || period <= 0) return null
+  return {
+    height,
+    period,
+    direction: marine.hourly.secondary_swell_wave_direction?.[i] ?? null,
+  }
 }
 
 export interface BestSpotsSwellHour {
@@ -62,12 +171,14 @@ export interface BestSpotsSpotEntry {
     rating: string
     ratingScore: number
     waveHeight: number
+    faceHeight: number
     windSpeed: number
     windDirectionLabel: string
   }[]
 }
 
 export async function GET(req: Request) {
+  try {
   const { searchParams } = new URL(req.url)
   const region = (searchParams.get('region') ?? '').slice(0, 100)
   const date   = (searchParams.get('date') ?? '').slice(0, 10)
@@ -76,48 +187,52 @@ export async function GET(req: Request) {
   if (!/^[\w\s',.()-]{1,100}$/.test(region)) return NextResponse.json({ error: 'Invalid region' }, { status: 400 })
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
 
-  const spots = await prisma.surfSpot.findMany({
-    where: { region: { contains: region, mode: 'insensitive' } },
-    orderBy: { name: 'asc' },
-  })
+  const spots = spotsInRegion(region)
 
   if (!spots.length) {
-    return NextResponse.json({ spots: [], regionalSwell: [], date })
+    return NextResponse.json(
+      { spots: [], regionalSwell: [], date },
+      { headers: cdnCacheHeaders(CACHE_MAX_AGE, CACHE_STALE_WHILE_REVALIDATE) }
+    )
   }
 
-  const center = REGION_CENTERS[region] ?? { lat: spots[0].lat, lng: spots[0].lng }
+  const seeds = buildClusterSeeds(spots, region)
 
-  const [marineResult, windResult] = await Promise.allSettled([
-    withTimeout(fetchMarineForecast(center.lat, center.lng), 28000),
-    withTimeout(fetchWindForecast(center.lat, center.lng), 28000),
-  ])
+  const settled = await Promise.all(seeds.map(async (seed): Promise<Cluster | null> => {
+    const [marineResult, windResult] = await Promise.allSettled([
+      withTimeout(fetchMarineForecast(seed.lat, seed.lng), 28000),
+      withTimeout(fetchWindForecast(seed.lat, seed.lng), 28000),
+    ])
+    const clusterMarine = marineResult.status === 'fulfilled' ? marineResult.value : null
+    if (!clusterMarine) return null
+    const clusterWind = windResult.status === 'fulfilled' ? windResult.value : null
+    const indexByTime = new Map<string, number>()
+    clusterMarine.hourly.time.forEach((t, i) => indexByTime.set(t, i))
+    return { seed, marine: clusterMarine, windByTime: buildWindMap(clusterWind), indexByTime }
+  }))
 
-  const marine = marineResult.status === 'fulfilled' ? marineResult.value : null
-  if (!marine) return NextResponse.json({ error: 'Could not fetch marine forecast' }, { status: 502 })
+  const clusters = settled.filter((c): c is Cluster => c !== null)
+  if (!clusters.length) {
+    return NextResponse.json({ error: 'Could not fetch marine forecast' }, { status: 502 })
+  }
 
-  const wind = windResult.status === 'fulfilled' ? windResult.value : null
-
-  // Find hour indices for the selected date
+  // The first successful cluster owns the time axis: every spot reports the
+  // same hours regardless of which cell scored it, so the client's hourly table
+  // has no holes.
+  const primary = clusters[0]
+  const marine = primary.marine
   const hourIndices: number[] = []
   marine.hourly.time.forEach((t, i) => {
     if (t.startsWith(date)) hourIndices.push(i)
   })
 
-  // Build wind lookup by time
-  const windMap = new Map<string, { speed: number; dir: number }>()
-  if (wind) {
-    wind.hourly.time.forEach((t, i) => {
-      windMap.set(t, {
-        speed: wind.hourly.wind_speed_10m[i] ?? 0,
-        dir:   wind.hourly.wind_direction_10m[i] ?? 0,
-      })
-    })
-  }
-
-  // Regional swell per hour
+  // Regional swell per hour — the primary cluster, as displayed context.
   const regionalSwell: BestSpotsSwellHour[] = hourIndices.map((i) => {
     const time        = marine.hourly.time[i]
-    const w           = windMap.get(time) ?? { speed: 0, dir: 270 }
+    const w           = primary.windByTime.get(time) ?? { speed: 0, dir: 270 }
+    // Display-only stand-ins below (the rating path in spotsData passes
+    // honest nulls); wDir keeps the compass label renderable.
+    const wDir        = w.dir ?? 270
     const swellDir    = marine.hourly.swell_wave_direction[i] ?? 270
     const windWaveDir = marine.hourly.wind_wave_direction[i]  ?? 270
     return {
@@ -133,49 +248,96 @@ export async function GET(req: Request) {
       waveHeight:           marine.hourly.wave_height[i]          ?? 0,
       wavePeriod:           marine.hourly.wave_period[i]          ?? 0,
       windSpeed:            w.speed,
-      windDirection:        w.dir,
-      windDirectionLabel:   degreesToCompass(w.dir),
+      windDirection:        wDir,
+      windDirectionLabel:   degreesToCompass(wDir),
       seaSurfaceTemperature: marine.hourly.sea_surface_temperature?.[i] ?? null,
     }
   })
 
-  // Per-spot hourly scores using regional swell + each spot's facing direction
-  const spotsData: BestSpotsSpotEntry[] = spots.map((spot) => ({
-    id:             spot.id,
-    name:           spot.name,
-    slug:           spot.slug,
-    facingDirection: spot.facingDirection,
-    hours: hourIndices.map((i) => {
-      const time         = marine.hourly.time[i]
-      const w            = windMap.get(time) ?? { speed: 0, dir: 270 }
-      const waveHeight   = marine.hourly.wave_height[i]          ?? 0
-      const swellHeight  = marine.hourly.swell_wave_height[i]    ?? 0
-      const swellPeriod  = marine.hourly.swell_wave_period[i]    ?? 0
-      const swellDir     = marine.hourly.swell_wave_direction[i] ?? 270
+  // Per-spot hourly scores against the NEAREST cluster's swell, not one cell
+  // for the whole region.
+  const spotsData: BestSpotsSpotEntry[] = spots.map((spot) => {
+    let cluster = clusters[0]
+    let clusterDist = Infinity
+    for (const c of clusters) {
+      const d = distanceKm(spot.lat, spot.lng, c.seed.lat, c.seed.lng)
+      if (d < clusterDist) { clusterDist = d; cluster = c }
+    }
+    const h = cluster.marine.hourly
 
-      const { score, rating } = rateSurfConditions({
-        waveHeight,
-        swellPeriod,
-        swellHeight,
-        windSpeed:     w.speed,
-        windDirection: w.dir,
-        swellDirection: swellDir,
-        spotFacing:    spot.facingDirection,
-      })
+    return {
+      id:             spot.id,
+      name:           spot.name,
+      slug:           spot.slug,
+      facingDirection: spot.facingDirection,
+      hours: hourIndices.map((primaryIndex) => {
+        const time = marine.hourly.time[primaryIndex]
+        // Index into THIS cluster by time. A cluster that doesn't carry the
+        // hour (different timezone at a region edge) is skipped rather than
+        // read at a wrong offset.
+        const i = cluster.indexByTime.get(time)
+        const src = i != null ? cluster : primary
+        const hourly = i != null ? h : marine.hourly
+        const idx = i ?? primaryIndex
 
-      return {
-        time,
-        rating,
-        ratingScore:        score,
-        waveHeight,
-        windSpeed:          w.speed,
-        windDirectionLabel: degreesToCompass(w.dir),
-      }
-    }),
-  }))
+        const wReal        = src.windByTime.get(time)
+        const w            = wReal ?? { speed: 0, dir: 270 }
+        const waveHeight   = hourly.wave_height[idx]          ?? 0
+        const wavePeriod   = hourly.wave_period[idx]          ?? 0
+        const swellHeight  = hourly.swell_wave_height[idx]    ?? 0
+        const swellPeriod  = hourly.swell_wave_period[idx]    ?? 0
+        // Null rather than 0: a 0 makes the cleanliness factor read "perfectly
+        // clean" instead of dropping out of the weighting.
+        const windWaveH    = hourly.wind_wave_height[idx]     ?? null
+        // Null rather than a 270 stand-in: an invented swell direction would be
+        // scored as real exposure against each spot's facing.
+        const swellDir     = hourly.swell_wave_direction[idx] ?? null
+
+        // No wind entry for this hour (per-hour null, or the whole wind fetch
+        // failed): estimate speed from the windsea like merge.ts does. Feeding a
+        // literal 0 scored a weather-API outage as a perfectly glassy coast.
+        const windSpeed = wReal
+          ? wReal.speed
+          : windWaveH != null && windWaveH > 0
+            ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
+            : 0
+
+        const { score, rating, faceHeight } = rateSurfConditions({
+          waveHeight,
+          swellHeight,
+          // Mirror the engine's total-sea fallback for period, or a missing
+          // partition computes a 0 m face while wave_period sits unused.
+          swellPeriod: swellPeriod > 0 ? swellPeriod : wavePeriod,
+          swellDirection: swellDir,
+          secondarySwell: secondaryAt(src.marine, idx),
+          windWaveHeight: windWaveH,
+          windSpeed,
+          // Direction unknown when the wind fetch had no entry for this hour —
+          // score on speed alone rather than against a fabricated due-west wind.
+          windDirection: wReal ? wReal.dir : null,
+          spotFacing:    spot.facingDirection,
+          bottomType:    spot.bottomType,
+          difficulty:    spot.difficulty,
+        })
+
+        return {
+          time,
+          rating,
+          ratingScore:        score,
+          waveHeight,
+          faceHeight,
+          windSpeed,
+          windDirectionLabel: degreesToCompass(w.dir ?? 270),
+        }
+      }),
+    }
+  })
 
   return NextResponse.json(
     { spots: spotsData, regionalSwell, date },
-    { headers: { 'Cache-Control': 's-maxage=1800, stale-while-revalidate=900' } }
+    { headers: cdnCacheHeaders(CACHE_MAX_AGE, CACHE_STALE_WHILE_REVALIDATE) }
   )
+  } catch (error) {
+    return handleRouteError(error, 'best_spots_error')
+  }
 }

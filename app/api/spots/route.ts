@@ -1,195 +1,406 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { fetchBuoyData } from '@/lib/api/noaa-buoy'
-import { fetchCurrentConditions } from '@/lib/api/open-meteo'
-import { rateSurfConditions, computeWavePower } from '@/lib/forecast/rating'
+import { listSpots, conditionsBucketKey, conditionsBucketPoint } from '@/lib/spots/static-store'
+import { monitor } from '@/lib/monitoring'
+import type { SurfSpot } from '@/types/spot'
+import { fetchCurrentConditionsBatch } from '@/lib/api/open-meteo'
+import type { CurrentMarineConditions } from '@/lib/api/open-meteo'
+import { rateSurfConditions, computeWavePower, degreesToCompass, angleDiff } from '@/lib/forecast/rating'
+import type { SwellPartition } from '@/lib/forecast/rating'
+import { buildSpatialIndex, findNearestInIndex } from '@/lib/forecast/nearest-fallback'
+import { inferBottomType } from '@/lib/bottom-type'
+import { cdnCacheHeaders } from '@/lib/route-helpers'
 
-export const revalidate = 1800
 export const maxDuration = 60
 
-// Offshore NOAA buoys read open-ocean swell before it loses height approaching
-// shore. Multiply by this factor to approximate nearshore surf height — keeps
-// node labels consistent with the Open-Meteo nearshore forecast on each spot page.
-const BUOY_NEARSHORE_FACTOR = 0.65
+// A borrowed reading is an approximation, not a measurement. Past these bounds
+// it is an invention: simulated against the dataset, 94 spots would otherwise
+// borrow from >100 km away, including across basins (Gulf of Thailand ←
+// Andaman Sea, Lake Erie ← Lake Ontario). Facing is the cheap proxy for "is
+// exposed to the same swell window".
+const FALLBACK_MAX_KM = 50
+const FALLBACK_MAX_FACING_DIFF = 45
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
+// Above this share of `unknown` ratings the sweep is treated as degraded and
+// cached only briefly — see the return at the bottom of the conditions path.
+const DEGRADED_UNKNOWN_SHARE = 0.25
+
+interface Bbox { minLat: number; minLng: number; maxLat: number; maxLng: number; wraps: boolean }
+
+/**
+ * `bbox=minLat,minLng,maxLat,maxLng` — restrict a conditions request to the
+ * area the map is actually showing.
+ *
+ * THIS IS A BUDGET CONTROL, NOT AN OPTIMISATION. Open-Meteo bills a
+ * multi-location request per location, so an unscoped conditions sweep costs
+ * 1,194 marine + 1,194 weather = ~2,388 calls against a free tier of 600/min,
+ * 5,000/hour and 10,000/day. With the route's own `s-maxage=180` that is up to
+ * ~48,000 calls/hour, ~9.6x the hourly allowance, and the whole daily budget
+ * inside about four cold sweeps. Past that the fan-out is refused wholesale and
+ * every pin on the map renders grey while individual spot pages — one location
+ * each — keep working, which is exactly how this failed in production.
+ *
+ * A viewport at the home map's default zoom is ~80 buckets, i.e. ~160 calls,
+ * comfortably inside the allowance. No retry policy or concurrency cap can
+ * substitute for this; they only decide how a sweep degrades once it is over
+ * budget.
+ *
+ * Longitudes are normalised into [-180, 180] because Leaflet's worldCopyJump
+ * reports bounds off the edge of the world after a pan across the dateline; a
+ * box that crosses the antimeridian arrives with minLng > maxLng and is matched
+ * as a union of two spans rather than an empty one.
+ */
+function parseBbox(raw: string | null): Bbox | null {
+  if (!raw) return null
+  const parts = raw.split(',').map(Number)
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null
+  const [minLat, rawMinLng, maxLat, rawMaxLng] = parts
+  if (minLat > maxLat || minLat < -90 || maxLat > 90) return null
+  // A span of a full turn or more is the whole world — no point filtering.
+  if (Math.abs(rawMaxLng - rawMinLng) >= 360) return null
+  const norm = (lng: number) => ((((lng + 180) % 360) + 360) % 360) - 180
+  const minLng = norm(rawMinLng)
+  const maxLng = norm(rawMaxLng)
+  return { minLat, minLng, maxLat, maxLng, wraps: minLng > maxLng }
 }
+
+function inBbox(spot: { lat: number; lng: number }, b: Bbox): boolean {
+  if (spot.lat < b.minLat || spot.lat > b.maxLat) return false
+  return b.wraps
+    ? spot.lng >= b.minLng || spot.lng <= b.maxLng
+    : spot.lng >= b.minLng && spot.lng <= b.maxLng
+}
+
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   // Sanitize: strip SQL wildcard chars that could widen LIKE matches
   const search     = (searchParams.get('q') ?? '').slice(0, 200).replace(/[%_\\]/g, '')
-  const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced'])
+  const VALID_DIFFICULTIES = new Set(['beginner', 'intermediate', 'advanced', 'expert'])
   const rawDiff    = searchParams.get('difficulty') ?? ''
   const difficulty = VALID_DIFFICULTIES.has(rawDiff) ? rawDiff : ''
   const country    = (searchParams.get('country') ?? '').slice(0, 100).replace(/[%_\\]/g, '')
-  // Validate each ID looks like a cuid/uuid before querying
+  // Accept both slug-shaped tokens (spots are now keyed by slug in the
+  // in-memory store) and legacy cuid-shaped tokens (saved-spot localStorage
+  // still holds prod cuids until the client migration runs). Slugs resolve via
+  // the store; cuids fall through to the Postgres fallback below. The widened
+  // pattern (lowercase alnum + hyphen, ≤120) is a superset of the old cuid
+  // pattern, so cuids keep validating.
   const ids        = (searchParams.get('ids') ?? '').split(',')
     .map((s) => s.trim())
-    .filter((s) => /^[a-z0-9]{20,36}$/i.test(s))
+    .filter((s) => /^[a-z0-9-]{1,120}$/i.test(s))
     .slice(0, 50)
   const withConditions = searchParams.get('withConditions') === 'true'
+  const bbox = parseBbox(searchParams.get('bbox'))
+  // ?slim=true returns only the fields needed to render markers on a map.
+  // Cuts the home payload from ~500 KB to ~150 KB so first paint on mobile
+  // is faster.
+  const slim = searchParams.get('slim') === 'true'
 
-  const spots = await prisma.surfSpot.findMany({
-    where: {
-      AND: [
-        ids.length ? { id: { in: ids } } : {},
-        search ? { OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { region: { contains: search, mode: 'insensitive' } },
-          { country: { contains: search, mode: 'insensitive' } },
-        ]} : {},
-        difficulty ? { difficulty } : {},
-        country ? { country } : {},
-      ],
-    },
-    orderBy: { name: 'asc' },
-  })
+  // Resolve from the in-memory static store. The store's `id` is the slug, so
+  // an ids= filter matches slug-shaped tokens; cuid-shaped tokens never match
+  // the store and fall through to the Postgres fallback below.
+  let spots: SurfSpot[]
+  try {
+    spots = listSpots({ q: search, difficulty, country, ids: ids.length ? ids : undefined })
 
-  if (!withConditions) return NextResponse.json(spots)
+    // Transitional cuid fallback: any ids the store couldn't resolve are looked
+    // up in Postgres (legacy saved-spot cuids). Disabled for slim/condition
+    // paths only insofar as those never pass ids=.
+    if (ids.length) {
+      const resolved = new Set(spots.map((s) => s.id))
+      const unresolved = ids.filter((id) => !resolved.has(id))
+      if (unresolved.length) {
+        // Telemetry: residual cuid traffic still hitting Postgres. Tracks how
+        // much the client-side slug migration has drained so the transitional
+        // cuid bridge (and the SurfSpot table) can be retired in a follow-up.
+        monitor('info', 'spots.ids.cuid_resolved', { count: unresolved.length })
+        // Imported here, not at module scope. A top-level import constructs a
+        // PrismaClient on every cold start of the app's hottest route — for a
+        // bridge whose telemetry is meant to read ~0 — and the map's first
+        // paint waits on it. Nothing else in this route touches Postgres.
+        const { prisma } = await import('@/lib/prisma')
+        const dbSpots = await prisma.surfSpot.findMany({
+          where: {
+            AND: [
+              { id: { in: unresolved } },
+              search ? { OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { region: { contains: search, mode: 'insensitive' } },
+                { country: { contains: search, mode: 'insensitive' } },
+              ]} : {},
+              difficulty ? { difficulty } : {},
+              country ? { country } : {},
+            ],
+          },
+          orderBy: { name: 'asc' },
+        })
+        const merged: SurfSpot[] = [
+          ...spots,
+          ...dbSpots.map((s): SurfSpot => ({
+            id: s.id,
+            slug: s.slug,
+            name: s.name,
+            region: s.region,
+            country: s.country,
+            lat: s.lat,
+            lng: s.lng,
+            description: s.description,
+            difficulty: s.difficulty as SurfSpot['difficulty'],
+            facingDirection: s.facingDirection,
+            noaaTideStationId: s.noaaTideStationId,
+            noaaBuoyId: s.noaaBuoyId,
+            webcamUrl: s.webcamUrl,
+            webcamType: s.webcamType,
+            parkingOptions: s.parkingOptions as SurfSpot['parkingOptions'],
+            bottomType: inferBottomType(s.description ?? null, s.name),
+          })),
+        ]
+        merged.sort((a, b) => a.name.localeCompare(b.name))
+        spots = merged
+      }
+    }
+  } catch (err) {
+    console.error('[api/spots] listSpots failed', err)
+    return NextResponse.json({ error: 'Failed to load spots' }, { status: 500 })
+  }
 
-  // ── Stage 1: fetch the ~15 unique NOAA buoys in parallel ─────────────────────
-  // Buoy fetches are few (15 unique IDs), fast, and cached 30 min by Next.js.
-  const uniqueBuoyIds = [...new Set(spots.filter((s) => s.noaaBuoyId).map((s) => s.noaaBuoyId!))]
-  const buoyResults = await Promise.all(
-    uniqueBuoyIds.map((id) => withTimeout(fetchBuoyData(id), 6000))
-  )
-  const buoyMap = new Map<string, Awaited<ReturnType<typeof fetchBuoyData>>>()
-  uniqueBuoyIds.forEach((id, i) => buoyMap.set(id, buoyResults[i]))
+  if (!withConditions) {
+    if (slim) {
+      // Match the previous Prisma slim projection field-for-field.
+      const slimSpots = spots.map((s) => ({
+        id: s.id, slug: s.slug, name: s.name, region: s.region, country: s.country,
+        lat: s.lat, lng: s.lng, difficulty: s.difficulty, facingDirection: s.facingDirection,
+      }))
+      return NextResponse.json(slimSpots, { headers: cdnCacheHeaders(600, 1800) })
+    }
+    // Store spots already carry precomputed bottomType; DB-fallback spots get
+    // it set where they're merged above — so no re-map is needed here.
+    return NextResponse.json(spots, { headers: cdnCacheHeaders(600, 1800) })
+  }
 
-  // ── Stage 2: Open-Meteo fallback only for spots with no/offline buoy ─────────
-  // Keep this set small to avoid hammering the API with 70+ parallel calls.
+  // ── Conditions: Open-Meteo current conditions at actual beach coordinates ─────
+  // Open-Meteo's nearshore marine model is the same source used by the individual
+  // spot forecast pages, so map node heights are always consistent with the
+  // forecast you see after clicking through. Offshore buoys with attenuation
+  // factors were producing values that diverged from the per-spot forecast.
+  //
+  // Spots within ~5.5 km of each other share one reading (0.05° lat/lng
+  // bucket, down from 0.1° — see CONDITIONS_BUCKET_DEG). fetchCurrentConditionsBatch
+  // sends the misses as multi-location requests of 50 coordinates each rather
+  // than one request per coordinate, and its runtime cache turns repeat
+  // requests within 5 min into instant hits.
+  //
+  // The representative coordinate comes from the full dataset, so it does not
+  // shift when the caller filters by difficulty/country — which previously
+  // changed both the conditions and the cache key for 229 spots.
+  // Scope to the visible area before any upstream work is planned. The client
+  // merges this projection onto the full spot list it already holds, so spots
+  // outside the box keep their pins — they just carry no rating until they are
+  // panned into view.
+  if (bbox) spots = spots.filter((s) => inBbox(s, bbox))
+
+  const buckets = new Map<string, { lat: number; lng: number }>()
+  for (const spot of spots) {
+    const key = conditionsBucketKey(spot.lat, spot.lng)
+    if (!buckets.has(key)) buckets.set(key, conditionsBucketPoint(spot.lat, spot.lng))
+  }
+  const bucketKeys = [...buckets.keys()]
+
+  const omResults = await fetchCurrentConditionsBatch(
+    bucketKeys.map((k) => buckets.get(k)!)
+  ).catch(() => bucketKeys.map(() => null))
+
+  const omMap = new Map<string, CurrentMarineConditions | null>()
+  bucketKeys.forEach((k, i) => omMap.set(k, omResults[i] ?? null))
+
   type EnrichedSpot = (typeof spots)[0] & {
     currentRating: string
     currentWaveHeight: number | null
+    currentFaceHeight: number | null
     currentPeriod: number | null
     currentWindSpeed: number | null
+    currentWindDirection: number | null
     wavePower: number | null
     _needsFallback: boolean
+    // Internal only — the response projection below is an allow-list, so these
+    // never reach the client. They exist so a fallback borrows the neighbour's
+    // actual sea state rather than a flattened summary of it.
+    _conditions: CurrentMarineConditions | null
+  }
+
+  // Wave power is the sum over partitions: charging the whole sea at the
+  // groundswell's period overstated mixed seas by up to 2x, and the map popup
+  // renders this number directly.
+  function powerOf(om: CurrentMarineConditions): number {
+    return computeWavePower([
+      { height: om.swellHeight > 0 ? om.swellHeight : om.waveHeight, period: om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod },
+      { height: om.secondarySwellHeight, period: om.secondarySwellPeriod },
+      { height: om.windWaveHeight, period: om.windWavePeriod },
+    ])
+  }
+
+  function secondaryOf(om: CurrentMarineConditions): SwellPartition | null {
+    return om.secondarySwellHeight != null && om.secondarySwellHeight > 0
+      && om.secondarySwellPeriod != null && om.secondarySwellPeriod > 0
+      ? {
+          height: om.secondarySwellHeight,
+          period: om.secondarySwellPeriod,
+          direction: om.secondarySwellDirection,
+        }
+      : null
   }
 
   const enriched: EnrichedSpot[] = spots.map((spot) => {
-    if (spot.noaaBuoyId) {
-      const buoy = buoyMap.get(spot.noaaBuoyId) ?? null
+    const key = conditionsBucketKey(spot.lat, spot.lng)
+    const om = omMap.get(key)
 
-      if (buoy && buoy.waveHeight !== null) {
-        // Apply nearshore attenuation so node height matches the forecast page
-        const nearshoreHeight = Math.round(buoy.waveHeight * BUOY_NEARSHORE_FACTOR * 10) / 10
-
-        if (nearshoreHeight > 0) {
-          const period = buoy.dominantPeriod ?? 8
-          const { rating } = rateSurfConditions({
-            waveHeight:    nearshoreHeight,
-            swellPeriod:   period,
-            swellHeight:   nearshoreHeight * 0.75,
-            windSpeed:     buoy.windSpeed ?? 8,
-            windDirection: buoy.windDirection ?? 270,
-            swellDirection: buoy.meanDirection,
-            spotFacing:    spot.facingDirection,
-          })
-          return {
-            ...spot,
-            currentRating: rating,
-            currentWaveHeight: nearshoreHeight,
-            currentPeriod: period,
-            currentWindSpeed: buoy.windSpeed,
-            wavePower: computeWavePower(nearshoreHeight, period),
-            _needsFallback: false,
-          }
-        }
-
-        // Buoy reports 0 — flat/calm
-        return {
-          ...spot, currentRating: 'poor', currentWaveHeight: 0,
-          currentPeriod: null, currentWindSpeed: buoy.windSpeed,
-          wavePower: 0, _needsFallback: false,
-        }
-      }
-
-      // Buoy WVHT sensor offline (null) — fall through to Open-Meteo
+    if (om && om.waveHeight > 0) {
+      // Real swell/windsea partition from the model — no more `waveHeight * 0.7`
+      // stand-in, which made every spot look like it had 70% clean groundswell.
+      const { rating, faceHeight } = rateSurfConditions({
+        waveHeight:     om.waveHeight,
+        swellHeight:    om.swellHeight,
+        swellPeriod:    om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod,
+        swellDirection: om.swellDirection,
+        secondarySwell: secondaryOf(om),
+        windWaveHeight: om.windWaveHeight,
+        windSpeed:      om.windSpeed,
+        windDirection:  om.windDirection,
+        spotFacing:     spot.facingDirection,
+        bottomType:     spot.bottomType,
+        difficulty:     spot.difficulty,
+      })
       return {
-        ...spot, currentRating: 'unknown', currentWaveHeight: null,
-        currentPeriod: null, currentWindSpeed: null,
-        wavePower: null, _needsFallback: true,
+        ...spot,
+        currentRating:        rating,
+        currentWaveHeight:    om.waveHeight,
+        currentFaceHeight:    faceHeight,
+        currentPeriod:        om.wavePeriod,
+        currentWindSpeed:     om.windSpeed,
+        currentWindDirection: om.windDirection,
+        wavePower:            powerOf(om),
+        _needsFallback:       false,
+        _conditions:          om,
       }
     }
 
-    // No buoy ID — fall through to Open-Meteo
+    // om returned an object but waveHeight === 0 → genuinely flat
+    // om === null → API timeout/error → use nearest-neighbour below
     return {
-      ...spot, currentRating: 'unknown', currentWaveHeight: null,
-      currentPeriod: null, currentWindSpeed: null,
-      wavePower: null, _needsFallback: true,
+      ...spot,
+      currentRating:        om ? 'poor' : 'unknown',
+      currentWaveHeight:    om ? 0 : null,
+      currentFaceHeight:    om ? 0 : null,
+      currentPeriod:        null,
+      currentWindSpeed:     null,
+      currentWindDirection: null,
+      wavePower:            om ? 0 : null,
+      _needsFallback:       om === null,
+      _conditions:          om ?? null,
     }
   })
 
-  // ── Stage 3: Open-Meteo for the small set with no buoy data ──────────────────
-  const needFallback = enriched.filter((s) => s._needsFallback)
-
-  if (needFallback.length > 0) {
-    const buckets = new Map<string, { lat: number; lng: number }>()
-    for (const spot of needFallback) {
-      const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
-      if (!buckets.has(key)) buckets.set(key, { lat: spot.lat, lng: spot.lng })
-    }
-    const bucketKeys = [...buckets.keys()]
-    const omResults = await Promise.all(
-      bucketKeys.map((k) =>
-        withTimeout(fetchCurrentConditions(buckets.get(k)!.lat, buckets.get(k)!.lng), 6000)
-      )
-    )
-    const omMap = new Map<string, Awaited<ReturnType<typeof fetchCurrentConditions>>>()
-    bucketKeys.forEach((k, i) => omMap.set(k, omResults[i]))
-
-    for (const spot of enriched) {
-      if (!spot._needsFallback) continue
-      const key = `${spot.lat.toFixed(1)},${spot.lng.toFixed(1)}`
-      const om = omMap.get(key)
-      if (om && om.waveHeight > 0) {
-        const { rating } = rateSurfConditions({
-          waveHeight:    om.waveHeight,
-          swellPeriod:   om.wavePeriod,
-          swellHeight:   om.waveHeight * 0.7,
-          windSpeed:     om.windSpeed,
-          windDirection: om.windDirection,
-          swellDirection: om.swellDirection,
-          spotFacing:    spot.facingDirection,
-        })
-        spot.currentRating     = rating
-        spot.currentWaveHeight = om.waveHeight
-        spot.currentPeriod     = om.wavePeriod
-        spot.currentWindSpeed  = om.windSpeed
-        spot.wavePower         = computeWavePower(om.waveHeight, om.wavePeriod)
-      }
-    }
-  }
-
-  // ── Stage 4: nearest-neighbor guarantee — no gray nodes ──────────────────────
-  const withData = enriched.filter((s) => s.currentWaveHeight !== null)
+  // ── Nearest-neighbour fallback — no permanently-grey nodes ───────────────────
+  // Only fires for spots where Open-Meteo timed out (not for genuine flat days).
+  // Spatial-grid lookup keeps this cheap when the upstream API degrades; spots
+  // with no acceptable neighbour stay "unknown" rather than borrowing
+  // conditions from a different coastline.
+  const withData = enriched.filter((s) => s._conditions !== null)
+  const dataIndex = buildSpatialIndex(withData)
   for (const spot of enriched) {
     if (spot.currentWaveHeight !== null) continue
-    if (withData.length === 0) continue
-    let closest = withData[0], minDist = Infinity
-    for (const s of withData) {
-      const d = Math.hypot(s.lat - spot.lat, s.lng - spot.lng)
-      if (d < minDist) { minDist = d; closest = s }
-    }
-    const wh = closest.currentWaveHeight ?? 0
-    const period = closest.currentPeriod ?? 8
-    const { rating } = rateSurfConditions({
-      waveHeight: wh, swellPeriod: period, swellHeight: wh * 0.7,
-      windSpeed: closest.currentWindSpeed ?? 8, windDirection: 270,
-      swellDirection: 270, spotFacing: spot.facingDirection,
+    const closest = findNearestInIndex(dataIndex, spot.lat, spot.lng, {
+      maxDistanceKm: FALLBACK_MAX_KM,
+      accept: (c) =>
+        angleDiff(c.facingDirection, spot.facingDirection) <= FALLBACK_MAX_FACING_DIFF,
     })
-    spot.currentRating     = rating
-    spot.currentWaveHeight = wh
-    spot.currentPeriod     = period
-    spot.currentWindSpeed  = closest.currentWindSpeed
-    spot.wavePower         = computeWavePower(wh, period)
+    if (!closest?._conditions) continue
+    const om = closest._conditions
+    const period = om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod
+    // Borrow the neighbour's *observed* wind direction. This used to hardcode
+    // 270, so every fallback spot on Earth was scored against a due-west wind —
+    // which reads as perfectly offshore for an east-facing coast and dead
+    // onshore for a west-facing one, purely by accident of geography.
+    const windDirection = om.windDirection
+    const { rating, faceHeight } = rateSurfConditions({
+      waveHeight: om.waveHeight,
+      swellHeight: om.swellHeight,
+      swellPeriod: period,
+      // Borrow the neighbour's swell DIRECTION too and score it against THIS
+      // spot's facing — exactly what already happens for the borrowed wind.
+      // Passing null instead handed every fallback spot a neutral exposure of
+      // 1.0, i.e. the maximum possible face height precisely where the data is
+      // least reliable.
+      swellDirection: om.swellDirection,
+      secondarySwell: secondaryOf(om),
+      windWaveHeight: om.windWaveHeight,
+      windSpeed: om.windSpeed,
+      windDirection,
+      spotFacing: spot.facingDirection,
+      bottomType: spot.bottomType,
+      difficulty: spot.difficulty,
+    })
+    spot.currentRating        = rating
+    spot.currentWaveHeight    = om.waveHeight
+    spot.currentFaceHeight    = faceHeight
+    spot.currentPeriod        = om.wavePeriod
+    spot.currentWindSpeed     = om.windSpeed
+    spot.currentWindDirection = windDirection
+    spot.wavePower            = powerOf(om)
   }
 
-  const response = enriched.map(({ _needsFallback: _, ...rest }) => rest)
+  // A marker projection, not a full spot record. /spots merges this onto the
+  // full list it already fetched; the home map renders from it directly, so it
+  // carries every field the map and its popups read and drops the rest.
+  // Measured against prod (582 US spots, 394 KB): `description` alone was 27%
+  // of the payload, and the webcam/NOAA-station ids another 13% — none of which
+  // any map surface reads. Adding a field to the map means adding it here.
+  const response = enriched.map((spot) => ({
+    id:              spot.id,
+    slug:            spot.slug,
+    name:            spot.name,
+    region:          spot.region,
+    country:         spot.country,
+    lat:             spot.lat,
+    lng:             spot.lng,
+    difficulty:      spot.difficulty,
+    facingDirection: spot.facingDirection,
+    bottomType:      spot.bottomType,
+    parkingOptions:  spot.parkingOptions,
+    currentRating:      spot.currentRating,
+    currentWaveHeight:  spot.currentWaveHeight,
+    currentFaceHeight:  spot.currentFaceHeight,
+    currentPeriod:      spot.currentPeriod,
+    currentWindSpeed:   spot.currentWindSpeed,
+    // Compass label rather than degrees: the map popup reads `currentWindDir`
+    // and has been rendering an empty string, because the route only ever sent
+    // the numeric `currentWindDirection` under a different name.
+    currentWindDir:     spot.currentWindDirection != null
+      ? degreesToCompass(spot.currentWindDirection)
+      : null,
+    wavePower:          spot.wavePower,
+  }))
+  // A long stale window is the point: conditions up to 15 min old served
+  // instantly beat a 5 s block on a cold Open-Meteo fan-out, and the client
+  // refetches every 5 min anyway.
+  //
+  // UNLESS THE SWEEP CAME BACK MOSTLY EMPTY. That same long window is what
+  // turned one refused fan-out into a map that stayed grey for a quarter of an
+  // hour for every visitor, and the client refetching against a pinned edge
+  // entry could not clear it — the response looked like a successful one. A
+  // degraded sweep is cached just long enough to absorb a thundering herd, then
+  // allowed to retry.
+  const unknownCount = response.filter((s) => s.currentRating === 'unknown').length
+  const degraded = response.length > 0 && unknownCount / response.length > DEGRADED_UNKNOWN_SHARE
+  if (degraded) {
+    monitor('warn', 'spots.conditions.degraded', {
+      unknown: unknownCount,
+      total: response.length,
+      buckets: bucketKeys.length,
+      scoped: !!bbox,
+    })
+  }
   return NextResponse.json(response, {
-    headers: { 'Cache-Control': 's-maxage=900, stale-while-revalidate=900' },
+    headers: degraded ? cdnCacheHeaders(20, 60) : cdnCacheHeaders(180, 900),
   })
 }

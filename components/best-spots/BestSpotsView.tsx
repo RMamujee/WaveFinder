@@ -212,7 +212,7 @@ export function BestSpotsView() {
   return (
     <div
       style={{
-        minHeight: 'calc(100vh - 57px)',
+        minHeight: 'calc(100dvh - 57px)',
         background: '#111111',
         color: '#e5e7eb',
       }}
@@ -225,7 +225,7 @@ export function BestSpotsView() {
           style={{ color: '#ffffff', letterSpacing: '-0.02em' }}
         >
           Best Spots{' '}
-          <span style={{ color: '#4b5563', fontWeight: 400 }}>|</span>{' '}
+          <span style={{ color: '#8b8b9a', fontWeight: 400 }}>|</span>{' '}
           {titleDateLabel}
         </h1>
 
@@ -284,7 +284,7 @@ export function BestSpotsView() {
             >
               {formatHour(selectedHour)}
             </div>
-            <div className="text-sm" style={{ color: '#6b7280' }}>
+            <div className="text-sm" style={{ color: '#9ca3af' }}>
               {epicCount} Best · {goodCount} Good
             </div>
           </div>
@@ -302,8 +302,8 @@ export function BestSpotsView() {
               style={{ accentColor: '#3b82f6', cursor: 'pointer' }}
             />
             <div className="flex justify-between mt-1">
-              <span className="text-xs" style={{ color: '#4b5563' }}>7:00 AM</span>
-              <span className="text-xs" style={{ color: '#4b5563' }}>7:00 PM</span>
+              <span className="text-xs" style={{ color: '#8b8b9a' }}>7:00 AM</span>
+              <span className="text-xs" style={{ color: '#8b8b9a' }}>7:00 PM</span>
             </div>
           </div>
 
@@ -335,7 +335,7 @@ export function BestSpotsView() {
                       {comp.dirLbl} ({comp.dir}°) @{' '}
                       {comp.period.toFixed(1)}s
                     </span>{' '}
-                    <span style={{ color: '#6b7280' }}>
+                    <span style={{ color: '#9ca3af' }}>
                       ({periodLabel(comp.period)})
                     </span>
                   </p>
@@ -355,7 +355,7 @@ export function BestSpotsView() {
             className="grid items-center px-5 py-3 text-xs font-semibold tracking-widest uppercase"
             style={{
               gridTemplateColumns: '1fr 160px 72px 72px 72px',
-              color: '#4b5563',
+              color: '#8b8b9a',
               borderBottom: '1px solid #222222',
             }}
           >
@@ -373,7 +373,7 @@ export function BestSpotsView() {
                 className="h-6 w-6 rounded-full border-2 animate-spin"
                 style={{ borderColor: '#262626', borderTopColor: '#3b82f6' }}
               />
-              <span className="text-sm" style={{ color: '#4b5563' }}>
+              <span className="text-sm" style={{ color: '#8b8b9a' }}>
                 Fetching conditions…
               </span>
             </div>
@@ -388,7 +388,7 @@ export function BestSpotsView() {
 
           {/* Empty */}
           {!isLoading && !isError && sortedSpots.length === 0 && (
-            <div className="py-20 text-center text-sm" style={{ color: '#4b5563' }}>
+            <div className="py-20 text-center text-sm" style={{ color: '#8b8b9a' }}>
               No spots found for {selectedRegion}.
             </div>
           )}
@@ -419,6 +419,7 @@ export function BestSpotsView() {
                   <span
                     className="font-semibold text-sm truncate pr-3"
                     style={{ color: '#f3f4f6' }}
+                    title={spot.name}
                   >
                     {spot.name}
                   </span>
@@ -434,7 +435,7 @@ export function BestSpotsView() {
                   {/* Tide (no per-spot tide data in this view) */}
                   <span
                     className="text-sm text-right"
-                    style={{ color: '#4b5563' }}
+                    style={{ color: '#8b8b9a' }}
                   >
                     —
                   </span>
@@ -461,7 +462,7 @@ export function BestSpotsView() {
 
         {/* Footer note */}
         {!isLoading && sortedSpots.length > 0 && (
-          <p className="text-center text-xs mt-4" style={{ color: '#374151' }}>
+          <p className="text-center text-xs mt-4" style={{ color: '#9ca3af' }}>
             Scores computed from regional swell model · waves in feet · wind in knots
           </p>
         )}

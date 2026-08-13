@@ -22,13 +22,14 @@ export interface SurfSpot {
   lat: number
   lng: number
   description?: string | null
-  difficulty: 'beginner' | 'intermediate' | 'advanced'
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | 'expert'
   facingDirection: number
   noaaTideStationId?: string | null
   noaaBuoyId?: string | null
   webcamUrl?: string | null
   webcamType?: string | null
   parkingOptions?: ParkingOption[] | null
+  bottomType?: string | null
 }
 
 export interface SurfSpotWithRating extends SurfSpot {
@@ -36,3 +37,5 @@ export interface SurfSpotWithRating extends SurfSpot {
   currentWaveHeight: number
   currentPeriod: number
 }
+
+
