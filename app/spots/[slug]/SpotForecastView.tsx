@@ -25,6 +25,11 @@ import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
 import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
 import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
+import { AirQualityPanel } from '@/components/forecast/AirQualityPanel'
+import { EarthquakePanel } from '@/components/forecast/EarthquakePanel'
+import { AmenitiesPanel } from '@/components/forecast/AmenitiesPanel'
+import { RiverRunoffPanel } from '@/components/forecast/RiverRunoffPanel'
+import { SeasonalClimatePanel } from '@/components/forecast/SeasonalClimatePanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { BOTTOM_TYPE_STYLE } from '@/lib/bottom-type'
@@ -450,7 +455,7 @@ export function SpotForecastView({ spot }: Props) {
             <div className="lg:col-span-2" style={{ display: 'flex', flexDirection: 'column' }}>
               <SectionTitle>Satellite View</SectionTitle>
               <div
-                className="rounded-2xl overflow-hidden"
+                className="rounded-2xl overflow-hidden isolate"
                 style={{ border: '1px solid var(--border)', flex: 1, minHeight: '260px' }}
               >
                 <LazyMount minHeight={280} style={{ height: '100%' }}>
@@ -572,8 +577,9 @@ export function SpotForecastView({ spot }: Props) {
           </div>
         )}
 
-        {/* Row 6: Swell | Gear Recommendations — same y-axis, equal widths */}
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* Row 6: Swell | Air Quality — 2-col; Gear + Seasonal stacked in right column */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* Swell — col 1 */}
           {current && (
             <div>
               <SectionTitle>
@@ -583,21 +589,35 @@ export function SpotForecastView({ spot }: Props) {
               <SwellPanel current={current} activeDayData={activeDayData} />
             </div>
           )}
+
+          {/* Air Quality — col 2 */}
+          <div>
+            <SectionTitle>Air Quality</SectionTitle>
+            <AirQualityPanel spotSlug={spot.slug} />
+          </div>
+
+          {/* Gear + Seasonal stacked — col 3 */}
           {activeDayData && (() => {
             const waterHours = activeDayData.hours.filter((h) => h.waterTemp !== null)
             const avgWaterTempC = waterHours.length > 0
               ? waterHours.reduce((sum, h) => sum + (h.waterTemp ?? 0), 0) / waterHours.length
               : null
             return (
-              <div>
-                <SectionTitle>Gear Recommendations</SectionTitle>
-                <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
+              <div className="flex flex-col gap-4">
+                <div>
+                  <SectionTitle>Gear Recommendations</SectionTitle>
+                  <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
+                </div>
+                <div>
+                  <SectionTitle>Seasonal Climate</SectionTitle>
+                  <SeasonalClimatePanel spotSlug={spot.slug} />
+                </div>
               </div>
             )
           })()}
         </div>
 
-        {/* Row 7: Community Reports (left, full height) | Buoy Data + Season Calendar (right, stacked) */}
+        {/* Row 8: Community Reports (left, full height) | Buoy Data + Season Calendar (right, stacked) */}
         <div className="grid gap-4 md:grid-cols-2 items-start">
           {/* Left — Community Reports at natural full height */}
           <div>
@@ -625,6 +645,23 @@ export function SpotForecastView({ spot }: Props) {
         {/* Water Quality — only renders when USGS/EPA data exists within 20 miles */}
         <LazyMount minHeight={0}>
           <WaterQualityPanel spotSlug={spot.slug} />
+        </LazyMount>
+
+        {/* River runoff — renders its own container only when a gauge is nearby */}
+        <LazyMount minHeight={0}>
+          <RiverRunoffPanel spotSlug={spot.slug} />
+        </LazyMount>
+
+        {/* Nearby facilities from OpenStreetMap */}
+        <LazyMount>
+          <SectionTitle>Nearby Facilities</SectionTitle>
+          <AmenitiesPanel spotSlug={spot.slug} />
+        </LazyMount>
+
+        {/* Seismic activity — only shows when M4.5+ quakes found within 800 km */}
+        <LazyMount>
+          <SectionTitle>Seismic Activity</SectionTitle>
+          <EarthquakePanel spotSlug={spot.slug} />
         </LazyMount>
 
       </div>
