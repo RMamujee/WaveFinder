@@ -25,6 +25,8 @@ import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
 import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
 import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
+import { BreakAnimation } from '@/components/forecast/BreakAnimation'
+import { isBreakAnimationRegion } from '@/lib/forecast/break-animation'
 import { AirQualityPanel } from '@/components/forecast/AirQualityPanel'
 import { EarthquakePanel } from '@/components/forecast/EarthquakePanel'
 import { AmenitiesPanel } from '@/components/forecast/AmenitiesPanel'
@@ -411,6 +413,17 @@ export function SpotForecastView({ spot }: Props) {
             coastalWind={forecast?.coastalWind}
           />
         </div>
+
+        {/* Break Anatomy — California only for now; see isBreakAnimationRegion
+            to enable elsewhere. Uses the same client-recomputed `current` hour
+            as SwellPanel/IdealConditionsPanel so it never disagrees with the
+            numbers shown beside it. */}
+        {isBreakAnimationRegion(spot) && (
+          <div>
+            <SectionTitle>Break Anatomy</SectionTitle>
+            <BreakAnimation spot={spot} hour={current} />
+          </div>
+        )}
 
         {/* Row 2: Best Times (col 1, spans 2 rows) | Wind (col 2) | UV (col 3) | Satellite (cols 2+3, row 2) */}
         {forecast?.forecast && activeDayData && (

@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 import { SPOT_SLUG_ALIASES } from "./lib/spots/spot-aliases";
 
+const isDev = process.env.NODE_ENV !== 'production'
+
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
@@ -13,8 +15,12 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // unsafe-inline required for Next.js hydration scripts and Leaflet inline styles.
-      // unsafe-eval removed — React 19 and Leaflet 1.9 do not require it in production.
-      "script-src 'self' 'unsafe-inline'",
+      // unsafe-eval is DEVELOPMENT ONLY: Next's dev runtime and React's dev build
+      // both need eval, and without it every page load logs "eval() is not
+      // supported in this environment" and then fails hydration — React throws
+      // the server tree away and re-renders the whole page on the client.
+      // Production never gets it; React 19 and Leaflet 1.9 do not need eval there.
+      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
       // Fonts are self-hosted via next/font — no Google Fonts origins needed.
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self'",

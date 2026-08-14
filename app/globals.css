@@ -167,6 +167,61 @@ body {
 .wl-foam3  { animation: wl-foam  2.4s ease-in-out 1.5s infinite; }
 .wl-label  { animation: wl-pulse 1.8s ease-in-out infinite; }
 
+/* ── BreakAnimation (components/forecast/BreakAnimation.tsx) ──
+   Duration and delay come from the live swell period and are set per-instance
+   via inline style, so only the shapes live here. Units are SVG user-space
+   (viewBox 0 0 360 232), not pixels.
+
+   RULE: an animated element must not also carry the SVG presentation
+   attribute for the property being animated. The attribute and the animation
+   compete, and the failure mode is silent — the diagram renders perfectly and
+   simply never moves. Base values therefore live here, not on the elements. */
+
+.ba-crest { transform: translateY(0); }
+.ba-peel  { stroke-dasharray: 30 100; stroke-dashoffset: 0; }
+.ba-peak  { stroke-width: 1.5; stroke-opacity: 0.3; }
+
+/* Crests march shoreward and fade only at the very edges of the cycle.
+   Long fades read as "nothing is happening" in a panel this size. */
+@keyframes break-march {
+  0%   { transform: translateY(0);     opacity: 0; }
+  6%   { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateY(158px); opacity: 0; }
+}
+
+/* THE PEEL. A dash sweeping along a path authored from the takeoff point
+   outward, so one keyframe serves left, right and both — the path's direction
+   is the wave's direction. pathLength=100 makes these offsets percentages.
+
+   The sweep deliberately occupies most of the cycle. The first version sat
+   invisible for 44% of a 7.4 s loop, which is over three seconds of a panel
+   showing nothing — measured in the browser, and the single biggest reason it
+   read as a still image. */
+@keyframes break-peel {
+  0%   { stroke-dashoffset: 0;    opacity: 0; }
+  7%   { stroke-dashoffset: -4;   opacity: 1; }
+  88%  { stroke-dashoffset: -116; opacity: 1; }
+  100% { stroke-dashoffset: -130; opacity: 0; }
+}
+
+/* The takeoff point registers the moment the wave stands up there — timed to
+   the start of the sweep, not the middle of the cycle. */
+@keyframes break-peak {
+  0%   { stroke-width: 1.5; stroke-opacity: 0.25; }
+  10%  { stroke-width: 3.5; stroke-opacity: 0.85; }
+  38%  { stroke-width: 1.5; stroke-opacity: 0.25; }
+}
+
+/* Reduced motion gets a real mid-scene frame, not a stopped animation: the
+   crests sit mid-march and the wave is caught half-peeled. */
+@media (prefers-reduced-motion: reduce) {
+  .ba-move  { animation: none !important; }
+  .ba-crest { transform: translateY(46px); }
+  .ba-peel  { stroke-dashoffset: -52; }
+  .ba-peak  { stroke-width: 2.5; stroke-opacity: 0.6; }
+}
+
 /* ── Mobile scroll fixes ── */
 /* Smooth momentum scrolling on iOS for all overflow-y scroll containers */
 .overflow-y-auto,
