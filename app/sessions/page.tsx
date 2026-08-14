@@ -192,6 +192,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
   const [isSearching, setIsSearching] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const comboboxRef = useRef<HTMLDivElement>(null)
+  const autoFillGenRef = useRef(0)
 
   // Auto-fill state
   const [autoFilling, setAutoFilling] = useState(false)
@@ -247,6 +248,7 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
 
   // Pick a spot from dropdown
   const selectSuggestion = (spot: SpotSuggestion) => {
+    autoFillGenRef.current++ // cancel any in-flight autofill
     setForm((prev) => ({ ...prev, spotName: spot.name, region: spot.region }))
     setSelectedSlug(spot.slug)
     setSuggestions([])
@@ -260,14 +262,14 @@ function LogSessionModal({ onClose, onSuccess, initialData, initialSlug }: LogSe
     const sevenDaysOut = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
     if (form.sessionDate > sevenDaysOut) return  // outside forecast window
 
+    const gen = ++autoFillGenRef.current
     setAutoFilling(true)
     try {
-      const capturedSlug = selectedSlug
-      const capturedDate = form.sessionDate
-      const res = await fetch(`/api/forecast/${capturedSlug}`, { signal: AbortSignal.timeout(10000) })
+      const res = await fetch(`/api/forecast/${selectedSlug}`, { signal: AbortSignal.timeout(10000) })
+      if (gen !== autoFillGenRef.current) return
       if (!res.ok) return
       const data: { forecast?: Array<{ date: string; hours: Array<{ time: string; waveHeight: number; swellPeriod: number; wind: { speed: number; directionLabel: string }; waterTemp: number | null }> }> } = await res.json()
-      if (capturedSlug !== selectedSlug || capturedDate !== form.sessionDate) return
+      if (gen !== autoFillGenRef.current) return
 
       const targetDay = data.forecast?.find((d) => d.date === form.sessionDate)
       if (!targetDay?.hours.length) return
