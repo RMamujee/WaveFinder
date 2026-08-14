@@ -20,6 +20,13 @@ interface SpotWithRating extends SurfSpot {
   bottomType?: string | null
 }
 
+export interface MapBounds {
+  minLat: number
+  minLng: number
+  maxLat: number
+  maxLng: number
+}
+
 interface Props {
   spots: SpotWithRating[]
   centerLat?: number
@@ -27,6 +34,10 @@ interface Props {
   zoom?: number
   userLocation?: { lat: number; lng: number } | null
   onLocate?: (lat: number, lng: number) => void
+  /** Fired (debounced) with the visible area whenever the map settles, and once
+   *  on init. Lets the caller fetch live conditions for what is on screen
+   *  instead of for all ~1,500 spots on Earth. */
+  onBoundsChange?: (bounds: MapBounds) => void
 }
 
 const RATING_COLORS: Record<ConditionRating | 'unknown', { bg: string; border: string; text: string }> = {
@@ -199,7 +210,7 @@ function popupHtml(spot: SpotWithRating): string {
   </div>`
 }
 
-export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7, userLocation, onLocate }: Props) {
+export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7, userLocation, onLocate, onBoundsChange }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<import('leaflet').Map | null>(null)
   const clusterRef      = useRef<unknown>(null)
@@ -221,6 +232,28 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
   // Track seamarkOn across async boundaries so the init effect can restore it
   const seamarkOnRef = useRef(seamarkOn)
   seamarkOnRef.current = seamarkOn
+  // Latest callback, so the map's event handlers never close over a stale one
+  // (the init effect runs only on re-centre, the handlers outlive every render).
+  const onBoundsChangeRef = useRef(onBoundsChange)
+  onBoundsChangeRef.current = onBoundsChange
+  const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Report the visible area, debounced. A pan is a continuous stream of
+  // moveend/zoomend, and each distinct box is a fresh upstream fan-out — so
+  // settle first, then ask.
+  function reportBounds(map: import('leaflet').Map, delayMs = 400) {
+    if (!onBoundsChangeRef.current) return
+    if (boundsTimer.current) clearTimeout(boundsTimer.current)
+    boundsTimer.current = setTimeout(() => {
+      const b = map.getBounds()
+      onBoundsChangeRef.current?.({
+        minLat: b.getSouth(),
+        minLng: b.getWest(),
+        maxLat: b.getNorth(),
+        maxLng: b.getEast(),
+      })
+    }, delayMs)
+  }
 
   // Show or hide parking layer based on current zoom level
   function syncParkingVisibility(map: import('leaflet').Map, L: typeof import('leaflet'), parkingLayer: import('leaflet').LayerGroup) {
@@ -455,10 +488,19 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
           syncParkingVisibility(map, L, parkingLayerRef.current)
         }
       })
+
+      // Conditions follow the viewport. The first report is immediate — the map
+      // has nothing to colour until it lands.
+      map.on('moveend', () => reportBounds(map))
+      reportBounds(map, 0)
     })().catch(console.error)
 
     return () => {
       cancelled = true
+      if (boundsTimer.current) {
+        clearTimeout(boundsTimer.current)
+        boundsTimer.current = null
+      }
       if (mapInstance.current) {
         mapInstance.current.remove()
         mapInstance.current = null

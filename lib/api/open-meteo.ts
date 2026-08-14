@@ -305,15 +305,43 @@ function asLocationList<T>(json: unknown, expected: number): T[] | null {
   return list.length === expected ? list as T[] : null
 }
 
-async function fetchJson(url: string, timeoutMs: number): Promise<unknown | null> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: HEADERS })
-    if (!res.ok) return null
-    // Parse from text: Open-Meteo can answer with Cloudflare HTML at status 200.
-    return JSON.parse(await res.text())
-  } catch {
-    return null
+// Attempts (including the first) for a rate-limited conditions request, and the
+// base delay doubled between them. Open-Meteo answers a 429 instantly, so a
+// retry is cheap; the jitter keeps the retries of one fan-out from re-colliding
+// in the same instant.
+const RATE_LIMIT_ATTEMPTS = 3
+const RATE_LIMIT_BACKOFF_MS = 400
+
+/**
+ * GET + parse, resolving null rather than throwing.
+ *
+ * `retryOn429` exists because Open-Meteo sheds load with
+ * `429 {"error":true,"reason":"Too many concurrent requests"}` rather than
+ * queueing, and a shed request here is not a lost request — it is 50 spots'
+ * worth of grey "no data" pins, because these calls are multi-location.
+ */
+async function fetchJson(
+  url: string,
+  timeoutMs: number,
+  retryOn429 = false
+): Promise<unknown | null> {
+  const attempts = retryOn429 ? RATE_LIMIT_ATTEMPTS : 1
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: HEADERS })
+      if (res.status === 429 && attempt < attempts - 1) {
+        const backoff = RATE_LIMIT_BACKOFF_MS * 2 ** attempt + Math.floor(Math.random() * 250)
+        await new Promise((r) => setTimeout(r, backoff))
+        continue
+      }
+      if (!res.ok) return null
+      // Parse from text: Open-Meteo can answer with Cloudflare HTML at status 200.
+      return JSON.parse(await res.text())
+    } catch {
+      return null
+    }
   }
+  return null
 }
 
 /** One upstream round trip covering up to BATCH_COORDS locations. */
@@ -351,8 +379,8 @@ async function fetchConditionsChunk(
   // old per-spot 5 s because one failure now costs a whole chunk; the route's
   // nearest-neighbour fallback covers whatever does fail.
   const [marineJson, windJson] = await Promise.all([
-    fetchJson(`${MARINE_BASE}?${marineParams}`, 12000),
-    fetchJson(`${WEATHER_BASE}?${weatherParams}`, 9000),
+    fetchJson(`${MARINE_BASE}?${marineParams}`, 12000, true),
+    fetchJson(`${WEATHER_BASE}?${weatherParams}`, 9000, true),
   ])
 
   const marineList = asLocationList<MarineCurrentEntry>(marineJson, points.length)
@@ -371,6 +399,38 @@ const condInflight = new Map<string, Promise<CurrentMarineConditions | null>>()
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = []
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+// Chunks allowed on the wire at once. Each chunk opens TWO upstream requests
+// (marine + weather), so this is half the real concurrency.
+//
+// An uncapped Promise.all over the global sweep's 24 chunks put 48 requests up
+// simultaneously and measured 11 of 24 rejected with "Too many concurrent
+// requests" — and a rejected chunk is not a scattering of gaps, it is a whole
+// contiguous coastline of grey pins, because buckets are chunked in dataset
+// order and the route's nearest-neighbour fallback then finds no neighbour
+// with data either. Capping does not make the budget arithmetic work on its
+// own (see the header on `bbox` in app/api/spots/route.ts) — it makes each
+// sweep behave predictably instead of shedding an arbitrary half of itself.
+const MAX_CONCURRENT_CHUNKS = 6
+
+/** Run `fn` over `items` with at most `limit` in flight, preserving order. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const out = new Array<R>(items.length)
+  let next = 0
+  const worker = async () => {
+    for (let i = next++; i < items.length; i = next++) {
+      out[i] = await fn(items[i], i)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker)
+  )
   return out
 }
 
@@ -427,7 +487,7 @@ export async function fetchCurrentConditionsBatch(
     toFetch.push({ key, point })
   }))
 
-  await Promise.all(chunk(toFetch, BATCH_COORDS).map(async (group) => {
+  await mapWithConcurrency(chunk(toFetch, BATCH_COORDS), MAX_CONCURRENT_CHUNKS, async (group) => {
     let results: (CurrentMarineConditions | NoDataSentinel | null)[]
     try {
       results = await fetchConditionsChunk(group.map((g) => g.point))
@@ -439,15 +499,30 @@ export async function fetchCurrentConditionsBatch(
       for (const { key } of group) condInflight.delete(key)
     }
     await Promise.all(group.map(async ({ key }, i) => {
-      const outcome = results[i] ?? null
+      let outcome = results[i] ?? null
       // Only definitive outcomes are cached: a null here is a transient chunk
       // failure and must retry on the next request.
       if (cache && outcome) {
-        try { await cache.set(key, outcome, { ttl: 5 * 60, tags: ['open-meteo'] }) } catch {}
+        try {
+          await cache.set(key, outcome, { ttl: 5 * 60, tags: ['open-meteo'] })
+          // STALE-IF-ERROR, the same protection fetchMarineForecast has had all
+          // along. Without it the map is the one surface with no floor under an
+          // upstream failure: a rejected chunk resolves null, null is
+          // deliberately not cached so it retries, and the spot goes grey. That
+          // asymmetry is why the map could sit blank while clicking through to
+          // a spot page showed a full forecast — the spot page was being served
+          // its own last-known-good copy.
+          await cache.set(staleKey(key), outcome, { ttl: STALE_IF_ERROR_TTL, tags: ['open-meteo'] })
+        } catch {}
+      } else if (cache && !outcome) {
+        try {
+          const lastGood = await cache.get(staleKey(key)) as CurrentMarineConditions | NoDataSentinel | null | undefined
+          if (lastGood !== null && lastGood !== undefined) outcome = lastGood
+        } catch { /* no usable fallback — stay null and let the route fall back */ }
       }
       settle.get(key)!(outcome && 'noData' in outcome ? null : outcome)
     }))
-  }))
+  })
 
   return Promise.all(keys.map(async (k) =>
     cached.has(k) ? cached.get(k)! : (await joined.get(k)!) ?? null
