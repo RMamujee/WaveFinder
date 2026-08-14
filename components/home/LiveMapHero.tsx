@@ -1,10 +1,12 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useCallback, useMemo, useState } from 'react'
 import { WaveLoader } from '@/components/layout/WaveLoader'
 import { Icon } from '@/components/ui/Icon'
+import type { MapBounds } from '@/components/spots/SpotMap'
 import type { SurfSpot } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
 
@@ -33,6 +35,23 @@ interface Props {
   spotCount: number
 }
 
+// Viewport → query key. Rounded outward to whole degrees and padded by one, so
+// nudging the map re-uses the cached payload instead of commissioning a new
+// Open-Meteo sweep, and pins just off-screen are already coloured when they pan
+// in. Quantising is what makes "conditions follow the viewport" affordable.
+const BBOX_PAD_DEG = 1
+
+function bboxParam(b: MapBounds): string {
+  const lo = (n: number) => Math.floor(n) - BBOX_PAD_DEG
+  const hi = (n: number) => Math.ceil(n) + BBOX_PAD_DEG
+  return [
+    Math.max(lo(b.minLat), -90),
+    lo(b.minLng),
+    Math.min(hi(b.maxLat), 90),
+    hi(b.maxLng),
+  ].join(',')
+}
+
 export function LiveMapHero({ spotCount }: Props) {
   // Slim payload: marker-essential fields only (~70% smaller than full)
   // so the map can render pins as soon as possible on mobile.
@@ -42,15 +61,36 @@ export function LiveMapHero({ spotCount }: Props) {
     staleTime: 30 * 60 * 1000,
   })
 
+  const [bbox, setBbox] = useState<string | null>(null)
+  const handleBoundsChange = useCallback((b: MapBounds) => {
+    setBbox((prev) => {
+      const next = bboxParam(b)
+      return prev === next ? prev : next
+    })
+  }, [])
+
   // Deliberately NOT gated on baseSpots: the conditions payload is a complete
   // marker projection, so it does not need the base list to render. Chaining it
   // behind one made time-to-coloured-map the SUM of both requests — measured
   // against production at 2.8 s + 4.3 s cold, i.e. ~7 s of grey "No data" pins
   // — where running them together costs only the slower of the two.
+  //
+  // Scoped to the viewport (`bbox`). Asking for all ~1,500 spots on Earth cost
+  // ~2,388 Open-Meteo calls per sweep against a 5,000/hour allowance, so the
+  // fan-out was refused outright and the map rendered entirely grey while spot
+  // pages — one location each — kept working. See the header on parseBbox in
+  // app/api/spots/route.ts.
   const { data: enrichedSpots, isLoading: conditionsLoading, dataUpdatedAt } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots-home-conditions'],
-    queryFn: () => fetch('/api/spots?withConditions=true').then((r) => r.json()),
+    queryKey: ['spots-home-conditions', bbox],
+    queryFn: () => fetch(`/api/spots?withConditions=true&bbox=${bbox}`).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json()
+    }),
+    enabled: bbox !== null,
     staleTime: 5 * 60 * 1000,
+    // Hold the previous viewport's ratings on screen while the new one loads —
+    // a pan must not repaint the map grey.
+    placeholderData: keepPreviousData,
     // Keep an open tab live: nothing else in the app refetches (focus-refetch
     // is globally off), so without this a 6am map showed 6am ratings at noon
     // under the "Live conditions" badge. 5 min matches the om:cond cache TTL.
@@ -58,8 +98,21 @@ export function LiveMapHero({ spotCount }: Props) {
     refetchOnWindowFocus: true,
   })
 
-  const spots = enrichedSpots ?? baseSpots
-  const conditionsPending = spotsLoading || conditionsLoading
+  // MERGED onto the base list, not substituted for it. The conditions payload
+  // now covers only the viewport, so replacing the list wholesale would delete
+  // every off-screen pin. Spots outside the box keep their marker and simply
+  // carry no rating until they are panned into view — invisible in practice,
+  // since the box is padded past the edge of the screen, and harmless in
+  // clusters, where an `unknown` child never wins the cluster's colour.
+  const spots = useMemo(() => {
+    if (!Array.isArray(enrichedSpots) || !enrichedSpots.length) return baseSpots
+    const condMap = new Map(enrichedSpots.map((s) => [s.id, s]))
+    return baseSpots.map((s) => {
+      const cond = condMap.get(s.id)
+      return cond ? { ...s, ...cond } : s
+    })
+  }, [baseSpots, enrichedSpots])
+  const conditionsPending = spotsLoading || conditionsLoading || bbox === null
 
   return (
     <section
@@ -143,9 +196,14 @@ export function LiveMapHero({ spotCount }: Props) {
       {/* ── Map ───────────────────────────────────────────────────────── */}
       <div className="flex-1 relative">
         {/* Live conditions chip — doubles as the loading indicator while the
-            slim pins and then the live-conditions payload stream in */}
+            slim pins and then the live-conditions payload stream in.
+            z-[1000], not z-10: Leaflet's own map pane is z-index 400, so this
+            was painting UNDERNEATH the map. Every status this surface reports —
+            "Loading live conditions…", the updated-at time — was invisible, which
+            is why a stalled map looked like a map that simply never loaded.
+            The controls inside SpotMap already use z-[1000] for this reason. */}
         <div
-          className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full px-4 py-1.5 pointer-events-none"
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 rounded-full px-4 py-1.5 pointer-events-none"
           style={{
             background: 'rgba(255,255,255,0.92)',
             backdropFilter: 'blur(8px)',
@@ -190,9 +248,10 @@ export function LiveMapHero({ spotCount }: Props) {
           </Link>
         </div>
 
-        {/* Mobile: single primary CTA — sources/credit moved to /spots footer */}
+        {/* Mobile: single primary CTA — sources/credit moved to /spots footer.
+            Same z-index correction as the chip above. */}
         <div
-          className="absolute bottom-0 left-0 right-0 z-10 lg:hidden flex justify-center px-5 pb-6 pt-10"
+          className="absolute bottom-0 left-0 right-0 z-[1000] lg:hidden flex justify-center px-5 pb-6 pt-10"
           style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.28) 0%, transparent 100%)' }}
         >
           <Link
@@ -212,6 +271,7 @@ export function LiveMapHero({ spotCount }: Props) {
           centerLat={35.5}
           centerLng={-120.5}
           zoom={6}
+          onBoundsChange={handleBoundsChange}
         />
 
         {/* Keep the loader up until the first pins exist — otherwise the map

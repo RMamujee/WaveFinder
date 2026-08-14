@@ -20,6 +20,56 @@ export const maxDuration = 60
 const FALLBACK_MAX_KM = 50
 const FALLBACK_MAX_FACING_DIFF = 45
 
+// Above this share of `unknown` ratings the sweep is treated as degraded and
+// cached only briefly — see the return at the bottom of the conditions path.
+const DEGRADED_UNKNOWN_SHARE = 0.25
+
+interface Bbox { minLat: number; minLng: number; maxLat: number; maxLng: number; wraps: boolean }
+
+/**
+ * `bbox=minLat,minLng,maxLat,maxLng` — restrict a conditions request to the
+ * area the map is actually showing.
+ *
+ * THIS IS A BUDGET CONTROL, NOT AN OPTIMISATION. Open-Meteo bills a
+ * multi-location request per location, so an unscoped conditions sweep costs
+ * 1,194 marine + 1,194 weather = ~2,388 calls against a free tier of 600/min,
+ * 5,000/hour and 10,000/day. With the route's own `s-maxage=180` that is up to
+ * ~48,000 calls/hour, ~9.6x the hourly allowance, and the whole daily budget
+ * inside about four cold sweeps. Past that the fan-out is refused wholesale and
+ * every pin on the map renders grey while individual spot pages — one location
+ * each — keep working, which is exactly how this failed in production.
+ *
+ * A viewport at the home map's default zoom is ~80 buckets, i.e. ~160 calls,
+ * comfortably inside the allowance. No retry policy or concurrency cap can
+ * substitute for this; they only decide how a sweep degrades once it is over
+ * budget.
+ *
+ * Longitudes are normalised into [-180, 180] because Leaflet's worldCopyJump
+ * reports bounds off the edge of the world after a pan across the dateline; a
+ * box that crosses the antimeridian arrives with minLng > maxLng and is matched
+ * as a union of two spans rather than an empty one.
+ */
+function parseBbox(raw: string | null): Bbox | null {
+  if (!raw) return null
+  const parts = raw.split(',').map(Number)
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null
+  const [minLat, rawMinLng, maxLat, rawMaxLng] = parts
+  if (minLat > maxLat || minLat < -90 || maxLat > 90) return null
+  // A span of a full turn or more is the whole world — no point filtering.
+  if (Math.abs(rawMaxLng - rawMinLng) >= 360) return null
+  const norm = (lng: number) => ((((lng + 180) % 360) + 360) % 360) - 180
+  const minLng = norm(rawMinLng)
+  const maxLng = norm(rawMaxLng)
+  return { minLat, minLng, maxLat, maxLng, wraps: minLng > maxLng }
+}
+
+function inBbox(spot: { lat: number; lng: number }, b: Bbox): boolean {
+  if (spot.lat < b.minLat || spot.lat > b.maxLat) return false
+  return b.wraps
+    ? spot.lng >= b.minLng || spot.lng <= b.maxLng
+    : spot.lng >= b.minLng && spot.lng <= b.maxLng
+}
+
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -40,6 +90,7 @@ export async function GET(req: Request) {
     .filter((s) => /^[a-z0-9-]{1,120}$/i.test(s))
     .slice(0, 50)
   const withConditions = searchParams.get('withConditions') === 'true'
+  const bbox = parseBbox(searchParams.get('bbox'))
   // ?slim=true returns only the fields needed to render markers on a map.
   // Cuts the home payload from ~500 KB to ~150 KB so first paint on mobile
   // is faster.
@@ -142,6 +193,12 @@ export async function GET(req: Request) {
   // The representative coordinate comes from the full dataset, so it does not
   // shift when the caller filters by difficulty/country — which previously
   // changed both the conditions and the cache key for 229 spots.
+  // Scope to the visible area before any upstream work is planned. The client
+  // merges this projection onto the full spot list it already holds, so spots
+  // outside the box keep their pins — they just carry no rating until they are
+  // panned into view.
+  if (bbox) spots = spots.filter((s) => inBbox(s, bbox))
+
   const buckets = new Map<string, { lat: number; lng: number }>()
   for (const spot of spots) {
     const key = conditionsBucketKey(spot.lat, spot.lng)
@@ -326,5 +383,24 @@ export async function GET(req: Request) {
   // A long stale window is the point: conditions up to 15 min old served
   // instantly beat a 5 s block on a cold Open-Meteo fan-out, and the client
   // refetches every 5 min anyway.
-  return NextResponse.json(response, { headers: cdnCacheHeaders(180, 900) })
+  //
+  // UNLESS THE SWEEP CAME BACK MOSTLY EMPTY. That same long window is what
+  // turned one refused fan-out into a map that stayed grey for a quarter of an
+  // hour for every visitor, and the client refetching against a pinned edge
+  // entry could not clear it — the response looked like a successful one. A
+  // degraded sweep is cached just long enough to absorb a thundering herd, then
+  // allowed to retry.
+  const unknownCount = response.filter((s) => s.currentRating === 'unknown').length
+  const degraded = response.length > 0 && unknownCount / response.length > DEGRADED_UNKNOWN_SHARE
+  if (degraded) {
+    monitor('warn', 'spots.conditions.degraded', {
+      unknown: unknownCount,
+      total: response.length,
+      buckets: bucketKeys.length,
+      scoped: !!bbox,
+    })
+  }
+  return NextResponse.json(response, {
+    headers: degraded ? cdnCacheHeaders(20, 60) : cdnCacheHeaders(180, 900),
+  })
 }
