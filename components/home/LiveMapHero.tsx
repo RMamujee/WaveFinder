@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useCallback, useMemo, useState } from 'react'
 import { WaveLoader } from '@/components/layout/WaveLoader'
+import { HeroBackdrop } from '@/components/home/HeroBackdrop'
 import { Icon } from '@/components/ui/Icon'
 import type { MapBounds } from '@/components/spots/SpotMap'
 import type { SurfSpot } from '@/types/spot'
@@ -24,8 +25,11 @@ const SpotMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full flex items-center justify-center" style={{ background: 'var(--sand-50)' }}>
-        <WaveLoader compact label="Loading live map…" />
+      <div className="h-full w-full relative overflow-hidden" style={{ background: 'var(--ocean-50)' }}>
+        <HeroBackdrop style={{ position: 'absolute', inset: 0 }} />
+        <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 1 }}>
+          <WaveLoader compact label="Loading live map…" />
+        </div>
       </div>
     ),
   }

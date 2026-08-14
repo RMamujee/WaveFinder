@@ -90,7 +90,9 @@ export function computeBestTimes(todayHours: ForecastHour[], spotFacing: number,
     const avgWaveHeight = hours.reduce((s, h) => s + h.waveHeight, 0) / hours.length
     const avgPeriod = hours.reduce((s, h) => s + h.swellPeriod, 0) / hours.length
     const avgWindSpeed = hours.reduce((s, h) => s + h.wind.speed, 0) / hours.length
-    const avgWindDir = hours.reduce((s, h) => s + h.wind.direction, 0) / hours.length
+    const sinSum = hours.reduce((s, h) => s + Math.sin(h.wind.direction * Math.PI / 180), 0)
+    const cosSum = hours.reduce((s, h) => s + Math.cos(h.wind.direction * Math.PI / 180), 0)
+    const avgWindDir = ((Math.atan2(sinSum, cosSum) * 180 / Math.PI) + 360) % 360
 
     // Rating from avg score
     let rating: ConditionRating
@@ -128,7 +130,7 @@ export function computeBestTimes(todayHours: ForecastHour[], spotFacing: number,
   return slots
 }
 
-// Find the single best 2-hour window within a day
+// Find the single best 3-hour window within a day
 export function findBestWindow(todayHours: ForecastHour[]): {
   start: string
   end: string
