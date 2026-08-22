@@ -209,8 +209,11 @@ export function TimelineSkyStrip({ sunrise, sunset, height = 28, currentHour }: 
 }
 
 function formatHour(h: number): string {
-  const hr  = Math.floor(h)
-  const min = Math.round((h - hr) * 60)
+  // Round to whole minutes FIRST: rounding the fraction separately produced
+  // ":60" (e.g. 6.9917 h → "6:60 AM") whenever the minutes rounded up.
+  const totalMin = Math.round(h * 60) % (24 * 60)
+  const hr  = Math.floor(totalMin / 60)
+  const min = totalMin % 60
   const ampm = hr < 12 ? 'AM' : 'PM'
   const h12  = hr === 0 ? 12 : hr > 12 ? hr - 12 : hr
   return `${h12}:${String(min).padStart(2, '0')} ${ampm}`

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useSyncExternalStore } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useUnits } from '@/contexts/UnitsContext'
@@ -8,35 +8,9 @@ import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 import { Icon, type WFIconName } from '@/components/ui/Icon'
 import { TimelineSkyStrip } from '@/components/ui/TimelineSkyStrip'
 
-// ── Solar helper (NOAA approximation) — no external lib ──────────────────────
-// Returns { sunrise, sunset } as decimal hours in local time.
-function computeSunriseSunset(
-  lat: number,
-  lng: number,
-  date: Date,
-): { sunrise: number; sunset: number } {
-  const rad  = Math.PI / 180
-  const jd   = date.getTime() / 86400000 + 2440587.5
-  const n    = jd - 2451545.0
-  const L    = (280.46 + 0.9856474 * n) % 360
-  const g    = (357.528 + 0.9856003 * n) % 360
-  const lam  = L + 1.915 * Math.sin(g * rad) + 0.02 * Math.sin(2 * g * rad)
-  const eps  = 23.439 - 0.0000004 * n
-  const sinDec = Math.sin(eps * rad) * Math.sin(lam * rad)
-  const dec  = Math.asin(sinDec)
-  const cosH = (Math.cos(90.833 * rad) - Math.sin(lat * rad) * Math.sin(dec))
-             / (Math.cos(lat * rad) * Math.cos(dec))
-
-  // Clamp: if |cosH| > 1 the sun never rises/sets — fall back to defaults
-  if (Math.abs(cosH) > 1) return { sunrise: 6.25, sunset: 19.6 }
-
-  const H  = Math.acos(cosH) / rad
-  const lngOffset = lng / 15  // hours offset from UTC based on longitude
-  const sunrise = 12 - H / 15 - lngOffset
-  const sunset  = 12 + H / 15 - lngOffset
-
-  return { sunrise: ((sunrise % 24) + 24) % 24, sunset: ((sunset % 24) + 24) % 24 }
-}
+// Sunrise/sunset in local solar time — see lib/forecast/sun-times.ts for why
+// there is deliberately no longitude/UTC term.
+import { computeSunriseSunset } from '@/lib/forecast/sun-times'
 
 // Region centre coordinates (lat, lng) — used for solar computation
 const REGION_COORDS: Record<string, [number, number]> = {
@@ -136,11 +110,22 @@ interface SwellHour {
   time: string; seaSurfaceTemperature: number | null
 }
 
+// Hydration detector plumbing for useSyncExternalStore — stable identities so
+// the store never resubscribes.
+const subscribeNoop = () => () => {}
+const getTrue = () => true
+const getFalse = () => false
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TimelinePage() {
   const { unit } = useUnits()
-  const mounted = true
+  // Real hydration guard — this was hardcoded `true`, which made the skeleton
+  // branch dead code and shipped server HTML rendered from the server's UTC
+  // clock against a client render from the local clock: a React hydration
+  // mismatch on every visit outside UTC. useSyncExternalStore returns the
+  // server snapshot (false) for SSR and first paint, true after hydration.
+  const mounted = useSyncExternalStore(subscribeNoop, getTrue, getFalse)
   const [hour,     setHour]     = useState(() => {
     const h = new Date().getHours()
     return Math.max(6, Math.min(21, h))

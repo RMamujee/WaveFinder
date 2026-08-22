@@ -19,9 +19,14 @@ function AlertCard({ alert }: { alert: NWSAlert }) {
   const [expanded, setExpanded] = useState(false)
   const style = SEVERITY_STYLE[alert.severity] ?? SEVERITY_STYLE.Unknown
 
-  const expiresIn = alert.expires
-    ? formatDistanceToNow(parseISO(alert.expires), { addSuffix: true })
-    : null
+  // Guarded: an unparseable expiry from the NWS feed must degrade to "no
+  // expiry shown", not throw and blank the whole forecast page.
+  const expiresIn = (() => {
+    if (!alert.expires) return null
+    const d = parseISO(alert.expires)
+    if (Number.isNaN(d.getTime())) return null
+    return formatDistanceToNow(d, { addSuffix: true })
+  })()
 
   return (
     <div
@@ -81,8 +86,14 @@ function AlertCard({ alert }: { alert: NWSAlert }) {
 export function CoastalAlertsPanel({ spotSlug }: Props) {
   const { data, isLoading } = useQuery<{ alerts: NWSAlert[] }>({
     queryKey: ['coastal-alerts', spotSlug],
-    queryFn: () => fetch(`/api/coastal-alerts/${spotSlug}`).then((r) => r.json()),
+    queryFn: () => fetch(`/api/coastal-alerts/${spotSlug}`).then((r) => {
+      if (!r.ok) throw new Error('coastal-alerts-unavailable')
+      return r.json()
+    }),
     staleTime: 15 * 60 * 1000,
+    // Like every other panel: one shot. The global default retries 3x, which
+    // against api.weather.gov would quadruple calls exactly when it is down.
+    retry: false,
   })
 
   if (isLoading || !data?.alerts?.length) return null

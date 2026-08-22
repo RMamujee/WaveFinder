@@ -32,6 +32,7 @@ import { EarthquakePanel } from '@/components/forecast/EarthquakePanel'
 import { AmenitiesPanel } from '@/components/forecast/AmenitiesPanel'
 import { RiverRunoffPanel } from '@/components/forecast/RiverRunoffPanel'
 import { SeasonalClimatePanel } from '@/components/forecast/SeasonalClimatePanel'
+import { CoastalAlertsPanel } from '@/components/forecast/CoastalAlertsPanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { BOTTOM_TYPE_STYLE } from '@/lib/bottom-type'
@@ -360,6 +361,12 @@ export function SpotForecastView({ spot }: Props) {
       {/* Storm / coastal alerts from NOAA Weather.gov */}
       {alerts.length > 0 && <StormAlerts alerts={alerts} />}
 
+      {/* Official NWS alerts (High Surf, Rip Current, Tsunami …) — US spots
+          only; the panel renders nothing when there are no active alerts, and
+          api.weather.gov answers nothing for non-US coordinates. Complements
+          the model-derived StormAlerts above with the official warnings. */}
+      <CoastalAlertsPanel spotSlug={spot.slug} />
+
       {/* Body */}
       {isPending && <WaveLoader label="Fetching forecast…" />}
       {error && !isPending && !isFetching && (
@@ -605,10 +612,14 @@ export function SpotForecastView({ spot }: Props) {
             </div>
           )}
 
-          {/* Air Quality — col 2 */}
+          {/* Air Quality — col 2. Lazy like its siblings: its upstream is the
+              Open-Meteo account family, and eager-mounting it added a
+              guaranteed per-page-view call to the budget-constrained vendor.
+              The panel renders its own card header. */}
           <div>
-            <SectionTitle>Air Quality</SectionTitle>
-            <AirQualityPanel spotSlug={spot.slug} />
+            <LazyMount minHeight={0}>
+              <AirQualityPanel spotSlug={spot.slug} />
+            </LazyMount>
           </div>
 
           {/* Gear + Seasonal stacked — col 3 */}
@@ -623,8 +634,9 @@ export function SpotForecastView({ spot }: Props) {
                   <SectionTitle>Gear Recommendations</SectionTitle>
                   <GearPanel activeDayHours={activeDayData.hours} waterTempC={avgWaterTempC} />
                 </div>
+                {/* Renders its own card header, and nothing at all when NASA
+                    POWER has no data — an outer heading here orphans. */}
                 <div>
-                  <SectionTitle>Seasonal Climate</SectionTitle>
                   <SeasonalClimatePanel spotSlug={spot.slug} />
                 </div>
               </div>
@@ -667,15 +679,16 @@ export function SpotForecastView({ spot }: Props) {
           <RiverRunoffPanel spotSlug={spot.slug} />
         </LazyMount>
 
-        {/* Nearby facilities from OpenStreetMap */}
+        {/* Nearby facilities from OpenStreetMap — renders its own card header,
+            and null while loading or when nothing is mapped nearby, so no
+            heading may sit outside it. */}
         <LazyMount>
-          <SectionTitle>Nearby Facilities</SectionTitle>
           <AmenitiesPanel spotSlug={spot.slug} />
         </LazyMount>
 
-        {/* Seismic activity — only shows when M4.5+ quakes found within 800 km */}
+        {/* Seismic activity — only shows when M4.5+ quakes found within 800 km;
+            renders its own card header. */}
         <LazyMount>
-          <SectionTitle>Seismic Activity</SectionTitle>
           <EarthquakePanel spotSlug={spot.slug} />
         </LazyMount>
 
