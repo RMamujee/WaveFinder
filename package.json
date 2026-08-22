@@ -30,11 +30,11 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.5.0",
     "@vercel/speed-insights": "^2.0.0",
-    "better-auth": "^1.6.11",
+    "better-auth": "^1.7.1",
     "date-fns": "^4.1.0",
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
-    "next": "16.2.7",
+    "next": "^16.3.2",
     "prisma": "^5.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -51,14 +51,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.7",
+    "eslint-config-next": "^16.3.2",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.1.8"
   },
   "overrides": {
-    "postcss": "8.5.10"
+    "postcss": "8.5.23"
   },
   "engines": {
     "node": "22.x"
