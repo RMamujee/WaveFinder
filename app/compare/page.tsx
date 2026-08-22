@@ -496,7 +496,7 @@ function SpotColumn({ spot, forecast, isLoading, isError, selectedDay, onDayChan
                 <div className="grid grid-cols-2 gap-2">
                   <StatCell label="Swell Height" value={fmtHeight(displayHour.swellHeight, unit)} sub={unit === 'imperial' ? `${displayHour.swellHeight.toFixed(1)}m` : undefined} />
                   <StatCell label="Wave Power" value={`${Math.round(displayHour.wavePower)} kW/m`} />
-                  {displayHour.wind.gust > 0 && <StatCell label="Wind Gust" value={fmtWind(displayHour.wind.gust, unit)} />}
+                  {displayHour.wind.gust != null && displayHour.wind.gust > 0 && <StatCell label="Wind Gust" value={fmtWind(displayHour.wind.gust, unit)} />}
                   {displayHour.uvIndex > 0 && <StatCell label="UV Index" value={displayHour.uvIndex.toFixed(1)} />}
                   {displayHour.airTempC != null && <StatCell label="Air Temp" value={fmtTemp(displayHour.airTempC, unit)} />}
                   {displayHour.precipProb != null && <StatCell label="Rain Chance" value={`${displayHour.precipProb}%`} />}

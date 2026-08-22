@@ -45,10 +45,12 @@ export async function GET(
     )
   }
 
-  // Wind data is best-effort — if unavailable, forecast still loads without wind ratings
-  const windData = (windResult.status === 'fulfilled' && windResult.value)
-    ? windResult.value
-    : { hourly: { time: [] as string[], wind_speed_10m: [] as number[], wind_direction_10m: [] as number[], wind_gusts_10m: [] as number[], temperature_2m: [] as number[], weather_code: [] as number[], precipitation_probability: [] as number[] } }
+  // Wind data is best-effort — if unavailable, the forecast still loads and the
+  // rating engine simply renormalises the wind factor away. `fetchWindForecast`
+  // rejects on an upstream failure (it used to resolve an empty structure,
+  // which the runtime cache then wrote over the last-known-good copy for 24 h),
+  // so null here is the expected degraded value and mergeForecastData takes it.
+  const windData = windResult.status === 'fulfilled' ? windResult.value : null
 
   // Resolved before the merge: tide height now feeds the surf rating, not just
   // the tide chart.

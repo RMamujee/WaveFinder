@@ -90,8 +90,8 @@ export function IdealConditionsPanel({ spot, current, buoy, coastalWind }: Props
     obsWindSpeedMps = buoy.windSpeed
     obsWindDir = buoy.windDirection
     obsSource = `NOAA Buoy ${spot.noaaBuoyId ?? ''} · observed`
-  } else if (current) {
-    // wind.speed is in km/h from Open-Meteo
+  } else if (current && current.wind.speed != null) {
+    // wind.speed is in km/h from Open-Meteo; null = no reading for the hour
     obsWindSpeedMps = current.wind.speed / 3.6
     obsWindDir = current.wind.direction
   }

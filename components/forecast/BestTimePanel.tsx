@@ -133,7 +133,7 @@ export function BestTimePanel({ slots, tides }: Props) {
                     <Stat label="Period" value={`${slot.avgPeriod}s`} />
                     <Stat
                       label="Wind"
-                      value={slot.windQuality}
+                      value={slot.windQuality === 'unknown' ? '—' : slot.windQuality}
                     />
                   </div>
 

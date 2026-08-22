@@ -53,7 +53,9 @@ const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text:
   epic:  { bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', accent: '#7c3aed' },
 }
 
-function getWaterQuality(windSpeedKmh: number, windDir: number, spotFacing: number): { label: string; color: string } {
+function getWaterQuality(windSpeedKmh: number | null, windDir: number, spotFacing: number): { label: string; color: string } {
+  // No wind reading → surface state unknown; never guess "Glassy" from missing data.
+  if (windSpeedKmh == null) return { label: '—', color: 'var(--text-3)' }
   const mph = windSpeedKmh * 0.621371
   if (mph < 5) return { label: 'Glassy', color: '#16a34a' }
   const diff = Math.abs(((windDir - spotFacing + 180) % 360) - 180)

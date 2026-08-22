@@ -33,17 +33,21 @@ export function WindRoseChart({ days, size = 200, showLegend = true }: Props) {
   }))
 
   let calmCount = 0
+  let knownCount = 0
   for (const h of hours) {
     const speed = h.wind.speed
+    if (speed == null) continue // hour with no wind reading — nothing to bin
+    knownCount++
     if (speed < 2) { calmCount++; continue }
     const si = dirIndex(h.wind.direction)
     const bi = SPEED_BANDS.findIndex(b => speed < b.max)
     sectors[si].total++
     sectors[si].bands[bi].count++
   }
+  if (knownCount === 0) return null
 
   const maxTotal = Math.max(...sectors.map(s => s.total), 1)
-  const totalHours = hours.length
+  const totalHours = knownCount
   const CX = size / 2
   const CY = size / 2
   const MAX_R = size * 0.33

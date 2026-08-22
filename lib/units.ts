@@ -10,8 +10,9 @@ export function fmtHeightDec(m: number, unit: UnitSystem): string {
   return unit === 'metric' ? `${m.toFixed(1)}m` : `${(m * 3.281).toFixed(1)}ft`
 }
 
-// Wind from km/h (Open-Meteo)
-export function fmtWind(kmh: number, unit: UnitSystem): string {
+// Wind from km/h (Open-Meteo); null = no reading for the hour
+export function fmtWind(kmh: number | null, unit: UnitSystem): string {
+  if (kmh === null) return '—'
   return unit === 'metric' ? `${Math.round(kmh)} km/h` : `${Math.round(kmh * 0.621371)} mph`
 }
 

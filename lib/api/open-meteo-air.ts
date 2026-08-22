@@ -16,6 +16,31 @@ export interface CurrentAirQuality {
   bg: string
 }
 
+/**
+ * Pick the entry for the spot's in-progress local hour. Exported for tests.
+ *
+ * The request uses `timezone=auto`, so Open-Meteo's `hourly.time` strings are
+ * the SPOT's local clock with no offset — `new Date().getHours()` is the
+ * server's clock (UTC on Vercel), so comparing the two was off by the spot's
+ * entire UTC offset (+7 h for California, and enough to roll the date for
+ * Hawaii). Shift now by `utc_offset_seconds` and compare hour-truncated
+ * strings, the same technique as `findNearestFutureHour` / `pickHourIndex`.
+ *
+ * When nothing matches, return the NEAREST hour — the last entry when the
+ * whole window is already in the past — never index 0, which would report
+ * yesterday's air as current.
+ */
+export function pickAirHourIndex(
+  times: string[],
+  utcOffsetSeconds: number,
+  nowMs: number = Date.now()
+): number {
+  if (!times.length) return -1
+  const nowLocalHour = new Date(nowMs + utcOffsetSeconds * 1000).toISOString().slice(0, 13)
+  const idx = times.findIndex((t) => t.slice(0, 13) >= nowLocalHour)
+  return idx === -1 ? times.length - 1 : idx
+}
+
 function aqiInfo(aqi: number): { label: string; color: string; bg: string } {
   if (aqi <= 50)  return { label: 'Good',                   color: '#16a34a', bg: '#f0fdf4' }
   if (aqi <= 100) return { label: 'Moderate',               color: '#d97706', bg: '#fffbeb' }
@@ -44,12 +69,9 @@ export async function fetchAirQuality(lat: number, lng: number): Promise<Current
     const h = json.hourly
     if (!h) return null
 
-    // Find the index closest to current hour
-    const now = new Date()
-    const nowPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:00`
     const times: string[] = h.time ?? []
-    let idx = times.findIndex((t) => t >= nowPrefix)
-    if (idx < 0) idx = 0
+    const idx = pickAirHourIndex(times, json.utc_offset_seconds ?? 0)
+    if (idx < 0) return null
 
     const usAqi: number | null = h.us_aqi?.[idx] ?? null
     const info = usAqi !== null ? aqiInfo(usAqi) : { label: 'Unknown', color: '#6b7280', bg: '#f9fafb' }

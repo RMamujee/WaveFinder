@@ -8,8 +8,13 @@ export interface SwellComponent {
 }
 
 export interface WindData {
-  speed: number
-  gust: number
+  /** km/h. NULL when the weather API had no entry for the hour and there was no
+   *  windsea partition to estimate one from. Rendered as "—", never as 0 —
+   *  a 0 reads as dead glassy, which is the opposite of "unknown". */
+  speed: number | null
+  /** km/h. Null alongside a null speed; otherwise either the measured gust or a
+   *  `speed × 1.25` display stand-in (the stand-in is never scored). */
+  gust: number | null
   direction: number
   directionLabel: string
 }

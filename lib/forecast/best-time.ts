@@ -12,8 +12,9 @@ export interface BestTimeSlot {
   rating: ConditionRating
   avgWaveHeight: number
   avgPeriod: number
-  avgWindSpeed: number
-  windQuality: 'glassy' | 'light offshore' | 'light onshore' | 'choppy'
+  /** Averaged over the window's hours that HAVE a wind reading; null when none do. */
+  avgWindSpeed: number | null
+  windQuality: 'glassy' | 'light offshore' | 'light onshore' | 'choppy' | 'unknown'
   tip: string
   recommended: boolean
 }
@@ -32,7 +33,9 @@ function isOffshore(avgWindDir: number, spotFacing: number): boolean {
   return (diff <= 90 || diff >= 270)
 }
 
-function classifyWindQuality(avgWindSpeed: number, avgWindDir: number, spotFacing: number): BestTimeSlot['windQuality'] {
+function classifyWindQuality(avgWindSpeed: number | null, avgWindDir: number, spotFacing: number): BestTimeSlot['windQuality'] {
+  // No wind reading for the window: say so — "glassy" is the opposite of unknown.
+  if (avgWindSpeed == null) return 'unknown'
   if (avgWindSpeed < 8) return 'glassy'
   const offshore = isOffshore(avgWindDir, spotFacing)
   if (avgWindSpeed < 15) return offshore ? 'light offshore' : 'light onshore'
@@ -89,7 +92,10 @@ export function computeBestTimes(todayHours: ForecastHour[], spotFacing: number,
     const avgScore = hours.reduce((s, h) => s + h.ratingScore, 0) / hours.length
     const avgWaveHeight = hours.reduce((s, h) => s + h.waveHeight, 0) / hours.length
     const avgPeriod = hours.reduce((s, h) => s + h.swellPeriod, 0) / hours.length
-    const avgWindSpeed = hours.reduce((s, h) => s + h.wind.speed, 0) / hours.length
+    const knownWinds = hours.map((h) => h.wind.speed).filter((v): v is number => v != null)
+    const avgWindSpeed = knownWinds.length > 0
+      ? knownWinds.reduce((s, v) => s + v, 0) / knownWinds.length
+      : null
     const sinSum = hours.reduce((s, h) => s + Math.sin(h.wind.direction * Math.PI / 180), 0)
     const cosSum = hours.reduce((s, h) => s + Math.cos(h.wind.direction * Math.PI / 180), 0)
     const avgWindDir = ((Math.atan2(sinSum, cosSum) * 180 / Math.PI) + 360) % 360
@@ -120,7 +126,7 @@ export function computeBestTimes(todayHours: ForecastHour[], spotFacing: number,
       rating,
       avgWaveHeight: Math.round(avgWaveHeight * 10) / 10,
       avgPeriod: Math.round(avgPeriod * 10) / 10,
-      avgWindSpeed: Math.round(avgWindSpeed),
+      avgWindSpeed: avgWindSpeed == null ? null : Math.round(avgWindSpeed),
       windQuality,
       tip,
       recommended: rating === 'good' || rating === 'epic',

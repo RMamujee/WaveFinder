@@ -13,7 +13,8 @@ interface Props {
   activeDayData?: ForecastDay
 }
 
-function getWindColor(speed: number): string {
+function getWindColor(speed: number | null): string {
+  if (speed == null) return '#d4d4d8'
   if (speed < 10) return '#16a34a'
   if (speed < 20) return '#f59e0b'
   if (speed < 30) return '#f97316'
@@ -34,7 +35,8 @@ export function WindChart({ days, activeDayData }: Props) {
     day.hours
       .filter((_, i) => i % 3 === 0)
       .map((h) => ({
-        speed: Math.round(h.wind.speed),
+        // null = wind unknown for the hour; recharts leaves a gap for null bars
+        speed: h.wind.speed == null ? null : Math.round(h.wind.speed),
         dir: degreesToCompass(h.wind.direction),
         label: format(parseISO(h.time), 'EEE ha'),
       }))
@@ -42,7 +44,7 @@ export function WindChart({ days, activeDayData }: Props) {
 
   const dailyData = activeDayData
     ? activeDayData.hours.map((h) => ({
-        speed: Math.round(h.wind.speed),
+        speed: h.wind.speed == null ? null : Math.round(h.wind.speed),
         dir: degreesToCompass(h.wind.direction),
         label: format(parseISO(h.time), 'ha'),
       }))
@@ -105,7 +107,9 @@ export function WindChart({ days, activeDayData }: Props) {
                 return (
                   <div className="rounded-xl p-3 text-xs shadow-lg" style={{ background: 'white', border: '1px solid #ede0cc' }}>
                     <p className="mb-1 font-medium" style={{ color: '#4a4a6a' }}>{label}</p>
-                    <p style={{ color: '#1a1a2e' }}>{fmtWind(payload[0]?.value as number ?? 0, unit)} {item?.dir}</p>
+                    <p style={{ color: '#1a1a2e' }}>
+                      {payload[0]?.value == null ? '—' : `${fmtWind(payload[0].value as number, unit)} ${item?.dir ?? ''}`}
+                    </p>
                   </div>
                 )
               }}

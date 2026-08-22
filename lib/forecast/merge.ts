@@ -100,12 +100,18 @@ function buildBuoyCorrection(
 
 export function mergeForecastData(
   marine: OpenMeteoMarineResponse,
-  wind: OpenMeteoWindResponse,
+  /** Null/undefined, or a payload with no usable `hourly`, means "no wind data
+   *  for any hour" — every hour then falls back to the windsea estimate, or to
+   *  an honest null. `fetchWindForecast` REJECTS on an upstream failure rather
+   *  than resolving an empty structure (which withCache would have written over
+   *  the last-known-good copy), so a caller handing us nothing is the normal
+   *  degraded path and must never throw here. */
+  wind: OpenMeteoWindResponse | null | undefined,
   ctx: MergeContext
 ): ForecastHour[] {
   const { spotFacing, lat } = ctx
   const { hourly: m } = marine
-  const { hourly: w } = wind
+  const w = wind?.hourly
 
   // Tide index keyed by local "YYYY-MM-DDTHH:MM" — the same local-clock format
   // Open-Meteo returns, so hours line up without timezone conversion.
@@ -165,18 +171,27 @@ export function mergeForecastData(
   const precipProbMap = new Map<string, number>()
   const cloudCoverMap = new Map<string, number>()
 
-  w.time.forEach((t, i) => {
-    if (w.wind_speed_10m[i] != null) {
+  // Every array is read through optional chaining: a truncated payload (or one
+  // cached before a field was requested) must leave the affected hours without
+  // an entry, not throw partway through the merge.
+  const windTimes = Array.isArray(w?.time) ? w.time : []
+  windTimes.forEach((t, i) => {
+    const speed = w?.wind_speed_10m?.[i] ?? null
+    if (speed != null) {
       windMap.set(t, {
-        speed: w.wind_speed_10m[i],
-        gust: w.wind_gusts_10m[i] ?? 0,
-        dir: w.wind_direction_10m[i] ?? null,
+        speed,
+        gust: w?.wind_gusts_10m?.[i] ?? 0,
+        dir: w?.wind_direction_10m?.[i] ?? null,
       })
     }
-    if (w.temperature_2m?.[i] != null) tempMap.set(t, w.temperature_2m[i])
-    if (w.weather_code?.[i] != null) weatherCodeMap.set(t, w.weather_code[i])
-    if (w.precipitation_probability?.[i] != null) precipProbMap.set(t, w.precipitation_probability[i])
-    if (w.cloud_cover?.[i] != null) cloudCoverMap.set(t, w.cloud_cover[i])
+    const temp = w?.temperature_2m?.[i] ?? null
+    if (temp != null) tempMap.set(t, temp)
+    const code = w?.weather_code?.[i] ?? null
+    if (code != null) weatherCodeMap.set(t, code)
+    const precip = w?.precipitation_probability?.[i] ?? null
+    if (precip != null) precipProbMap.set(t, precip)
+    const cloud = w?.cloud_cover?.[i] ?? null
+    if (cloud != null) cloudCoverMap.set(t, cloud)
   })
 
   const hours: ForecastHour[] = []
@@ -243,14 +258,23 @@ export function mergeForecastData(
 
     // When the weather API had no entry for this hour, estimate wind speed from
     // wind-wave height using empirical relationship: Hs_wind ≈ 0.0248 × U² (m/s)
+    //
+    // With no windsea partition either — days 11-16, where the long-range model
+    // has no decomposition to fill it from — there is no basis for an estimate
+    // and the speed is NULL, not 0. A literal 0 is a real dead-glassy calm, the
+    // best wind there is, so the old fallback rated the far end of every
+    // forecast as permanently glassy. The engine drops the wind factor and
+    // renormalises instead, exactly as it does for tide and cleanliness.
     const windWaveH = m.wind_wave_height[i] as number | null
     const windWaveDir = m.wind_wave_direction[i] ?? 0
-    const estimatedSpeed = rawWind
+    const estimatedSpeed: number | null = rawWind
       ? rawWind.speed
-      : windWaveH != null && windWaveH > 0 ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6) : 0
+      : windWaveH != null && windWaveH > 0 ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6) : null
     const windData = {
       speed: estimatedSpeed,
-      gust: rawWind && rawWind.gust > 0 ? rawWind.gust : Math.round(estimatedSpeed * 1.25),
+      gust: rawWind && rawWind.gust > 0
+        ? rawWind.gust
+        : estimatedSpeed != null ? Math.round(estimatedSpeed * 1.25) : null,
       // Rating direction: null unless the weather API reported one. An
       // estimated speed paired with wind_wave_direction used to convert a
       // glassy-calm hour into a rated onshore blow; the engine's speed-only
@@ -275,6 +299,9 @@ export function mergeForecastData(
       // Null (not 0) when the model omitted the partition, so the cleanliness
       // factor renormalises away instead of scoring "perfectly clean".
       windWaveHeight: windWaveH,
+      // Null (not 0) when nothing measured or estimated it — see above. The
+      // wind factor then renormalises away and the wind veto cannot fire on a
+      // reading that does not exist.
       windSpeed: windData.speed,
       // Gusts were fetched and displayed but never scored: 12 km/h gusting 35
       // rated exactly like 12 km/h steady. Only a measured gust counts — the
@@ -316,11 +343,20 @@ export function mergeForecastData(
       // Summed per partition: charging the whole sea at the swell's period
       // overstated mixed seas by 1.79-2.0x. The gear panel renders the day's
       // average of this, so the error was visible.
-      wavePower: computeWavePower([
-        { height: swellHeight > 0 ? swellHeight : waveHeight, period: swellPeriod },
-        secondarySwell ?? { height: null, period: null },
-        { height: windWaveH, period: m.wind_wave_period?.[i] ?? null },
-      ]),
+      //
+      // With no swell partition the fallback charges the TOTAL sea — which
+      // already contains the windsea — so adding the windsea partition beside
+      // it billed the same energy twice. Pure-windsea spots (the Great Lakes,
+      // any short-fetch lake or bay) have no swell partition at all, so they
+      // read exactly 2x. One partition or three; never the total plus a slice
+      // of itself.
+      wavePower: swellHeight > 0
+        ? computeWavePower([
+            { height: swellHeight, period: swellPeriod },
+            secondarySwell ?? { height: null, period: null },
+            { height: windWaveH, period: m.wind_wave_period?.[i] ?? null },
+          ])
+        : computeWavePower([{ height: waveHeight, period: wavePeriod }]),
       uvIndex: computeUVIndex(lat, time, cloudCoverMap.get(time) ?? null),
       waterTemp: m.sea_surface_temperature?.[i] ?? null,
       airTempC: tempMap.get(time) ?? null,

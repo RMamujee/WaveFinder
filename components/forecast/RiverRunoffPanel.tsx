@@ -24,9 +24,12 @@ export function RiverRunoffPanel({ spotSlug }: Props) {
 
   if (isLoading || !data?.stations?.length) return null
 
-  // Only show if any station has elevated flow — low-flow data isn't interesting
+  // Only show if any station has elevated flow — low-flow data isn't
+  // interesting, and neither is moderate. The old condition only bailed when
+  // EVERY station read low, so an all-moderate set still rendered a runoff
+  // panel with nothing to warn about.
   const elevated = data.stations.filter((s) => s.flowLevel === 'high' || s.flowLevel === 'flood')
-  if (!elevated.length && data.stations.every((s) => s.flowLevel === 'low')) return null
+  if (!elevated.length) return null
 
   return (
     <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>

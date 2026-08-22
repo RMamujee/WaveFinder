@@ -37,9 +37,24 @@ function computeMoonPhase(date: Date): { phase: number; name: string; emoji: str
   return { phase, name, emoji }
 }
 
+/**
+ * The spot's local calendar date, approximated from longitude. Exported for tests.
+ *
+ * `new Date().toISOString()` is the UTC date, which is the wrong day for a
+ * Hawaii evening (UTC has already rolled over) and for a UTC+12 morning (UTC
+ * hasn't yet) — so the panel showed a spot yesterday's or tomorrow's sunrise.
+ * Solar time runs ~lng/15 hours ahead of UTC; that is far too coarse for a
+ * clock but it is exact enough to choose a date, since it only errs within
+ * ~1 h of local midnight where the political timezone may disagree anyway.
+ */
+export function localDateFromLongitude(lng: number, nowMs: number = Date.now()): string {
+  const offsetHours = lng / 15
+  return new Date(nowMs + offsetHours * 3600 * 1000).toISOString().split('T')[0]
+}
+
 export async function fetchSolarData(lat: number, lng: number, date?: string): Promise<SolarData | null> {
   try {
-    const dateStr = date ?? new Date().toISOString().split('T')[0]
+    const dateStr = date ?? localDateFromLongitude(lng)
     const params = new URLSearchParams({
       lat: lat.toString(),
       lng: lng.toString(),

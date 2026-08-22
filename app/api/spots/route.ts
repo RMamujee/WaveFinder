@@ -231,9 +231,18 @@ export async function GET(req: Request) {
   // Wave power is the sum over partitions: charging the whole sea at the
   // groundswell's period overstated mixed seas by up to 2x, and the map popup
   // renders this number directly.
+  // With no swell partition the fallback charges the TOTAL sea, which already
+  // contains the windsea — adding the windsea partition beside it billed the
+  // same energy twice, so a pure-windsea spot (the Great Lakes, any short-fetch
+  // lake or bay) read exactly 2x in the popup. One partition or three.
   function powerOf(om: CurrentMarineConditions): number {
+    if (om.swellHeight <= 0) {
+      return computeWavePower([
+        { height: om.waveHeight, period: om.wavePeriod > 0 ? om.wavePeriod : om.swellPeriod },
+      ])
+    }
     return computeWavePower([
-      { height: om.swellHeight > 0 ? om.swellHeight : om.waveHeight, period: om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod },
+      { height: om.swellHeight, period: om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod },
       { height: om.secondarySwellHeight, period: om.secondarySwellPeriod },
       { height: om.windWaveHeight, period: om.windWavePeriod },
     ])

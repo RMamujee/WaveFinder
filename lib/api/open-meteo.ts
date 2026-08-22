@@ -156,7 +156,11 @@ export interface CurrentMarineConditions {
   /** Windsea period, so wave power can be summed per partition rather than
    *  charging the chop at the groundswell's period. */
   windWavePeriod: number | null
-  windSpeed: number
+  /** Null when the weather API gave nothing AND there is no windsea partition
+   *  to estimate a speed from. Preserved (not coerced to 0) for the same reason
+   *  windDirection is: the engine scores a 0 as a real dead-glassy calm, which
+   *  is the best wind there is — the exact opposite of "we don't know". */
+  windSpeed: number | null
   windDirection: number | null
 }
 
@@ -265,10 +269,13 @@ export function parseCurrentConditions(
   const windWaveH = hourly.wind_wave_height?.[idx] ?? null
 
   // Estimate wind speed from wind-wave height when the weather API is
-  // unavailable: Hs_wind ≈ 0.0248 × U² (m/s).
+  // unavailable: Hs_wind ≈ 0.0248 × U² (m/s). With no windsea to read it off,
+  // there is no basis for an estimate at all — null, not 0. A 0 is a real
+  // glassy calm and scores as the best wind possible, so the old fallback
+  // turned a weather-API outage into a coastline of perfect mornings.
   const estimatedWindSpeed = windWaveH != null && windWaveH > 0
     ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
-    : 0
+    : null
 
   return {
     waveHeight,
@@ -488,40 +495,47 @@ export async function fetchCurrentConditionsBatch(
   }))
 
   await mapWithConcurrency(chunk(toFetch, BATCH_COORDS), MAX_CONCURRENT_CHUNKS, async (group) => {
-    let results: (CurrentMarineConditions | NoDataSentinel | null)[]
+    // Registry entries must never outlive the work, or a transient failure
+    // would pin every future caller to a promise nobody resolves — but they
+    // must not be released EARLY either. Dropping them the moment the fetch
+    // settled left a window in which the cache write had not landed yet: an
+    // overlapping request found no in-flight promise and no cache entry, and
+    // duplicated the whole upstream chunk. The release therefore happens after
+    // the cache write and the settle below, not between them.
     try {
-      results = await fetchConditionsChunk(group.map((g) => g.point))
-    } catch {
-      results = group.map(() => null)
+      let results: (CurrentMarineConditions | NoDataSentinel | null)[]
+      try {
+        results = await fetchConditionsChunk(group.map((g) => g.point))
+      } catch {
+        results = group.map(() => null)
+      }
+      await Promise.all(group.map(async ({ key }, i) => {
+        let outcome = results[i] ?? null
+        // Only definitive outcomes are cached: a null here is a transient chunk
+        // failure and must retry on the next request.
+        if (cache && outcome) {
+          try {
+            await cache.set(key, outcome, { ttl: 5 * 60, tags: ['open-meteo'] })
+            // STALE-IF-ERROR, the same protection fetchMarineForecast has had all
+            // along. Without it the map is the one surface with no floor under an
+            // upstream failure: a rejected chunk resolves null, null is
+            // deliberately not cached so it retries, and the spot goes grey. That
+            // asymmetry is why the map could sit blank while clicking through to
+            // a spot page showed a full forecast — the spot page was being served
+            // its own last-known-good copy.
+            await cache.set(staleKey(key), outcome, { ttl: STALE_IF_ERROR_TTL, tags: ['open-meteo'] })
+          } catch {}
+        } else if (cache && !outcome) {
+          try {
+            const lastGood = await cache.get(staleKey(key)) as CurrentMarineConditions | NoDataSentinel | null | undefined
+            if (lastGood !== null && lastGood !== undefined) outcome = lastGood
+          } catch { /* no usable fallback — stay null and let the route fall back */ }
+        }
+        settle.get(key)!(outcome && 'noData' in outcome ? null : outcome)
+      }))
     } finally {
-      // Registry entries must never outlive the fetch, or a transient failure
-      // would pin every future caller to a promise nobody resolves.
       for (const { key } of group) condInflight.delete(key)
     }
-    await Promise.all(group.map(async ({ key }, i) => {
-      let outcome = results[i] ?? null
-      // Only definitive outcomes are cached: a null here is a transient chunk
-      // failure and must retry on the next request.
-      if (cache && outcome) {
-        try {
-          await cache.set(key, outcome, { ttl: 5 * 60, tags: ['open-meteo'] })
-          // STALE-IF-ERROR, the same protection fetchMarineForecast has had all
-          // along. Without it the map is the one surface with no floor under an
-          // upstream failure: a rejected chunk resolves null, null is
-          // deliberately not cached so it retries, and the spot goes grey. That
-          // asymmetry is why the map could sit blank while clicking through to
-          // a spot page showed a full forecast — the spot page was being served
-          // its own last-known-good copy.
-          await cache.set(staleKey(key), outcome, { ttl: STALE_IF_ERROR_TTL, tags: ['open-meteo'] })
-        } catch {}
-      } else if (cache && !outcome) {
-        try {
-          const lastGood = await cache.get(staleKey(key)) as CurrentMarineConditions | NoDataSentinel | null | undefined
-          if (lastGood !== null && lastGood !== undefined) outcome = lastGood
-        } catch { /* no usable fallback — stay null and let the route fall back */ }
-      }
-      settle.get(key)!(outcome && 'noData' in outcome ? null : outcome)
-    }))
   })
 
   return Promise.all(keys.map(async (k) =>
@@ -665,34 +679,35 @@ export async function fetchWindForecast(
       timezone: 'auto',
     })
 
-    try {
-      const res = await fetch(`${WEATHER_BASE}?${params}`, {
-        next: { revalidate: 3600 },
-        headers: HEADERS,
-        signal: AbortSignal.timeout(15000),
-      })
+    const res = await fetch(`${WEATHER_BASE}?${params}`, {
+      next: { revalidate: 3600 },
+      headers: HEADERS,
+      signal: AbortSignal.timeout(15000),
+    })
 
-      if (!res.ok) throw new Error(`status ${res.status}`)
+    if (!res.ok) throw new Error(`Open-Meteo wind API error: ${res.status} ${res.statusText}`)
 
-      const text = await res.text()
-      const data: OpenMeteoWindResponse = JSON.parse(text)
+    // Parse from text: Open-Meteo can answer with Cloudflare HTML at status 200.
+    const text = await res.text()
+    const data = JSON.parse(text) as OpenMeteoWindResponse & { error?: boolean; reason?: string }
 
-      return data
-    } catch {
-      // Wind API unavailable — return empty structure so forecast still loads.
-      // Wind wave direction from marine API will be used as fallback in merge.
-      return {
-        hourly: {
-          time: [] as string[],
-          wind_speed_10m: [] as number[],
-          wind_direction_10m: [] as number[],
-          wind_gusts_10m: [] as number[],
-          temperature_2m: [] as number[],
-          weather_code: [] as number[],
-          precipitation_probability: [] as number[],
-          cloud_cover: [] as number[],
-        },
-      }
+    // The rate limiter answers HTTP 200 with `{"error":true,"reason":"…"}`, so
+    // res.ok proves nothing. Same guard fetchMarineForecast's fetchOne uses —
+    // without it a refusal was stored as a perfectly valid empty forecast.
+    if (data?.error === true) {
+      throw new Error(`Open-Meteo wind API error body: ${data.reason ?? 'unknown'}`)
     }
+    if (!Array.isArray(data?.hourly?.time) || data.hourly.time.length === 0) {
+      throw new Error('Open-Meteo wind API returned empty or malformed hourly data')
+    }
+
+    // THROW, never resolve an empty structure. withCache writes every resolved
+    // value to BOTH the 1 h key and the 24 h last-known-good key, so returning
+    // `{hourly:{time:[],…}}` on a transient failure poisoned wind — and, through
+    // cloud_cover, UV — for up to a day, and overwrote the good copy that
+    // stale-if-error exists to serve. A rejection lets withCache serve that copy
+    // instead; callers that can live without wind already degrade on a rejected
+    // promise (see /api/forecast/[slug] and /api/best-spots).
+    return data
   })
 }

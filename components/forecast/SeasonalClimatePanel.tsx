@@ -23,10 +23,16 @@ export function SeasonalClimatePanel({ spotSlug }: Props) {
   if (isLoading || !data?.climate?.length) return null
 
   const months = data.climate
-  const maxWind = Math.max(...months.map((m) => m.avgWindSpeedMs))
-  const maxPrecip = Math.max(...months.map((m) => m.avgPrecipMmDay), 1)
-  const maxTemp = Math.max(...months.map((m) => m.avgTempC))
-  const minTemp = Math.min(...months.map((m) => m.avgTempC))
+  // POWER can report -999/no-data for individual months (stored as null) —
+  // aggregate over the months that have values and render gaps for the rest.
+  const winds = months.map((m) => m.avgWindSpeedMs).filter((v): v is number => v != null)
+  const temps = months.map((m) => m.avgTempC).filter((v): v is number => v != null)
+  const precips = months.map((m) => m.avgPrecipMmDay).filter((v): v is number => v != null)
+  if (!winds.length && !temps.length && !precips.length) return null
+  const maxWind = Math.max(...(winds.length ? winds : [1]), 0.1)
+  const maxPrecip = Math.max(...(precips.length ? precips : [1]), 1)
+  const maxTemp = temps.length ? Math.max(...temps) : 0
+  const minTemp = temps.length ? Math.min(...temps) : 0
   const tempRange = Math.max(maxTemp - minTemp, 1)
 
   const currentMonth = new Date().getMonth() + 1
@@ -45,21 +51,21 @@ export function SeasonalClimatePanel({ spotSlug }: Props) {
       <div className="grid grid-cols-12 gap-0.5 mb-2">
         {months.map((m) => {
           const isNow = m.month === currentMonth
-          const windH = Math.round((m.avgWindSpeedMs / maxWind) * 40)
-          const tempNorm = (m.avgTempC - minTemp) / tempRange
+          const windH = m.avgWindSpeedMs == null ? null : Math.round((m.avgWindSpeedMs / maxWind) * 40)
+          const tempNorm = m.avgTempC == null ? null : (m.avgTempC - minTemp) / tempRange
 
           return (
             <div key={m.month} className="flex flex-col items-center gap-0.5">
-              {/* Wind bar */}
+              {/* Wind bar (flat grey stub when the month has no data) */}
               <div
                 className="w-full rounded-sm"
                 style={{
-                  height: windH || 2,
-                  background: isNow ? 'var(--ocean-600)' : '#93c5fd',
+                  height: windH == null ? 2 : windH || 2,
+                  background: windH == null ? 'var(--border)' : isNow ? 'var(--ocean-600)' : '#93c5fd',
                   alignSelf: 'flex-end',
                   opacity: isNow ? 1 : 0.7,
                 }}
-                title={`Wind: ${mphFromMs(m.avgWindSpeedMs)} mph`}
+                title={m.avgWindSpeedMs == null ? 'Wind: no data' : `Wind: ${mphFromMs(m.avgWindSpeedMs)} mph`}
               />
               {/* Precip dot */}
               <div
@@ -67,18 +73,20 @@ export function SeasonalClimatePanel({ spotSlug }: Props) {
                 style={{
                   width: 4,
                   height: 4,
-                  background: `rgba(59,130,246,${(m.avgPrecipMmDay / maxPrecip).toFixed(2)})`,
+                  background: m.avgPrecipMmDay == null
+                    ? 'var(--border)'
+                    : `rgba(59,130,246,${(m.avgPrecipMmDay / maxPrecip).toFixed(2)})`,
                 }}
-                title={`Rain: ${m.avgPrecipMmDay.toFixed(1)} mm/day`}
+                title={m.avgPrecipMmDay == null ? 'Rain: no data' : `Rain: ${m.avgPrecipMmDay.toFixed(1)} mm/day`}
               />
               {/* Temp color strip */}
               <div
                 className="w-full h-1 rounded-sm"
                 style={{
-                  background: `hsl(${200 - Math.round(tempNorm * 160)},70%,55%)`,
+                  background: tempNorm == null ? 'var(--border)' : `hsl(${200 - Math.round(tempNorm * 160)},70%,55%)`,
                   opacity: isNow ? 1 : 0.65,
                 }}
-                title={`Temp: ${tempF(m.avgTempC)}°F`}
+                title={m.avgTempC == null ? 'Temp: no data' : `Temp: ${tempF(m.avgTempC)}°F`}
               />
               <span
                 style={{
@@ -121,15 +129,21 @@ export function SeasonalClimatePanel({ spotSlug }: Props) {
           >
             <div>
               <p style={{ fontSize: 10, color: 'var(--text-3)' }}>Avg wind ({cur.name})</p>
-              <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{mphFromMs(cur.avgWindSpeedMs)} mph</p>
+              <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+                {cur.avgWindSpeedMs == null ? '—' : `${mphFromMs(cur.avgWindSpeedMs)} mph`}
+              </p>
             </div>
             <div>
               <p style={{ fontSize: 10, color: 'var(--text-3)' }}>Avg temp</p>
-              <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{tempF(cur.avgTempC)}°F</p>
+              <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+                {cur.avgTempC == null ? '—' : `${tempF(cur.avgTempC)}°F`}
+              </p>
             </div>
             <div>
               <p style={{ fontSize: 10, color: 'var(--text-3)' }}>Avg rain</p>
-              <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{cur.avgPrecipMmDay.toFixed(1)} mm/day</p>
+              <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+                {cur.avgPrecipMmDay == null ? '—' : `${cur.avgPrecipMmDay.toFixed(1)} mm/day`}
+              </p>
             </div>
           </div>
         )

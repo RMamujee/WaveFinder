@@ -113,15 +113,18 @@ interface Cluster {
   indexByTime: Map<string, number>
 }
 
-function buildWindMap(wind: OpenMeteoWindResponse | null): Cluster['windByTime'] {
+// `fetchWindForecast` rejects rather than resolving an empty structure, so the
+// caller hands us null whenever the wind fetch failed or timed out. A truncated
+// or `hourly`-less payload has to be survivable too: no wind data is a degraded
+// ranking, but a throw here is a 500 for the whole region.
+function buildWindMap(wind: OpenMeteoWindResponse | null | undefined): Cluster['windByTime'] {
   const map = new Map<string, { speed: number; dir: number | null }>()
-  if (!wind) return map
-  wind.hourly.time.forEach((t, i) => {
-    if (wind.hourly.wind_speed_10m[i] != null) {
-      map.set(t, {
-        speed: wind.hourly.wind_speed_10m[i],
-        dir: wind.hourly.wind_direction_10m[i] ?? null,
-      })
+  const h = wind?.hourly
+  if (!Array.isArray(h?.time)) return map
+  h.time.forEach((t, i) => {
+    const speed = h.wind_speed_10m?.[i] ?? null
+    if (speed != null) {
+      map.set(t, { speed, dir: h.wind_direction_10m?.[i] ?? null })
     }
   })
   return map
@@ -153,8 +156,9 @@ export interface BestSpotsSwellHour {
   // Total
   waveHeight: number
   wavePeriod: number
-  // Wind
-  windSpeed: number    // km/h
+  // Wind. Null when the wind fetch failed or carried no entry for the hour —
+  // a displayed 0 km/h reads as dead glassy, which is the opposite of unknown.
+  windSpeed: number | null    // km/h
   windDirection: number
   windDirectionLabel: string
   // Water
@@ -172,7 +176,8 @@ export interface BestSpotsSpotEntry {
     ratingScore: number
     waveHeight: number
     faceHeight: number
-    windSpeed: number
+    /** Null when nothing measured or estimated it — see BestSpotsSwellHour. */
+    windSpeed: number | null
     windDirectionLabel: string
   }[]
 }
@@ -221,18 +226,37 @@ export async function GET(req: Request) {
   // has no holes.
   const primary = clusters[0]
   const marine = primary.marine
-  const hourIndices: number[] = []
-  marine.hourly.time.forEach((t, i) => {
-    if (t.startsWith(date)) hourIndices.push(i)
-  })
+  const hoursOn = (day: string): number[] => {
+    const out: number[] = []
+    marine.hourly.time.forEach((t, i) => { if (t.startsWith(day)) out.push(i) })
+    return out
+  }
+
+  // `date` comes from the CALLER's browser clock while Open-Meteo's time strings
+  // are the region's own local clock, so the two disagree across the dateline
+  // and either side of midnight — a Sydney visitor asking for "today" can name a
+  // day the region's window does not contain. That matched zero hours and
+  // produced a valid-looking empty payload, which then CDN-cached for hours.
+  // Fall back to the first day the region actually has, and report which day
+  // that was so the client labels the table with the day it is showing.
+  let effectiveDate = date
+  let hourIndices = hoursOn(date)
+  if (!hourIndices.length) {
+    const firstDay = marine.hourly.time[0]?.slice(0, 10)
+    if (firstDay) {
+      effectiveDate = firstDay
+      hourIndices = hoursOn(firstDay)
+    }
+  }
 
   // Regional swell per hour — the primary cluster, as displayed context.
   const regionalSwell: BestSpotsSwellHour[] = hourIndices.map((i) => {
     const time        = marine.hourly.time[i]
-    const w           = primary.windByTime.get(time) ?? { speed: 0, dir: 270 }
-    // Display-only stand-ins below (the rating path in spotsData passes
-    // honest nulls); wDir keeps the compass label renderable.
-    const wDir        = w.dir ?? 270
+    const w           = primary.windByTime.get(time) ?? null
+    // Direction falls back to a stand-in so the compass label stays renderable,
+    // but the SPEED does not: 0 km/h is a real reading (dead glassy) and the
+    // client cannot tell an invented one from a measured one.
+    const wDir        = w?.dir ?? 270
     const swellDir    = marine.hourly.swell_wave_direction[i] ?? 270
     const windWaveDir = marine.hourly.wind_wave_direction[i]  ?? 270
     return {
@@ -247,7 +271,7 @@ export async function GET(req: Request) {
       windWaveDirectionLabel: degreesToCompass(windWaveDir),
       waveHeight:           marine.hourly.wave_height[i]          ?? 0,
       wavePeriod:           marine.hourly.wave_period[i]          ?? 0,
-      windSpeed:            w.speed,
+      windSpeed:            w?.speed ?? null,
       windDirection:        wDir,
       windDirectionLabel:   degreesToCompass(wDir),
       seaSurfaceTemperature: marine.hourly.sea_surface_temperature?.[i] ?? null,
@@ -281,7 +305,6 @@ export async function GET(req: Request) {
         const idx = i ?? primaryIndex
 
         const wReal        = src.windByTime.get(time)
-        const w            = wReal ?? { speed: 0, dir: 270 }
         const waveHeight   = hourly.wave_height[idx]          ?? 0
         const wavePeriod   = hourly.wave_period[idx]          ?? 0
         const swellHeight  = hourly.swell_wave_height[idx]    ?? 0
@@ -295,12 +318,15 @@ export async function GET(req: Request) {
 
         // No wind entry for this hour (per-hour null, or the whole wind fetch
         // failed): estimate speed from the windsea like merge.ts does. Feeding a
-        // literal 0 scored a weather-API outage as a perfectly glassy coast.
-        const windSpeed = wReal
+        // literal 0 scored a weather-API outage as a perfectly glassy coast —
+        // and with no windsea partition to estimate from there is no basis for
+        // any number at all, so the speed stays NULL and the engine renormalises
+        // the wind factor away rather than rating the whole region glassy.
+        const windSpeed: number | null = wReal
           ? wReal.speed
           : windWaveH != null && windWaveH > 0
             ? Math.round(Math.sqrt(windWaveH / 0.0248) * 3.6)
-            : 0
+            : null
 
         const { score, rating, faceHeight } = rateSurfConditions({
           waveHeight,
@@ -327,14 +353,16 @@ export async function GET(req: Request) {
           waveHeight,
           faceHeight,
           windSpeed,
-          windDirectionLabel: degreesToCompass(w.dir ?? 270),
+          windDirectionLabel: degreesToCompass(wReal?.dir ?? 270),
         }
       }),
     }
   })
 
   return NextResponse.json(
-    { spots: spotsData, regionalSwell, date },
+    // `date` is the day actually covered by `regionalSwell`/`hours`, which is
+    // the requested one unless the region's window did not contain it.
+    { spots: spotsData, regionalSwell, date: effectiveDate },
     { headers: cdnCacheHeaders(CACHE_MAX_AGE, CACHE_STALE_WHILE_REVALIDATE) }
   )
   } catch (error) {

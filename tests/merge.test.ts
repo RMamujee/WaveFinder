@@ -441,7 +441,7 @@ describe('mergeForecastData', () => {
     // into the rating would invent a gust penalty out of a missing reading.
     const emptyWind = { hourly: { time: [], wind_speed_10m: [], wind_direction_10m: [], wind_gusts_10m: [], temperature_2m: [], weather_code: [], precipitation_probability: [] } }
     const hours = mergeForecastData(marineFixture(times), emptyWind, { spotFacing: 270, lat: 33.8 })
-    expect(hours[0].wind.gust).toBeGreaterThan(hours[0].wind.speed)
+    expect(hours[0].wind.gust).toBeGreaterThan(hours[0].wind.speed!)
     expect(hours[0].ratingScore).toBeGreaterThan(45)
   })
 

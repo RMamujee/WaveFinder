@@ -6,6 +6,23 @@ export interface RiverStation {
   dischargeCfs: number  // cubic feet per second; high = elevated runoff risk
   time: string          // ISO
   flowLevel: 'low' | 'moderate' | 'high' | 'flood'
+  distanceKm: number
+}
+
+// A gauge is only relevant if its outflow could plausibly reach this beach.
+// The old 0.5° box (~55 km) handed Malibu the Los Angeles River, Piru Creek and
+// Sespe Creek — 36-56 km away and draining to entirely different coastlines.
+export const MAX_STATION_KM = 25
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const toRad = (d: number) => d * (Math.PI / 180)
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 function classifyFlow(cfs: number): RiverStation['flowLevel'] {
@@ -17,10 +34,13 @@ function classifyFlow(cfs: number): RiverStation['flowLevel'] {
 }
 
 export async function fetchRiverRunoff(lat: number, lng: number): Promise<RiverStation[]> {
-  const delta = 0.5  // ~55 km bounding box
+  // Bounding box that circumscribes MAX_STATION_KM; the corners reach further
+  // than the radius, so the haversine filter below is what actually caps it.
+  const latDelta = MAX_STATION_KM / 111
+  const lngDelta = MAX_STATION_KM / (111 * Math.max(0.05, Math.cos(lat * Math.PI / 180)))
   const params = new URLSearchParams({
     format: 'json',
-    bBox: `${(lng - delta).toFixed(4)},${(lat - delta).toFixed(4)},${(lng + delta).toFixed(4)},${(lat + delta).toFixed(4)}`,
+    bBox: `${(lng - lngDelta).toFixed(4)},${(lat - latDelta).toFixed(4)},${(lng + lngDelta).toFixed(4)},${(lat + latDelta).toFixed(4)}`,
     parameterCd: '00060',  // Streamflow in cubic feet per second
     siteType: 'ST',
     siteStatus: 'active',
@@ -37,10 +57,13 @@ export async function fetchRiverRunoff(lat: number, lng: number): Promise<RiverS
     const series: unknown[] = json?.value?.timeSeries ?? []
 
     return series
-      .slice(0, 5)
       .map((entry: unknown) => {
         const s = entry as {
-          sourceInfo?: { siteName?: string; siteCode?: { value?: string }[] }
+          sourceInfo?: {
+            siteName?: string
+            siteCode?: { value?: string }[]
+            geoLocation?: { geogLocation?: { latitude?: number; longitude?: number } }
+          }
           values?: { value?: { value?: string; dateTime?: string }[] }[]
         }
         const vals = s.values?.[0]?.value ?? []
@@ -48,15 +71,22 @@ export async function fetchRiverRunoff(lat: number, lng: number): Promise<RiverS
         if (!latest) return null
         const cfs = parseFloat(latest.value ?? '')
         if (isNaN(cfs) || cfs < 0) return null
+        const geo = s.sourceInfo?.geoLocation?.geogLocation
+        if (geo?.latitude == null || geo?.longitude == null) return null
+        const distanceKm = haversineKm(lat, lng, geo.latitude, geo.longitude)
+        if (distanceKm > MAX_STATION_KM) return null
         return {
           siteId: s.sourceInfo?.siteCode?.[0]?.value ?? '',
           siteName: s.sourceInfo?.siteName ?? 'Unknown',
           dischargeCfs: Math.round(cfs),
           time: latest.dateTime ?? '',
           flowLevel: classifyFlow(cfs),
+          distanceKm: Math.round(distanceKm * 10) / 10,
         } satisfies RiverStation
       })
       .filter((r): r is RiverStation => r !== null)
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, 5)
   } catch {
     return []
   }

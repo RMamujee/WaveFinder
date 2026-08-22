@@ -297,7 +297,7 @@ describe('rateSurfConditions', () => {
     // and passing windSpeed 0 instead would score a perfect 100 for "calm".
     const unknown = rateSurfConditions({ ...CLEAN, windSpeed: 25, windDirection: null })
     const glassy = rateSurfConditions({ ...CLEAN, windSpeed: 0, windDirection: null })
-    expect(unknown.factors.wind).toBeLessThan(glassy.factors.wind)
+    expect(unknown.factors.wind).toBeLessThan(glassy.factors.wind!)
     expect(unknown.factors.wind).toBeLessThan(60)
   })
 
@@ -407,8 +407,8 @@ describe('rateSurfConditions', () => {
     const light = rateSurfConditions({ ...CLEAN, windSpeed: 6, windDirection: 270 })
     const moderate = rateSurfConditions({ ...CLEAN, windSpeed: 15, windDirection: 270 })
     const strong = rateSurfConditions({ ...CLEAN, windSpeed: 25, windDirection: 270 })
-    expect(light.factors.wind).toBeGreaterThan(moderate.factors.wind)
-    expect(moderate.factors.wind).toBeGreaterThan(strong.factors.wind)
+    expect(light.factors.wind).toBeGreaterThan(moderate.factors.wind!)
+    expect(moderate.factors.wind).toBeGreaterThan(strong.factors.wind!)
     expect(strong.rating).toBe('poor')
   })
 
@@ -422,8 +422,8 @@ describe('rateSurfConditions', () => {
       const unknown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: null })
       const worstKnown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: 270 })
       const bestKnown = rateSurfConditions({ ...CLEAN, windSpeed: speed, windDirection: 90 })
-      expect(unknown.factors.wind).toBeGreaterThanOrEqual(worstKnown.factors.wind)
-      expect(unknown.factors.wind).toBeLessThanOrEqual(bestKnown.factors.wind)
+      expect(unknown.factors.wind).toBeGreaterThanOrEqual(worstKnown.factors.wind!)
+      expect(unknown.factors.wind).toBeLessThanOrEqual(bestKnown.factors.wind!)
     }
   })
 
@@ -597,7 +597,7 @@ describe('rateSurfConditions', () => {
     // rated exactly like 12 km/h steady. The face is groomed then wrecked.
     const steady = rateSurfConditions({ ...CLEAN, windSpeed: 12, windDirection: 270 })
     const gusty = rateSurfConditions({ ...CLEAN, windSpeed: 12, windDirection: 270, windGust: 35 })
-    expect(gusty.factors.wind).toBeLessThan(steady.factors.wind)
+    expect(gusty.factors.wind).toBeLessThan(steady.factors.wind!)
   })
 
   it('leaves a genuine calm calm even when the gust field is set', () => {

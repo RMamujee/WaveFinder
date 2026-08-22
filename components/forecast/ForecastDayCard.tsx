@@ -40,8 +40,9 @@ export function ForecastDayCard({ day, isSelected, onClick }: Props) {
   const waveMin = fmtHeight(minFaceHeight, unit)
   const waveRange = waveMin !== waveMax ? `${waveMin.replace(/ft|m$/, '')}–${waveMax}` : waveMax
 
-  const avgWindKmh = hours.length > 0
-    ? hours.reduce((s, h) => s + h.wind.speed, 0) / hours.length
+  const knownWinds = hours.map((h) => h.wind.speed).filter((v): v is number => v != null)
+  const avgWindKmh = knownWinds.length > 0
+    ? knownWinds.reduce((s, v) => s + v, 0) / knownWinds.length
     : null
 
   return (

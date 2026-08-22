@@ -373,9 +373,15 @@ export interface SurfRatingInput {
   /** Local windsea partition height (m). Omit when unknown; the cleanliness
    *  factor is then dropped and remaining weights renormalise. */
   windWaveHeight?: number | null
-  windSpeed: number       // km/h
+  /** Mean wind speed (km/h). NULL when nothing measured or estimated it — the
+   *  wind factor is then dropped and the remaining weights renormalise, exactly
+   *  like windWaveHeight and tide. A 0 here is a real dead-glassy calm, i.e. the
+   *  single best wind there is, so coercing a missing reading to 0 rated a
+   *  weather-API outage as the perfect morning. */
+  windSpeed: number | null       // km/h
   /** Peak gust (km/h). Omit when unknown; the wind factor is then scored on the
-   *  mean speed alone, exactly as before. */
+   *  mean speed alone, exactly as before. Only blended when a real speed exists
+   *  to blend it into. */
   windGust?: number | null
   /** Null when the wind reading is borrowed or unavailable — the wind factor
    *  then falls back to a speed-only score. */
@@ -401,11 +407,13 @@ export interface SurfRating {
    *  shows a 6 s period beside a rating computed from an 11 s one. Null when
    *  nothing breaks (no height, or no period to shoal it with). */
   combinedSwell: SwellPartition | null
-  /** Per-factor 0-100 scores, for "why is it rated this way" UI. */
+  /** Per-factor 0-100 scores, for "why is it rated this way" UI. Null means the
+   *  factor was unavailable and dropped out of the weighting, not that it
+   *  scored zero. */
   factors: {
     height: number
     period: number
-    wind: number
+    wind: number | null
     cleanliness: number | null
     tide: number | null
     exposure: number
@@ -506,7 +514,13 @@ export function rateSurfConditions(input: SurfRatingInput): SurfRating {
   // The period that matters is the one carrying the surf, not whichever train
   // the model happened to rank first.
   const periodScore = scorePeriod(combinedSwell?.period ?? raw[0].period)
-  const windScore = scoreWind(input.windSpeed, input.windDirection, input.spotFacing, input.windGust)
+  // No speed from the weather API and no windsea to estimate one from: the wind
+  // is UNKNOWN, which is not the same as calm. Scoring it drops out entirely
+  // (and takes the gust blend with it) rather than being scored as a 0 km/h
+  // glassy morning.
+  const windScore = input.windSpeed != null
+    ? scoreWind(input.windSpeed, input.windDirection, input.spotFacing, input.windGust)
+    : null
   const cleanScore = windWaveHeight != null
     ? scoreCleanliness(effectiveSwell, windWaveHeight)
     : null
@@ -517,8 +531,8 @@ export function rateSurfConditions(input: SurfRatingInput): SurfRating {
   const weighted: Array<[number, number]> = [
     [heightScore, 0.32],
     [periodScore, 0.22],
-    [windScore, 0.26],
   ]
+  if (windScore != null) weighted.push([windScore, 0.26])
   if (cleanScore != null) weighted.push([cleanScore, 0.10])
   if (tideScore != null) weighted.push([tideScore, 0.10])
 
@@ -536,9 +550,13 @@ export function rateSurfConditions(input: SurfRatingInput): SurfRating {
   // strong numbers elsewhere — a 4.5 m swell at 13 s under 40 km/h of straight
   // onshore wind scored "good" on size and period alone, when it is in fact
   // unsurfable. Conditions this bad are disqualifying, not merely a deduction.
-  if (windScore <= 10) score = Math.min(score, 29)
-  else if (windScore <= 25) score = Math.min(score, 45)
-  else if (windScore <= 40) score = Math.min(score, 62)
+  // A veto is a statement that the wind is destroying the spot. An unknown wind
+  // cannot make that statement, so it cannot fire the cap either.
+  if (windScore != null) {
+    if (windScore <= 10) score = Math.min(score, 29)
+    else if (windScore <= 25) score = Math.min(score, 45)
+    else if (windScore <= 40) score = Math.min(score, 62)
+  }
 
   if (cleanScore != null) {
     if (cleanScore <= 10) score = Math.min(score, 29)       // windsea-dominated

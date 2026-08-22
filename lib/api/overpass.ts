@@ -1,4 +1,14 @@
-const OVERPASS_BASE = 'https://overpass-api.de/api/interpreter'
+// Overpass mirrors, tried in order. The main instance answers HTTP 504
+// ("Dispatcher_Client::request_read_and_idx::timeout. The server is probably
+// too busy") often enough that a single attempt is not a reliable read: a
+// probe of Malibu's own coordinates returned 504 first and 49 elements on
+// retry. `!res.ok` turns that into `[]`, which the route then caches as a
+// definitive "this beach has no facilities" for a day — the same trap the
+// Open-Meteo layer avoids by never caching a transient failure.
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+]
 
 export interface Amenity {
   id: number
@@ -36,10 +46,30 @@ function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): num
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+async function runOverpass(query: string): Promise<{ elements?: unknown[] } | null> {
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: query,
+        headers: { 'Content-Type': 'text/plain' },
+        next: { revalidate: 86400 },
+        signal: AbortSignal.timeout(9000),
+      })
+      if (!res.ok) continue
+      // A busy instance can also answer 200 with an HTML error document.
+      return await res.json()
+    } catch {
+      // Timed out or the mirror is down — fall through to the next one.
+    }
+  }
+  return null
+}
+
 export async function fetchNearbyAmenities(lat: number, lng: number): Promise<Amenity[]> {
   const radius = 1000
   const query = `
-[out:json][timeout:20];
+[out:json][timeout:12];
 (
   node["amenity"~"^(toilets|parking|cafe|restaurant|shower|drinking_water|ice_cream|fast_food)$"](around:${radius},${lat},${lng});
   node["leisure"="surf_school"](around:${radius},${lat},${lng});
@@ -51,15 +81,8 @@ out center;
 `.trim()
 
   try {
-    const res = await fetch(OVERPASS_BASE, {
-      method: 'POST',
-      body: query,
-      headers: { 'Content-Type': 'text/plain' },
-      next: { revalidate: 86400 },
-      signal: AbortSignal.timeout(25000),
-    })
-    if (!res.ok) return []
-    const json = await res.json()
+    const json = await runOverpass(query)
+    if (!json) return []
 
     const elements: unknown[] = json?.elements ?? []
     const results: Amenity[] = elements
