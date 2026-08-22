@@ -4,7 +4,7 @@ import { join } from 'path'
 export const runtime = 'nodejs'
 
 export function GET() {
-  const img = readFileSync(join(process.cwd(), 'public/logo.png'))
+  const img = readFileSync(join(process.cwd(), 'public/icon.png'))
   return new Response(img, {
     headers: {
       'Content-Type': 'image/png',
