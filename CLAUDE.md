@@ -7,6 +7,22 @@ Upstash Redis, deployed on Vercel at https://wave-finder.vercel.app.
 
 ## Current state & open work
 
+- **2026-08-21 hardening pass** (security + bug audit, 7 commits): the dormant
+  auth/billing/stripe routes now 404 unless `ENABLE_ACCOUNTS=true` (they were
+  fully live and accepting unauthenticated DB writes; signup logged a live
+  verification URL — both fixed). Conditions requests to `/api/spots` have a
+  hard 200-bucket ceiling — over it, markers come back `unknown` on a 20 s TTL
+  with ZERO upstream calls; the `/spots` list view is paginated (48/page) and
+  fetches conditions via `ids=` instead of the unscoped sweep it used to fire.
+  Missing wind is now null end-to-end (`WindData.speed`, `SurfRatingInput`,
+  `factors.wind`) and a failed wind fetch THROWS instead of caching an empty
+  structure over the 24 h last-known-good copy. `next` is 16.3.2; the postcss
+  override is 8.5.23 (8.5.10 carried three high file-read advisories).
+  CoastalAlertsPanel (official NWS warnings) is mounted; **SolarPanel is
+  deliberately unmounted** — it formats UTC times in the viewer's browser
+  timezone, wrong for any remote spot; thread the spot's IANA timezone (free
+  from Open-Meteo) through the forecast payload before wiring it.
+
 - **Latest audit (read this first):** `docs/audit/05-post-deploy-audit-2026-06-09.md`
   — post-deploy audit with the prioritized open-work list. Done since
   (2026-06-09, second pass): Prisma migrations baselined (`0_init` marked
