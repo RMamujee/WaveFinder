@@ -124,6 +124,12 @@ async function syncSubscription(subscription: Stripe.Subscription, allowLink = f
 }
 
 export async function POST(req: Request) {
+  // Dormant account stack — unreachable unless explicitly enabled. See the note
+  // in app/api/auth/[...all]/route.ts.
+  if (process.env.ENABLE_ACCOUNTS !== 'true') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
     return NextResponse.json({ error: 'Stripe webhook is not configured' }, { status: 503 })
   }

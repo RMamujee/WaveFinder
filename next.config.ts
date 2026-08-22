@@ -35,6 +35,12 @@ const securityHeaders = [
       "media-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
+      // Clickjacking defence for browsers that honour CSP over X-Frame-Options
+      // (and the only one of the two that survives a nested-frame chain).
+      "frame-ancestors 'self'",
+      // Nothing in the app posts to a third party; pinning form targets stops a
+      // markup injection from exfiltrating a form submission.
+      "form-action 'self'",
     ].join('; '),
   },
 ]

@@ -63,7 +63,11 @@ export const auth = betterAuth({
           }),
         })
       } else {
-        monitor('info', 'email_verification.url', { email: user.email, url })
+        // Never log the verification URL or the address: the URL is a live
+        // credential (anyone reading the platform logs could verify the
+        // account) and the address is PII. Record only that the mail could not
+        // be sent, keyed by the opaque user id.
+        monitor('warn', 'email_verification.unsent_no_provider', { userId: user.id })
       }
     },
   },

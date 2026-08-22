@@ -47,8 +47,45 @@ describe('proxy rate limiter — per-path limits', () => {
     expect(await limitFor('/api/spots')).toBe(120)
   })
 
+  it('applies the panels = 40 rule to the spot-page condition endpoints', async () => {
+    for (const path of [
+      '/api/air-quality',
+      '/api/amenities',
+      '/api/earthquakes',
+      '/api/coastal-alerts',
+      '/api/river-runoff',
+      '/api/seasonal',
+      '/api/solar',
+    ]) {
+      expect(await limitFor(path), path).toBe(40)
+    }
+    expect(await limitFor('/api/solar/malibu')).toBe(40)
+  })
+
+  it('keeps the tighter pre-existing limits for panels that already had a rule', async () => {
+    // `panels` is listed last so the first-match lookup still finds these.
+    expect(await limitFor('/api/water-quality/malibu')).toBe(30)
+    expect(await limitFor('/api/surf-reports/malibu')).toBe(45)
+  })
+
   it('falls back to the default limit (80) for unmatched /api/ paths', async () => {
     expect(await limitFor('/api/something-else')).toBe(80)
+  })
+
+  it('exempts self-authenticating callers from IP rate limiting entirely', async () => {
+    // Stripe signs its webhooks and Vercel's cron presents CRON_SECRET, so an
+    // IP bucket could only throttle the one legitimate sender. No counter is
+    // kept for them at all — hence no rate-limit headers either.
+    const ip = `169.254.10.${++ipCounter}`
+    for (const path of ['/api/stripe/webhook', '/api/cron/cleanup']) {
+      for (let i = 0; i < 200; i++) {
+        const res = await proxy(makeRequest(path, ip))
+        if (res.status !== 200) throw new Error(`${path} was limited on request ${i + 1}`)
+      }
+      const res = await proxy(makeRequest(path, ip))
+      expect(res.status).toBe(200)
+      expect(res.headers.get('X-RateLimit-Limit')).toBeNull()
+    }
   })
 
   it('only matches a pattern at a segment boundary', async () => {

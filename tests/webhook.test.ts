@@ -34,14 +34,29 @@ function makeRequest(headers: Record<string, string> = {}, body = '{}') {
 
 describe('POST /api/stripe/webhook', () => {
   const ORIGINAL_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+  const ORIGINAL_ACCOUNTS = process.env.ENABLE_ACCOUNTS
 
   beforeEach(() => {
     constructEvent.mockReset()
+    // The route is 404-gated behind the dormant account stack; these cases
+    // exercise the behaviour *behind* the gate.
+    process.env.ENABLE_ACCOUNTS = 'true'
   })
 
   afterEach(() => {
     if (ORIGINAL_SECRET === undefined) delete process.env.STRIPE_WEBHOOK_SECRET
     else process.env.STRIPE_WEBHOOK_SECRET = ORIGINAL_SECRET
+    if (ORIGINAL_ACCOUNTS === undefined) delete process.env.ENABLE_ACCOUNTS
+    else process.env.ENABLE_ACCOUNTS = ORIGINAL_ACCOUNTS
+  })
+
+  it('returns 404 when accounts are disabled, before any signature work', async () => {
+    delete process.env.ENABLE_ACCOUNTS
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test'
+
+    const res = await POST(makeRequest({ 'stripe-signature': 'sig' }))
+    expect(res.status).toBe(404)
+    expect(constructEvent).not.toHaveBeenCalled()
   })
 
   it('refuses with 503 when STRIPE_WEBHOOK_SECRET is not configured', async () => {

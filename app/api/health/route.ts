@@ -1,9 +1,27 @@
+import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { monitor } from '@/lib/monitoring'
 import { redis } from '@/lib/redis'
 
 export const dynamic = 'force-dynamic'
+
+// Which components are up is infrastructure detail an anonymous caller has no
+// need for — "redis: unreachable" tells an attacker the rate limiter has fallen
+// back to per-instance memory, which is exactly when it is cheapest to abuse.
+// Operators get the breakdown by presenting the cron secret; everyone else gets
+// the verdict. Compared in constant time for the same reason /api/cron/cleanup
+// does: `===` on the same secret would leak its prefix byte by byte.
+function isOperator(req: Request) {
+  const secret = process.env.CRON_SECRET
+  if (!secret) return false
+  const provided = req.headers.get('authorization')
+  if (!provided) return false
+  const a = Buffer.from(provided)
+  const b = Buffer.from(`Bearer ${secret}`)
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
 
 // A slow-but-alive Redis must map to 'degraded', not stall the whole health
 // response past the uptime monitor's own timeout (which would read as the
@@ -31,7 +49,7 @@ async function checkRedis(): Promise<'connected' | 'unreachable' | 'unconfigured
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const [db, redisStatus] = await Promise.all([
     prisma.$queryRaw`SELECT 1`.then(
       () => 'connected' as const,
@@ -45,17 +63,20 @@ export async function GET() {
     checkRedis(),
   ])
 
+  // Both components are still pinged on every request — the monitor() calls
+  // above are what alerting reads. Only the wire response is trimmed.
+  const breakdown = isOperator(req) ? { db, redis: redisStatus } : {}
+
   if (db === 'unreachable') {
     return NextResponse.json(
-      { status: 'error', db, redis: redisStatus },
+      { status: 'error', ...breakdown },
       { status: 503 }
     )
   }
 
   return NextResponse.json({
     status: redisStatus === 'unreachable' ? 'degraded' : 'ok',
-    db,
-    redis: redisStatus,
+    ...breakdown,
     ts: new Date().toISOString(),
   })
 }

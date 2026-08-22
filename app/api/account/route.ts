@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { billingLabel, hasProAccess } from '@/lib/entitlements'
-import { getServerSession } from '@/lib/session'
 import { handleRouteError } from '@/lib/route-helpers'
 
 export async function GET() {
+  // Dormant account stack — unreachable unless explicitly enabled. See the note
+  // in app/api/auth/[...all]/route.ts.
+  if (process.env.ENABLE_ACCOUNTS !== 'true') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  // Lazy: `@/lib/entitlements` and `@/lib/session` both pull in `@/lib/auth`,
+  // which throws at module load without BETTER_AUTH_SECRET in production.
+  const [{ billingLabel, hasProAccess }, { getServerSession }] = await Promise.all([
+    import('@/lib/entitlements'),
+    import('@/lib/session'),
+  ])
+
   const session = await getServerSession()
   // Personalized billing/identity data — must never be shared/edge-cached.
   const noStore = { 'Cache-Control': 'private, no-store' }

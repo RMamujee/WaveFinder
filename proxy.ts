@@ -4,6 +4,17 @@ import { redis } from '@/lib/redis'
 
 const WINDOW_MS = 60_000   // 1 minute
 
+// Routes that authenticate the *caller*, not the IP: Stripe signs its webhook
+// bodies and Vercel's cron sends `Authorization: Bearer ${CRON_SECRET}`. Both
+// arrive from platform IP ranges we do not control, so an IP bucket can only
+// ever throttle the one legitimate sender (a retry storm from Stripe would
+// silently drop subscription events); a forged request is rejected by the
+// signature/secret check regardless of how many times it is sent.
+const RATE_LIMIT_EXEMPT = [
+  /^\/api\/stripe\/webhook(?:\/|$)/,
+  /^\/api\/cron(?:\/|$)/,
+]
+
 const RATE_LIMITS: { bucket: string; pattern: RegExp; limit: number }[] = [
   { bucket: 'auth', pattern: /^\/api\/auth(?:\/|$)/, limit: 10 },
   { bucket: 'debug', pattern: /^\/api\/debug(?:\/|$)/, limit: 10 },
@@ -14,6 +25,16 @@ const RATE_LIMITS: { bucket: string; pattern: RegExp; limit: number }[] = [
   { bucket: 'alerts', pattern: /^\/api\/alerts(?:\/|$)/, limit: 60 },
   { bucket: 'health', pattern: /^\/api\/health(?:\/|$)/, limit: 120 },
   { bucket: 'spots', pattern: /^\/api\/spots(?:\/|$)/, limit: 120 },
+  // Everything the spot-page condition panels fan out to. A single spot view
+  // fires several of these at once, so they need more headroom than the 80/min
+  // default — but they are all upstream-API-backed, so they must stay bounded.
+  // Listed last on purpose: `ruleForPath` takes the FIRST match, so
+  // water-quality (30) and surf-reports (45) keep their own tighter limits.
+  {
+    bucket: 'panels',
+    pattern: /^\/api\/(air-quality|amenities|earthquakes|coastal-alerts|river-runoff|seasonal|solar|water-quality|surf-reports)(?:\/|$)/,
+    limit: 40,
+  },
 ]
 const DEFAULT_RULE = { bucket: 'default', limit: 80 }
 
@@ -81,6 +102,12 @@ function checkMemoryLimit(key: string) {
 
 export async function proxy(req: NextRequest) {
   if (!req.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+
+  // Self-authenticating callers bypass the limiter entirely — no counter, no
+  // headers, nothing to exhaust.
+  if (RATE_LIMIT_EXEMPT.some((pattern) => pattern.test(req.nextUrl.pathname))) {
     return NextResponse.next()
   }
 

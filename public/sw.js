@@ -71,12 +71,17 @@ self.addEventListener('fetch', (e) => {
     return
   }
 
-  // Network-first for pages — fall back to cache when offline
+  // Network-first for pages — fall back to cache when offline.
+  // Only successful responses are cached: storing a 404/500/redirect would pin
+  // an error page for that URL and keep serving it after the server recovered,
+  // and it would evict the last good copy the offline fallback depends on.
   e.respondWith(
     fetch(e.request)
       .then((res) => {
-        const clone = res.clone()
-        caches.open(CACHE).then((c) => c.put(e.request, clone))
+        if (res.ok) {
+          const clone = res.clone()
+          caches.open(CACHE).then((c) => c.put(e.request, clone))
+        }
         return res
       })
       .catch(() => caches.match(e.request))

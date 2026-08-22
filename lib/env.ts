@@ -21,8 +21,21 @@ const serverEnvSchema = z.object({
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>
 
-/** Vars that the production runtime cannot start without. */
-const REQUIRED_IN_PRODUCTION = ['DATABASE_URL', 'BETTER_AUTH_SECRET'] as const
+/**
+ * Vars that the production runtime cannot start without.
+ *
+ * BETTER_AUTH_SECRET is only one of them when accounts are switched on. The
+ * account stack (better-auth + Stripe) is dormant by default — every route that
+ * touches it answers 404 unless ENABLE_ACCOUNTS === 'true' and imports
+ * `lib/auth` lazily behind that gate — so demanding an auth secret on an
+ * account-free deployment would fail the boot for a subsystem that can never
+ * run.
+ */
+function requiredInProduction(): string[] {
+  const required = ['DATABASE_URL']
+  if (process.env.ENABLE_ACCOUNTS === 'true') required.push('BETTER_AUTH_SECRET')
+  return required
+}
 
 /** Optional vars we warn about when absent (useful but not fatal). */
 const RECOMMENDED = [
@@ -50,7 +63,7 @@ export function validateEnv(): ServerEnv {
   const isProduction = process.env.NODE_ENV === 'production'
   const isBuild = process.env.NEXT_PHASE === 'phase-production-build'
 
-  const missingRequired = REQUIRED_IN_PRODUCTION.filter((key) => !process.env[key])
+  const missingRequired = requiredInProduction().filter((key) => !process.env[key])
 
   if (isProduction && !isBuild && missingRequired.length > 0) {
     throw new Error(
