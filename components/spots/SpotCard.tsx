@@ -13,7 +13,7 @@ interface Props {
   rating?: ConditionRating
   waveHeight?: number
   period?: number   // swell period in seconds
-  wind?: number     // wind speed in knots
+  wind?: number     // wind speed in km/h (matches the conditions API)
   tempF?: number    // water temperature in Fahrenheit
 }
 
@@ -33,9 +33,7 @@ export function SpotCard({ spot, rating, waveHeight, period, wind, tempF }: Prop
   const diffStyle = DIFFICULTY_STYLES[spot.difficulty as keyof typeof DIFFICULTY_STYLES] ?? DIFFICULTY_STYLES.intermediate
   const hasMicro = period !== undefined || wind !== undefined || tempF !== undefined
 
-  // Convert to metric for fmtWind/fmtTemp (they expect m/s and °C)
-  const windMs  = wind  !== undefined ? wind  * 0.514 : undefined
-  const tempC   = tempF !== undefined ? (tempF - 32) * 5 / 9 : undefined
+  const tempC = tempF !== undefined ? (tempF - 32) * 5 / 9 : undefined
 
   return (
     <Link
@@ -107,13 +105,13 @@ export function SpotCard({ spot, rating, waveHeight, period, wind, tempF }: Prop
             {period !== undefined && (
               <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
                 <Icon name="wave" size={12} strokeWidth={1.8} />
-                {period}s
+                {Math.round(period)}s
               </span>
             )}
-            {windMs !== undefined && (
+            {wind !== undefined && (
               <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--text-3)' }}>
                 <Icon name="wind" size={12} strokeWidth={1.8} />
-                {fmtWind(windMs, unit)}
+                {fmtWind(wind, unit)}
               </span>
             )}
             {tempC !== undefined && (

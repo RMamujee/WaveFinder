@@ -32,6 +32,11 @@ const SpotMap = dynamic(
 
 type ViewMode = 'map' | 'list'
 
+// List page size. Also the list view's conditions scope: 48 spots is at most
+// 48 coordinate buckets ≈ 96 upstream calls, and stays under the route's
+// 50-item ids= cap.
+const PAGE_SIZE = 48
+
 // Viewport → query key, rounded outward and padded so nudging the map re-uses
 // the cached payload. Mirrors LiveMapHero; see the header on parseBbox in
 // app/api/spots/route.ts for why the map must not ask for the whole world.
@@ -40,11 +45,19 @@ const BBOX_PAD_DEG = 1
 function bboxParam(b: MapBounds): string {
   const lo = (n: number) => Math.floor(n) - BBOX_PAD_DEG
   const hi = (n: number) => Math.ceil(n) + BBOX_PAD_DEG
+  // Wrap longitudes into [-180, 180]: Leaflet reports bounds past the edge of
+  // the world after a dateline pan, and -182 vs 178 are the same geography but
+  // two distinct CDN cache keys — each one a fresh origin fan-out. The server
+  // matches a wrapped box (minLng > maxLng) as a union of two spans.
+  const wrapLng = (n: number) => ((((n + 180) % 360) + 360) % 360) - 180
+  const minLng = lo(b.minLng)
+  const maxLng = hi(b.maxLng)
+  const wide = maxLng - minLng >= 360
   return [
     Math.max(lo(b.minLat), -90),
-    lo(b.minLng),
+    wide ? -180 : wrapLng(minLng),
     Math.min(hi(b.maxLat), 90),
-    hi(b.maxLng),
+    wide ? 180 : wrapLng(maxLng),
   ].join(',')
 }
 
@@ -182,30 +195,49 @@ export default function SpotsPage() {
     staleTime: 30 * 60 * 1000,
   })
 
+  // The list renders in pages: 1,482 cards in one scroll meant 1,482 animated
+  // canvases and an unbounded conditions request. The page is also the
+  // conditions scope — see below. Page resets when the filters change, adjusted
+  // during render (the React-documented pattern) rather than in an effect.
+  const filterKey = `${effectiveSearch}|${difficulty}|${selectedCountry}`
+  const [pageState, setPageState] = useState({ key: filterKey, page: 0 })
+  if (pageState.key !== filterKey) setPageState({ key: filterKey, page: 0 })
+  const page = pageState.key === filterKey ? pageState.page : 0
+  const setPage = (fn: (p: number) => number) =>
+    setPageState((s) => ({ key: filterKey, page: fn(s.key === filterKey ? s.page : 0) }))
+
   // Live conditions — issued alongside the base list, not after it. The
   // conditions payload is a complete marker projection and never needed the
   // base list to be in flight first; gating on it made time-to-coloured-map the
   // SUM of both requests (measured 2.8 s + 4.3 s cold against production)
   // instead of the slower one.
   //
-  // In map view the request is additionally scoped to the visible area. An
+  // In map view the request is scoped to the visible area; in list view it is
+  // scoped to the visible PAGE via ids= (the route caps ids at 50). An
   // unfiltered sweep is ~2,388 Open-Meteo calls against a 5,000/hour
   // allowance, which gets the whole fan-out refused and every pin rendered
-  // grey — see the header on parseBbox in app/api/spots/route.ts. The list view
-  // keeps the filtered fetch, since a list has no viewport to scope to.
-  const condParams = new URLSearchParams(apiParams)
+  // grey — see the header on parseBbox in app/api/spots/route.ts. The list
+  // view used to send the bare filtered fetch, which for a filter-less list
+  // WAS that global sweep — and its 5-minute refetch made one idle tab cost
+  // ~12 sweeps an hour.
+  const condParams = new URLSearchParams()
   condParams.set('withConditions', 'true')
   const scoped = view === 'map' && bbox !== null
+  const pageIds = view !== 'map'
+    ? baseSpots.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((s) => s.id).join(',')
+    : ''
   if (scoped) condParams.set('bbox', bbox)
+  if (view !== 'map') condParams.set('ids', pageIds)
   const { data: conditionData } = useQuery<SpotWithRating[]>({
-    queryKey: ['spots-conditions', effectiveSearch, difficulty, selectedCountry, scoped ? bbox : null],
+    queryKey: ['spots-conditions', view === 'map' ? bbox : pageIds],
     queryFn: () => fetch(`/api/spots?${condParams}`).then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     }),
     // Map view must wait for the first viewport report rather than firing an
-    // unscoped global sweep in the gap before it arrives.
-    enabled: view !== 'map' || bbox !== null,
+    // unscoped global sweep in the gap before it arrives; list view waits for
+    // the base list that provides the page's ids.
+    enabled: view === 'map' ? bbox !== null : pageIds.length > 0,
     // A pan must not repaint the map grey while the next box loads.
     placeholderData: keepPreviousData,
     // Match the route's edge cache (s-maxage=180): refetching sooner than that
@@ -226,7 +258,10 @@ export default function SpotsPage() {
   // every off-screen pin. Spots outside the box keep their marker and carry no
   // rating until panned into view.
   const spots = useMemo(() => {
-    if (!Array.isArray(conditionData) || !conditionData.length) return baseSpots
+    // `undefined` means not loaded yet; a successful `[]` (viewport or page
+    // with nothing rated) is a real answer and must not be treated as missing,
+    // or keepPreviousData repaints every pin grey after an empty pan.
+    if (!Array.isArray(conditionData)) return baseSpots
     const condMap = new Map(conditionData.map((s) => [s.id, s]))
     return baseSpots.map((s) => {
       const cond = condMap.get(s.id)
@@ -495,16 +530,43 @@ export default function SpotsPage() {
                 No spots match your filters.
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {spots.map((spot) => (
-                  <SpotCard
-                    key={spot.id}
-                    spot={spot}
-                    rating={spot.currentRating && spot.currentRating !== 'unknown' ? spot.currentRating as ConditionRating : undefined}
-                    waveHeight={spot.currentFaceHeight ?? undefined}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {spots.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((spot) => (
+                    <SpotCard
+                      key={spot.id}
+                      spot={spot}
+                      rating={spot.currentRating && spot.currentRating !== 'unknown' ? spot.currentRating as ConditionRating : undefined}
+                      waveHeight={spot.currentFaceHeight ?? undefined}
+                      period={spot.currentPeriod ?? undefined}
+                      wind={spot.currentWindSpeed ?? undefined}
+                    />
+                  ))}
+                </div>
+                {spots.length > PAGE_SIZE && (
+                  <div className="mt-6 flex items-center justify-center gap-4">
+                    <button
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                      className="rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40"
+                      style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs" style={{ color: 'var(--text-3)' }}>
+                      {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, spots.length)} of {spots.length}
+                    </span>
+                    <button
+                      onClick={() => setPage((p) => ((p + 1) * PAGE_SIZE < spots.length ? p + 1 : p))}
+                      disabled={(page + 1) * PAGE_SIZE >= spots.length}
+                      className="rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40"
+                      style={{ background: 'white', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

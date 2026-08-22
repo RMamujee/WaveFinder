@@ -24,6 +24,14 @@ const FALLBACK_MAX_FACING_DIFF = 45
 // cached only briefly — see the return at the bottom of the conditions path.
 const DEGRADED_UNKNOWN_SHARE = 0.25
 
+// Hard ceiling on the number of 0.05° coordinate buckets one conditions
+// request may fan out to. Each bucket costs 2 upstream Open-Meteo calls
+// (marine + weather) billed per location, so 200 buckets ≈ 400 calls — a
+// generous viewport, but nowhere near the ~2,400-call global sweep that
+// exhausts the daily budget and greys the map for everyone. Whatever the
+// caller sent — huge bbox, weird zoom, hand-built URL — this is the ceiling.
+const MAX_CONDITION_BUCKETS = 200
+
 interface Bbox { minLat: number; minLng: number; maxLat: number; maxLng: number; wraps: boolean }
 
 /**
@@ -55,8 +63,16 @@ function parseBbox(raw: string | null): Bbox | null {
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null
   const [minLat, rawMinLng, maxLat, rawMaxLng] = parts
   if (minLat > maxLat || minLat < -90 || maxLat > 90) return null
-  // A span of a full turn or more is the whole world — no point filtering.
-  if (Math.abs(rawMaxLng - rawMinLng) >= 360) return null
+  // A span of a full turn or more of longitude is the whole world east-west —
+  // Leaflet reports this legitimately at low zooms, where getBounds() unprojects
+  // raw pixel bounds without wrapping. Returning null here used to skip the
+  // bbox filter ENTIRELY, discarding the latitude half too and falling back to
+  // the full global sweep — reachable by simply clicking zoom out to 2. Keep
+  // the latitude filter and treat longitude as unbounded instead; the bucket
+  // ceiling below decides whether the result is still affordable.
+  if (Math.abs(rawMaxLng - rawMinLng) >= 360) {
+    return { minLat, minLng: -180, maxLat, maxLng: 180, wraps: false }
+  }
   const norm = (lng: number) => ((((lng + 180) % 360) + 360) % 360) - 180
   const minLng = norm(rawMinLng)
   const maxLng = norm(rawMaxLng)
@@ -206,6 +222,42 @@ export async function GET(req: Request) {
   }
   const bucketKeys = [...buckets.keys()]
 
+  // The ceiling holds regardless of how the caller got here — no bbox at all,
+  // an unparseable one, a whole-world box at zoom 2, a huge filtered sweep, a
+  // cache-busted attack URL. Serving grey "unknown" markers at ZERO upstream
+  // cost beats attempting the fan-out: an over-budget sweep gets refused
+  // upstream wholesale anyway, greys every pin for every visitor, and takes
+  // the shared daily budget (and the individual spot pages' headroom) with it.
+  // The short TTL means the pins colour in as soon as the caller scopes down.
+  if (bucketKeys.length > MAX_CONDITION_BUCKETS) {
+    monitor('warn', 'spots.conditions.refused_oversized', {
+      buckets: bucketKeys.length,
+      spots: spots.length,
+      scoped: !!bbox,
+    })
+    const refused = spots.map((spot) => ({
+      id:              spot.id,
+      slug:            spot.slug,
+      name:            spot.name,
+      region:          spot.region,
+      country:         spot.country,
+      lat:             spot.lat,
+      lng:             spot.lng,
+      difficulty:      spot.difficulty,
+      facingDirection: spot.facingDirection,
+      bottomType:      spot.bottomType,
+      parkingOptions:  spot.parkingOptions,
+      currentRating:      'unknown',
+      currentWaveHeight:  null,
+      currentFaceHeight:  null,
+      currentPeriod:      null,
+      currentWindSpeed:   null,
+      currentWindDir:     null,
+      wavePower:          null,
+    }))
+    return NextResponse.json(refused, { headers: cdnCacheHeaders(20, 60) })
+  }
+
   const omResults = await fetchCurrentConditionsBatch(
     bucketKeys.map((k) => buckets.get(k)!)
   ).catch(() => bucketKeys.map(() => null))
@@ -266,7 +318,7 @@ export async function GET(req: Request) {
     if (om && om.waveHeight > 0) {
       // Real swell/windsea partition from the model — no more `waveHeight * 0.7`
       // stand-in, which made every spot look like it had 70% clean groundswell.
-      const { rating, faceHeight } = rateSurfConditions({
+      const { rating, faceHeight, combinedSwell } = rateSurfConditions({
         waveHeight:     om.waveHeight,
         swellHeight:    om.swellHeight,
         swellPeriod:    om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod,
@@ -284,7 +336,12 @@ export async function GET(req: Request) {
         currentRating:        rating,
         currentWaveHeight:    om.waveHeight,
         currentFaceHeight:    faceHeight,
-        currentPeriod:        om.wavePeriod,
+        // DISPLAY the period the score was computed from (the energy-weighted
+        // blend of both swell trains), not the total sea's mean period — a
+        // popup showing 6 s beside a pin scored from an 8 s blend is the same
+        // class of bug CLAUDE.md pins for the forecast page.
+        currentPeriod:        combinedSwell?.period
+          ?? (om.swellPeriod > 0 ? om.swellPeriod : om.wavePeriod),
         currentWindSpeed:     om.windSpeed,
         currentWindDirection: om.windDirection,
         wavePower:            powerOf(om),
@@ -331,7 +388,7 @@ export async function GET(req: Request) {
     // which reads as perfectly offshore for an east-facing coast and dead
     // onshore for a west-facing one, purely by accident of geography.
     const windDirection = om.windDirection
-    const { rating, faceHeight } = rateSurfConditions({
+    const { rating, faceHeight, combinedSwell } = rateSurfConditions({
       waveHeight: om.waveHeight,
       swellHeight: om.swellHeight,
       swellPeriod: period,
@@ -352,7 +409,7 @@ export async function GET(req: Request) {
     spot.currentRating        = rating
     spot.currentWaveHeight    = om.waveHeight
     spot.currentFaceHeight    = faceHeight
-    spot.currentPeriod        = om.wavePeriod
+    spot.currentPeriod        = combinedSwell?.period ?? period
     spot.currentWindSpeed     = om.windSpeed
     spot.currentWindDirection = windDirection
     spot.wavePower            = powerOf(om)

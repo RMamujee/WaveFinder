@@ -85,7 +85,8 @@ describe('GET /api/spots?withConditions=true', () => {
   })
 
   it('resolves every coordinate bucket in a single batched call', async () => {
-    await getSpots('country=USA&withConditions=true')
+    // Portugal, not USA: USA alone spans 414 buckets, past the fan-out ceiling.
+    await getSpots('country=Portugal&withConditions=true')
 
     expect(batchCalls).toHaveLength(1)
     // One entry per unique 0.05° bucket, deduplicated before the fetch.
@@ -99,13 +100,13 @@ describe('GET /api/spots?withConditions=true', () => {
   // therefore the conditions and the cache key — for 229 spots. The
   // representative now comes from the full dataset.
   it('queries the same coordinate for a bucket regardless of the caller filters', async () => {
-    await getSpots('country=USA&withConditions=true')
+    await getSpots('country=Portugal&withConditions=true')
     const unfiltered = new Map(
       batchCalls[0].map((p) => [conditionsBucketKey(p.lat, p.lng), `${p.lat},${p.lng}`])
     )
 
     batchCalls.length = 0
-    await getSpots('country=USA&difficulty=beginner&withConditions=true')
+    await getSpots('country=Portugal&difficulty=beginner&withConditions=true')
     const filtered = batchCalls[0]
 
     expect(filtered.length).toBeGreaterThan(0)
@@ -180,16 +181,23 @@ describe('GET /api/spots?withConditions=true&bbox=', () => {
     batchCalls.length = 0
   })
 
-  it('asks Open-Meteo for far fewer coordinates than an unscoped sweep', async () => {
-    await getSpots('withConditions=true')
-    const unscoped = batchCalls[0].length
+  // An unscoped sweep is ~1,192 buckets, ~2,384 upstream calls — the ceiling
+  // refuses it outright: every marker comes back `unknown`, nothing is fetched,
+  // and the response is cached only briefly so pins colour in on zoom/filter.
+  it('refuses to fan out for an unscoped sweep — zero upstream calls', async () => {
+    const res = await GET(new Request('http://localhost/api/spots?withConditions=true'))
+    const spots = await res.json() as Record<string, unknown>[]
+    expect(batchCalls).toHaveLength(0)
+    expect(spots.length).toBeGreaterThan(1000)
+    expect(spots.every((s) => s.currentRating === 'unknown')).toBe(true)
+    expect(res.headers.get('Vercel-CDN-Cache-Control')).toMatch(/s-maxage=20/)
+  })
 
-    batchCalls.length = 0
+  it('still fans out for a scoped viewport', async () => {
     await getSpots('withConditions=true&bbox=32,-118,34,-117')
-    const scoped = batchCalls[0].length
-
-    expect(scoped).toBeGreaterThan(0)
-    expect(scoped).toBeLessThan(unscoped / 10)
+    expect(batchCalls).toHaveLength(1)
+    expect(batchCalls[0].length).toBeGreaterThan(0)
+    expect(batchCalls[0].length).toBeLessThanOrEqual(200)
   })
 
   it('returns only the spots inside the box', async () => {
@@ -228,17 +236,39 @@ describe('GET /api/spots?withConditions=true&bbox=', () => {
     expect(wrapped.map((s) => s.id)).toEqual(plain.map((s) => s.id))
   })
 
+  // An unusable bbox must not become a global fan-out — that was the fail-open
+  // hole: `bbox=garbage` skipped the filter entirely and cost ~2,384 upstream
+  // calls, and the CDN keying on the full query string made every variant a
+  // fresh cache miss. Unusable now degrades to the refused (all-unknown,
+  // zero-fetch) response; the pins still render, just grey.
   for (const bad of ['nonsense', '1,2,3', '34,-117,32,-118', '10,20,30']) {
-    it(`ignores an unusable bbox (${bad}) rather than returning nothing`, async () => {
+    it(`refuses the fan-out for an unusable bbox (${bad}) without dropping the markers`, async () => {
       const spots = await getSpots(`withConditions=true&bbox=${encodeURIComponent(bad)}`)
       expect(spots.length).toBeGreaterThan(100)
+      expect(batchCalls).toHaveLength(0)
+      expect(spots.every((s) => s.currentRating === 'unknown')).toBe(true)
     })
   }
 
-  it('ignores a bbox spanning a full turn of longitude', async () => {
+  // Leaflet legitimately reports >360° of longitude at low zooms. That used to
+  // return null from parseBbox — discarding the LATITUDE filter too and falling
+  // back to the full global sweep, reachable by clicking zoom-out. Longitude is
+  // now clamped to the whole world while the latitude band keeps filtering; the
+  // bucket ceiling then decides whether the request is affordable.
+  it('keeps the latitude filter for a bbox spanning a full turn of longitude', async () => {
+    const spots = await getSpots('withConditions=true&bbox=30,-500,45,300')
+    expect(spots.length).toBeGreaterThan(0)
+    for (const s of spots) {
+      expect(s.lat as number).toBeGreaterThanOrEqual(30)
+      expect(s.lat as number).toBeLessThanOrEqual(45)
+    }
+  })
+
+  it('refuses the whole-world box outright', async () => {
     const spots = await getSpots('withConditions=true&bbox=-90,-180,90,180')
-    const all = await getSpots('withConditions=true')
-    expect(spots.length).toBe(all.length)
+    expect(batchCalls).toHaveLength(0)
+    expect(spots.length).toBeGreaterThan(1000)
+    expect(spots.every((s) => s.currentRating === 'unknown')).toBe(true)
   })
 })
 

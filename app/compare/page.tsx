@@ -659,7 +659,10 @@ function MobileSwipeCompare({
     }
   }, []) // intentionally empty — refs keep closure values current
 
-  const slug = activeSlugs[idx] ?? ''
+  // clampedIdx, not idx: after removing a spot while viewing the last pane,
+  // idx points past the end — the dots/buttons already use the clamped value,
+  // so raw idx here rendered "2 of 2" over an empty panel.
+  const slug = activeSlugs[clampedIdx] ?? ''
 
   return (
     <div>
@@ -788,7 +791,9 @@ export default function ComparePage() {
   const { data: spots = [], isLoading: spotsLoading, isError: spotsError } = useQuery<SurfSpot[]>({
     queryKey: ['spots-all'],
     queryFn: async () => {
-      const r = await fetch('/api/spots', { signal: AbortSignal.timeout(12000) })
+      // slim: the picker reads name/region/slug/difficulty only. The full list
+      // is 780 KB (descriptions for all 1,482 spots); slim is ~300 KB.
+      const r = await fetch('/api/spots?slim=true', { signal: AbortSignal.timeout(12000) })
       if (!r.ok) throw new Error(`${r.status}`)
       const data = await r.json()
       return Array.isArray(data) ? data : []

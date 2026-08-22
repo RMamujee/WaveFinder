@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react'
 interface Props {
   height: number   // wave height in metres (from forecast)
   period: number   // swell period in seconds
-  wind: number     // wind speed in knots
+  wind: number     // wind speed in km/h (what the conditions API serves)
   width?: number
   h?: number       // canvas height in px
 }
@@ -67,9 +67,9 @@ function drawFrame(
   ctx.lineWidth = 1.5
   ctx.stroke()
 
-  // ── Layer 3: wind chop ripple (only if wind > 5 kt) ────────────────────
-  if (wind > 5) {
-    const ripAmp = Math.min(3, (wind - 5) * 0.18) * (h / 48)
+  // ── Layer 3: wind chop ripple (only past ~5 kt ≈ 9 km/h) ───────────────
+  if (wind > 9) {
+    const ripAmp = Math.min(3, (wind - 9) * 0.1) * (h / 48)
     // Derived from wind, not Math.random() — a fresh wavelength every frame made
     // the chop layer strobe instead of travel.
     const ripLen = 28 + (wind % 4)
@@ -110,7 +110,14 @@ export function MiniWave({ height, period, wind, width: _width = 232, h = 48 }: 
       return
     }
 
+    // Every card in a list mounts one of these. Unthrottled, a long list runs
+    // hundreds of concurrent rAF loops redrawing off-screen canvases — so the
+    // loop only runs while the canvas is actually in the viewport AND the tab
+    // is visible. Paused cards keep a static frame instead of going blank.
     let last = performance.now()
+    let running = false
+    let inView = false
+
     function loop(now: number) {
       const dt = (now - last) / 1000
       last = now
@@ -118,9 +125,31 @@ export function MiniWave({ height, period, wind, width: _width = 232, h = 48 }: 
       if (ctx) drawFrame(ctx, logW, h, height, period, wind, tRef.current)
       rafRef.current = requestAnimationFrame(loop)
     }
+    function sync() {
+      const shouldRun = inView && document.visibilityState === 'visible'
+      if (shouldRun && !running) {
+        running = true
+        last = performance.now()
+        rafRef.current = requestAnimationFrame(loop)
+      } else if (!shouldRun && running) {
+        running = false
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
 
-    rafRef.current = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(rafRef.current)
+    drawFrame(ctx, logW, h, height, period, wind, tRef.current || 1.5)
+
+    const io = new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting
+      sync()
+    }, { rootMargin: '100px' })
+    io.observe(canvas)
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      io.disconnect()
+      document.removeEventListener('visibilitychange', sync)
+      cancelAnimationFrame(rafRef.current)
+    }
   }, [height, period, wind, _width, h])
 
   return (

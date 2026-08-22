@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getSpotBySlug } from '@/lib/spots/static-store'
 import { degreesToCompass, computeWavePower } from '@/lib/forecast/rating'
+import { cdnCacheHeaders } from '@/lib/route-helpers'
 
+// `revalidate` alone does nothing for a route handler's response headers — the
+// three success returns shipped no Cache-Control at all, so this was the one
+// panel endpoint that hit the function on every scroll-into-view (measured
+// MISS/age:0 on 3/3 consecutive prod requests, ~900 ms each).
 export const revalidate = 1800
 
 export interface LiveConditionReport {
@@ -94,7 +99,7 @@ export async function GET(
       trend: 'unknown',
       summary: 'No live buoy data available for this spot. Check the 7-day forecast below.',
     }
-    return NextResponse.json({ report })
+    return NextResponse.json({ report }, { headers: cdnCacheHeaders(1800, 900) })
   }
 
   // Fetch the buoy's last ~20 observations (NOAA provides ~45 days of data)
@@ -191,7 +196,7 @@ export async function GET(
       detailUrl: `https://www.ndbc.noaa.gov/station_page.php?station=${spot.noaaBuoyId}`,
     }
 
-    return NextResponse.json({ report })
+    return NextResponse.json({ report }, { headers: cdnCacheHeaders(1800, 900) })
   } catch {
     const report: LiveConditionReport = {
       source: 'none',
@@ -206,6 +211,6 @@ export async function GET(
       trend: 'unknown',
       summary: 'Live buoy data temporarily unavailable. Check the forecast charts for expected conditions.',
     }
-    return NextResponse.json({ report })
+    return NextResponse.json({ report }, { headers: cdnCacheHeaders(1800, 900) })
   }
 }

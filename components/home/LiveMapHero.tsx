@@ -48,11 +48,19 @@ const BBOX_PAD_DEG = 1
 function bboxParam(b: MapBounds): string {
   const lo = (n: number) => Math.floor(n) - BBOX_PAD_DEG
   const hi = (n: number) => Math.ceil(n) + BBOX_PAD_DEG
+  // Wrap longitudes into [-180, 180]: Leaflet reports bounds past the edge of
+  // the world after a dateline pan, and -182 vs 178 are the same geography but
+  // two distinct CDN cache keys — each one a fresh origin fan-out. The server
+  // matches a wrapped box (minLng > maxLng) as a union of two spans.
+  const wrapLng = (n: number) => ((((n + 180) % 360) + 360) % 360) - 180
+  const minLng = lo(b.minLng)
+  const maxLng = hi(b.maxLng)
+  const wide = maxLng - minLng >= 360
   return [
     Math.max(lo(b.minLat), -90),
-    lo(b.minLng),
+    wide ? -180 : wrapLng(minLng),
     Math.min(hi(b.maxLat), 90),
-    hi(b.maxLng),
+    wide ? 180 : wrapLng(maxLng),
   ].join(',')
 }
 
@@ -109,7 +117,10 @@ export function LiveMapHero({ spotCount }: Props) {
   // since the box is padded past the edge of the screen, and harmless in
   // clusters, where an `unknown` child never wins the cluster's colour.
   const spots = useMemo(() => {
-    if (!Array.isArray(enrichedSpots) || !enrichedSpots.length) return baseSpots
+    // `undefined` = not loaded yet; a successful `[]` (viewport with no spots)
+    // is a real answer — treating it as "missing" made keepPreviousData repaint
+    // every pin grey after a pan over open ocean.
+    if (!Array.isArray(enrichedSpots)) return baseSpots
     const condMap = new Map(enrichedSpots.map((s) => [s.id, s]))
     return baseSpots.map((s) => {
       const cond = condMap.get(s.id)
