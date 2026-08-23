@@ -75,7 +75,17 @@ describe('parseCurrentConditions', () => {
       windWavePeriod: 5,
       windSpeed: 12,
       windDirection: 300,
+      windGust: null,
     })
+  })
+
+  it('carries the gust through and never estimates one', () => {
+    const gusty = parseCurrentConditions(marineEntry(), { current: { wind_speed_10m: 12, wind_direction_10m: 300, wind_gusts_10m: 31 } }, NOW)
+    expect(gusty).toMatchObject({ windSpeed: 12, windGust: 31 })
+    // The speed can be estimated from the windsea; a gust cannot.
+    const noWeather = parseCurrentConditions(marineEntry(), null, NOW)
+    expect(noWeather).toMatchObject({ windGust: null })
+    expect((noWeather as { windSpeed: number | null }).windSpeed).toBeGreaterThan(0)
   })
 
   // Open-Meteo ranks swell partitions by HEIGHT, so the longer-period (more
@@ -246,6 +256,43 @@ describe('fetchCurrentConditionsBatch', () => {
     const [result] = await fetchCurrentConditionsBatch([{ lat: 21.65, lng: -158.06 }])
 
     expect(result).toMatchObject({ waveHeight: 2.25, windSpeed: 7 })
+  })
+
+  // Open-Meteo bills a rejected request as a call. Retrying a quota
+  // rejection (minutely/hourly/daily) therefore spends quota to be rejected
+  // again inside the same window; only the concurrency shed clears fast.
+  it('retries a concurrency-shed 429 but not a quota 429', async () => {
+    const shed = { ok: false, status: 429, text: async () => '{"error":true,"reason":"Too many concurrent requests"}' } as unknown as Response
+    const quota = { ok: false, status: 429, text: async () => '{"error":true,"reason":"Minutely API request limit exceeded. Please try again in one minute."}' } as unknown as Response
+
+    let marineHits = 0
+    const first = installFetch((url) => {
+      if (!url.includes(MARINE)) return jsonResponse({ current: { wind_speed_10m: 7, wind_direction_10m: 15 } })
+      marineHits++
+      return marineHits === 1 ? shed : jsonResponse(marinePayload(1.1))
+    })
+    // The suite runs on fake timers, so the backoff sleep must be driven.
+    const pending = fetchCurrentConditionsBatch([{ lat: 40.1, lng: -124.1 }])
+    await vi.advanceTimersByTimeAsync(2000)
+    const [afterShed] = await pending
+    expect(afterShed).toMatchObject({ waveHeight: 1.1 })
+    expect(first.calls.filter((c) => c.url.includes(MARINE))).toHaveLength(2)
+
+    const second = installFetch((url) => (url.includes(MARINE) ? quota : jsonResponse({ current: {} })))
+    const [afterQuota] = await fetchCurrentConditionsBatch([{ lat: 41.1, lng: -124.2 }])
+    expect(afterQuota).toBeNull()
+    expect(second.calls.filter((c) => c.url.includes(MARINE))).toHaveLength(1)
+  })
+
+  it('asks the marine API for exactly ten variables and the weather API for gusts', async () => {
+    const { calls } = installFetch((url) => (url.includes(MARINE) ? jsonResponse(marinePayload(1)) : jsonResponse({ current: {} })))
+    await fetchCurrentConditionsBatch([{ lat: 42.1, lng: -124.3 }])
+    const marine = new URL(calls.find((c) => c.url.includes(MARINE))!.url)
+    // The 11th variable tips the per-location weight from 1.0 to 1.1.
+    expect(marine.searchParams.get('hourly')!.split(',')).toHaveLength(10)
+    expect(marine.searchParams.get('hourly')).not.toContain('wind_wave_direction')
+    const weather = new URL(calls.find((c) => !c.url.includes(MARINE))!.url)
+    expect(weather.searchParams.get('current')).toContain('wind_gusts_10m')
   })
 
   it('keeps marine data when the weather request fails', async () => {

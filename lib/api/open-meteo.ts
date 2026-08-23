@@ -171,6 +171,8 @@ export interface CurrentMarineConditions {
    *  is the best wind there is — the exact opposite of "we don't know". */
   windSpeed: number | null
   windDirection: number | null
+  /** km/h. Null when the weather API gave none — never estimated. */
+  windGust: number | null
 }
 
 export interface GeoPoint {
@@ -202,6 +204,7 @@ export interface WeatherCurrentEntry {
   current?: {
     wind_speed_10m?: number | null
     wind_direction_10m?: number | null
+    wind_gusts_10m?: number | null
   }
 }
 
@@ -305,6 +308,7 @@ export function parseCurrentConditions(
     // rated an estimated breeze as if it blew from the chop's bearing,
     // which the forecast route's merge explicitly stopped doing.
     windDirection:  wind?.current?.wind_direction_10m ?? null,
+    windGust:       wind?.current?.wind_gusts_10m ?? null,
   }
 }
 
@@ -329,6 +333,19 @@ const RATE_LIMIT_ATTEMPTS = 3
 const RATE_LIMIT_BACKOFF_MS = 400
 
 /**
+ * Whether a 429 is worth retrying. Open-Meteo's rate limiter BILLS A FAILED
+ * REQUEST AS A CALL ("Some users do infinite retries on errors!" — verbatim
+ * from its ApiKeyManager), so retrying a quota rejection costs quota and, with
+ * sub-second backoff, lands inside the same rejected minute. Only the
+ * concurrency shed ("Too many concurrent requests") clears in milliseconds;
+ * minutely/hourly/daily exhaustion is terminal for this request — the
+ * stale-if-error copy is the right answer, and cheaper.
+ */
+export function isRetryable429(body: string): boolean {
+  return /concurrent/i.test(body)
+}
+
+/**
  * GET + parse, resolving null rather than throwing.
  *
  * `retryOn429` exists because Open-Meteo sheds load with
@@ -345,10 +362,14 @@ async function fetchJson(
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: HEADERS })
-      if (res.status === 429 && attempt < attempts - 1) {
-        const backoff = RATE_LIMIT_BACKOFF_MS * 2 ** attempt + Math.floor(Math.random() * 250)
-        await new Promise((r) => setTimeout(r, backoff))
-        continue
+      if (res.status === 429) {
+        const body = await res.text().catch(() => '')
+        if (attempt < attempts - 1 && isRetryable429(body)) {
+          const backoff = RATE_LIMIT_BACKOFF_MS * 2 ** attempt + Math.floor(Math.random() * 250)
+          await new Promise((r) => setTimeout(r, backoff))
+          continue
+        }
+        return null
       }
       if (!res.ok) return null
       // Parse from text: Open-Meteo can answer with Cloudflare HTML at status 200.
@@ -374,7 +395,13 @@ async function fetchConditionsChunk(
   const marineParams = new URLSearchParams({
     latitude,
     longitude,
-    hourly: 'wave_height,wave_period,swell_wave_height,swell_wave_period,swell_wave_direction,secondary_swell_wave_height,secondary_swell_wave_period,secondary_swell_wave_direction,wind_wave_height,wind_wave_period,wind_wave_direction',
+    // Exactly 10 variables, and that is not incidental. Open-Meteo weights a
+    // request as max(1, variables/10) PER LOCATION (verified against the
+    // server source and by saturating the minutely limit): the 11th variable
+    // — `wind_wave_direction`, which parseCurrentConditions never reads —
+    // made every location cost 1.1 calls, ~9% of the marine leg for nothing.
+    // Adding a variable here costs a tenth of a call per location per sweep.
+    hourly: 'wave_height,wave_period,swell_wave_height,swell_wave_period,swell_wave_direction,secondary_swell_wave_height,secondary_swell_wave_period,secondary_swell_wave_direction,wind_wave_height,wind_wave_period',
     // 2 days, not 1: forecast_days spans the spot's LOCAL calendar day, so a
     // west-of-UTC spot queried in its evening needs tomorrow's first hours in
     // range or the current-hour lookup runs off the end and pins to 23:00.
@@ -385,7 +412,10 @@ async function fetchConditionsChunk(
   const weatherParams = new URLSearchParams({
     latitude,
     longitude,
-    current: 'wind_speed_10m,wind_direction_10m',
+    // Gusts ride free: the per-location floor of 1 call binds until the
+    // variable count passes 10, and the rating engine already scores gusts
+    // (GUST_WEIGHT) — the map path simply never supplied one.
+    current: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m',
     wind_speed_unit: 'kmh',
     timezone,
   })

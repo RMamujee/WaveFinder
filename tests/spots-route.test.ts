@@ -27,6 +27,7 @@ const CONDITIONS: CurrentMarineConditions = {
   windWavePeriod: 4,
   windSpeed: 9,
   windDirection: 45,
+  windGust: null,
 }
 
 vi.mock('@/lib/api/open-meteo', async (importOriginal) => {
