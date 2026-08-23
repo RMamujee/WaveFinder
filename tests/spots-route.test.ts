@@ -169,6 +169,79 @@ describe('GET /api/spots?withConditions=true', () => {
   })
 })
 
+// The home hero downloads this before it can draw a single pin, so every field
+// in it is on the critical path to first paint. Measured over the full dataset:
+// 297.6 KB (slim) -> 230.1 KB raw, 61.0 KB -> 53.3 KB gzipped.
+describe('GET /api/spots?markers=true', () => {
+  const MARKER_FIELDS = ['id', 'name', 'region', 'lat', 'lng', 'difficulty', 'facingDirection']
+
+  it('emits exactly the fields SpotMap needs to place and label a pin', async () => {
+    const [spot] = await getSpots('markers=true&q=Malibu')
+    expect(Object.keys(spot).sort()).toEqual([...MARKER_FIELDS].sort())
+  })
+
+  it('keeps facingDirection — the pin is nudged offshore along it', async () => {
+    // Without it SpotMap computes the marker position from `undefined` and
+    // every pin lands at NaN, i.e. nowhere. It is the least obviously
+    // "marker-essential" field in the projection and the easiest to trim.
+    const [spot] = await getSpots('markers=true&q=Malibu')
+    expect(typeof spot.facingDirection).toBe('number')
+    expect(Number.isFinite(spot.facingDirection as number)).toBe(true)
+  })
+
+  it('drops country and slug', async () => {
+    const [spot] = await getSpots('markers=true&q=Malibu')
+    expect(spot).not.toHaveProperty('country')
+    expect(spot).not.toHaveProperty('slug')
+    expect(spot).not.toHaveProperty('description')
+  })
+
+  it('serves an id that IS the slug, so the caller can re-attach it', async () => {
+    // LiveMapHero rebuilds `slug` from `id` to rescue those bytes, and
+    // SpotMap's popup link (/spots/${slug}) breaks the moment that stops
+    // holding. Pinned against the slim projection, which still sends both.
+    const marker = await getSpots('markers=true&q=Malibu')
+    const slim = await getSpots('slim=true&q=Malibu')
+    expect(marker.length).toBe(slim.length)
+    expect(marker.length).toBeGreaterThan(0)
+    for (const [i, m] of marker.entries()) {
+      expect(m.id).toBe(slim[i].slug)
+    }
+  })
+
+  it('is strictly smaller than the slim payload it replaces', async () => {
+    const res = await GET(new Request('http://localhost/api/spots?markers=true'))
+    const slimRes = await GET(new Request('http://localhost/api/spots?slim=true'))
+    const markerBytes = (await res.text()).length
+    const slimBytes = (await slimRes.text()).length
+    expect(markerBytes).toBeLessThan(slimBytes)
+    // Guards against the projection quietly regrowing: the whole point is a
+    // double-digit cut, not a rounding difference.
+    expect(markerBytes / slimBytes).toBeLessThan(0.85)
+  })
+
+  it('carries the same CDN cache headers as slim', async () => {
+    const res = await GET(new Request('http://localhost/api/spots?markers=true'))
+    const slimRes = await GET(new Request('http://localhost/api/spots?slim=true'))
+    for (const header of ['Cache-Control', 'CDN-Cache-Control', 'Vercel-CDN-Cache-Control']) {
+      expect(res.headers.get(header), header).toBe(slimRes.headers.get(header))
+    }
+  })
+
+  it('does not fan out to Open-Meteo', async () => {
+    batchCalls.length = 0
+    await getSpots('markers=true')
+    expect(batchCalls).toHaveLength(0)
+  })
+
+  it('leaves the slim projection alone — /compare still reads country', async () => {
+    const [spot] = await getSpots('slim=true&q=Malibu')
+    expect(Object.keys(spot).sort()).toEqual(
+      ['id', 'slug', 'name', 'region', 'country', 'lat', 'lng', 'difficulty', 'facingDirection'].sort()
+    )
+  })
+})
+
 // Open-Meteo bills a multi-location request PER LOCATION, so an unscoped sweep
 // is ~1,194 marine + 1,194 weather calls against a free tier of 5,000/hour.
 // With the route's own s-maxage that is ~9.6x the hourly allowance: the fan-out
