@@ -97,6 +97,12 @@ async function withCache<T>(key: string, ttlSeconds: number, tags: string[], fn:
 
 export interface OpenMeteoMarineResponse {
   utc_offset_seconds?: number
+  /** IANA zone name resolved by `timezone=auto`, e.g. "America/Los_Angeles".
+   *  Preferred over utc_offset_seconds for rendering absolute instants on the
+   *  spot's clock: the offset is the one in force at fetch time, so it is an
+   *  hour wrong for anything past a DST change. Optional — payloads cached
+   *  before 2026-08-22 have no such field. */
+  timezone?: string
   hourly: {
     time: string[]
     wave_height: number[]
@@ -122,6 +128,12 @@ export interface OpenMeteoMarineResponse {
 }
 
 export interface OpenMeteoWindResponse {
+  utc_offset_seconds?: number
+  /** Same IANA zone name as the marine response — both requests send
+   *  `timezone=auto` for the same coordinate. Declared so the field is not
+   *  silently dropped by a structural copy; the forecast route reads the
+   *  marine one, which is the fetch it treats as required. */
+  timezone?: string
   hourly: {
     time: string[]
     wind_speed_10m: number[]

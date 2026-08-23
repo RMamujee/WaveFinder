@@ -91,6 +91,14 @@ export async function GET(
       ...(marineResult.value.utc_offset_seconds != null
         ? { utcOffsetSeconds: marineResult.value.utc_offset_seconds }
         : {}),
+      // The spot's IANA zone, free from `timezone=auto`. Lets the client render
+      // absolute instants (solar times, alert expiries) on the SPOT's clock —
+      // formatting those in the viewer's browser timezone is why SolarPanel sat
+      // unmounted. Spread conditionally for the same reason as the offset
+      // above: absent, not null, so a marine payload cached before this field
+      // existed degrades to utcOffsetSeconds instead of being handed a zone
+      // name of `null` to try.
+      ...(marineResult.value.timezone ? { timezone: marineResult.value.timezone } : {}),
       forecast,
       tides,
       buoy,

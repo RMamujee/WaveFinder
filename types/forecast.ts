@@ -94,6 +94,14 @@ export interface SpotForecast {
    *  from forecast[] instead of trusting the CDN-frozen currentCondition.
    *  Optional: absent on payloads cached before 2026-08-05. */
   utcOffsetSeconds?: number
+  /** The spot's IANA zone name from Open-Meteo (`timezone=auto`). Used to
+   *  render absolute instants — solar times, alert expiries — on the SPOT's
+   *  clock rather than the viewer's. Preferred over utcOffsetSeconds because
+   *  it stays right across a DST change. Optional/null: payloads cached before
+   *  2026-08-22 have no such field, and consumers must degrade to
+   *  utcOffsetSeconds (then to rendering nothing) rather than to the viewer's
+   *  timezone. See lib/forecast/local-time.ts. */
+  timezone?: string | null
   forecast: ForecastDay[]
   tides: TidePoint[]
   buoy: BuoyReading | null

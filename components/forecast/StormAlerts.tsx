@@ -2,10 +2,16 @@
 
 import { useState } from 'react'
 import type { NWSAlert, AlertSeverity } from '@/lib/api/noaa-alerts'
-import { format, parseISO } from 'date-fns'
+import { formatSpotLocalTime, type SpotZone } from '@/lib/forecast/local-time'
 
 interface Props {
   alerts: NWSAlert[]
+  /** The spot's zone from the forecast payload. NWS `expires` is an absolute
+   *  instant carrying its own offset, so formatting it with date-fns rendered
+   *  "Until Fri 6:00 PM" on the VIEWER's clock — the same defect that kept
+   *  SolarPanel unmounted, just less obvious because most NWS alerts are
+   *  domestic. Optional: without it the expiry is omitted, not guessed. */
+  zone?: SpotZone
 }
 
 const SEVERITY_STYLE: Record<AlertSeverity, { bg: string; border: string; text: string; dot: string; label: string }> = {
@@ -16,15 +22,7 @@ const SEVERITY_STYLE: Record<AlertSeverity, { bg: string; border: string; text: 
   Unknown: { bg: '#f9fafb', border: '#e5e7eb', text: '#374151', dot: '#9ca3af', label: 'Statement' },
 }
 
-function fmtExpires(iso: string): string {
-  try {
-    return format(parseISO(iso), 'EEE h:mm a')
-  } catch {
-    return ''
-  }
-}
-
-export function StormAlerts({ alerts }: Props) {
+export function StormAlerts({ alerts, zone }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
 
   if (!alerts.length) return null
@@ -35,6 +33,7 @@ export function StormAlerts({ alerts }: Props) {
         {alerts.map((alert) => {
           const s = SEVERITY_STYLE[alert.severity]
           const isOpen = expanded === alert.id
+          const expires = formatSpotLocalTime(alert.expires, zone, { weekday: true })
           return (
             <div
               key={alert.id}
@@ -52,9 +51,9 @@ export function StormAlerts({ alerts }: Props) {
                 <span className="font-semibold text-sm flex-1" style={{ color: s.text }}>
                   {alert.event}
                 </span>
-                {alert.expires && (
+                {expires && (
                   <span className="text-xs shrink-0" style={{ color: s.text, opacity: 0.85 }}>
-                    Until {fmtExpires(alert.expires)}
+                    Until {expires}
                   </span>
                 )}
                 <svg

@@ -33,6 +33,7 @@ import { AmenitiesPanel } from '@/components/forecast/AmenitiesPanel'
 import { RiverRunoffPanel } from '@/components/forecast/RiverRunoffPanel'
 import { SeasonalClimatePanel } from '@/components/forecast/SeasonalClimatePanel'
 import { CoastalAlertsPanel } from '@/components/forecast/CoastalAlertsPanel'
+import { SolarPanel } from '@/components/forecast/SolarPanel'
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { BOTTOM_TYPE_STYLE } from '@/lib/bottom-type'
@@ -146,6 +147,15 @@ export function SpotForecastView({ spot }: Props) {
     return forecast.currentCondition ?? null
   }, [forecast, nowTick])
   const ratingStyle = current ? RATING_STYLES[current.rating] : RATING_STYLES.poor
+
+  // The spot's own clock, for the surfaces that render an ABSOLUTE instant
+  // (solar times, NWS alert expiries) rather than an Open-Meteo local-clock
+  // string. Everything reading `hour.time` is already spot-local and must not
+  // go through this. See lib/forecast/local-time.ts.
+  const spotZone = useMemo(
+    () => ({ timezone: forecast?.timezone, utcOffsetSeconds: forecast?.utcOffsetSeconds }),
+    [forecast?.timezone, forecast?.utcOffsetSeconds]
+  )
 
   const bestTimes = useMemo(() => {
     if (!activeDayData?.hours.length) return []
@@ -359,7 +369,7 @@ export function SpotForecastView({ spot }: Props) {
       )}
 
       {/* Storm / coastal alerts from NOAA Weather.gov */}
-      {alerts.length > 0 && <StormAlerts alerts={alerts} />}
+      {alerts.length > 0 && <StormAlerts alerts={alerts} zone={spotZone} />}
 
       {/* Official NWS alerts (High Surf, Rip Current, Tsunami …) — US spots
           only; the panel renders nothing when there are no active alerts, and
@@ -668,6 +678,19 @@ export function SpotForecastView({ spot }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Daylight & moon. Renders its own card header. Every clock time in it
+            is an absolute instant from sunrise-sunset.org, so it needs the
+            spot's zone — without one it shows the day length and the moon and
+            omits the times rather than printing the viewer's clock. */}
+        <LazyMount minHeight={160}>
+          <SolarPanel
+            spotSlug={spot.slug}
+            selectedDate={activeDayData?.date ?? selectedDay}
+            timezone={forecast?.timezone}
+            utcOffsetSeconds={forecast?.utcOffsetSeconds}
+          />
+        </LazyMount>
 
         {/* Water Quality — only renders when USGS/EPA data exists within 20 miles */}
         <LazyMount minHeight={0}>

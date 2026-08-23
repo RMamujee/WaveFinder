@@ -2,20 +2,27 @@
 
 import { useQuery } from '@tanstack/react-query'
 import type { SolarData } from '@/lib/api/sunrise-sunset'
-import { format, parseISO } from 'date-fns'
+import { formatSpotLocalTime } from '@/lib/forecast/local-time'
 import { Icon } from '@/components/ui/Icon'
 
 interface Props {
   spotSlug: string
   selectedDate?: string | null
+  /** The spot's IANA zone from the forecast payload. sunrise-sunset.org returns
+   *  absolute UTC instants, so without this the panel renders a Bali sunrise on
+   *  a California clock — which is why it was left unmounted until now. */
+  timezone?: string | null
+  /** Fallback for payloads cached before `timezone` was threaded through. */
+  utcOffsetSeconds?: number | null
 }
 
-function formatUTC(iso: string): string {
-  try {
-    return format(parseISO(iso), 'h:mm a')
-  } catch {
-    return '—'
-  }
+/** "UTC+8", "UTC−3:30" — the honest label when only a numeric offset is known. */
+function offsetLabel(seconds: number): string {
+  const sign = seconds < 0 ? '−' : '+'
+  const total = Math.round(Math.abs(seconds) / 60)
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return `UTC${sign}${h}${m ? `:${String(m).padStart(2, '0')}` : ''}`
 }
 
 function MoonBar({ phase }: { phase: number }) {
@@ -32,7 +39,11 @@ function MoonBar({ phase }: { phase: number }) {
   )
 }
 
-function TimeRow({ label, time, accent }: { label: string; time: string; accent?: string }) {
+function TimeRow({ label, time, accent }: { label: string; time: string | null; accent?: string }) {
+  // No spot-local rendering available → no row. Showing the instant in the
+  // viewer's timezone would be a confident wrong answer, and a dash beside
+  // every label is just noise.
+  if (!time) return null
   return (
     <div className="flex items-center justify-between py-1.5" style={{ borderBottom: '1px solid var(--border)' }}>
       <span className="text-xs" style={{ color: 'var(--text-3)' }}>{label}</span>
@@ -43,7 +54,7 @@ function TimeRow({ label, time, accent }: { label: string; time: string; accent?
   )
 }
 
-export function SolarPanel({ spotSlug, selectedDate }: Props) {
+export function SolarPanel({ spotSlug, selectedDate, timezone, utcOffsetSeconds }: Props) {
   const date = selectedDate ?? undefined
   const { data, isLoading } = useQuery<SolarData>({
     queryKey: ['solar', spotSlug, date],
@@ -70,6 +81,27 @@ export function SolarPanel({ spotSlug, selectedDate }: Props) {
   const hours = Math.floor(data.dayLengthSeconds / 3600)
   const mins  = Math.floor((data.dayLengthSeconds % 3600) / 60)
 
+  // Day length is a duration and stays correct with no zone at all; every
+  // clock time below needs one, and renders nothing without it.
+  const zone = { timezone, utcOffsetSeconds }
+  const times = {
+    dawn:    formatSpotLocalTime(data.civilTwilightBegin, zone),
+    sunrise: formatSpotLocalTime(data.sunrise, zone),
+    noon:    formatSpotLocalTime(data.solarNoon, zone),
+    sunset:  formatSpotLocalTime(data.sunset, zone),
+    dusk:    formatSpotLocalTime(data.civilTwilightEnd, zone),
+  }
+  // Name the zone only if it is the one actually used. Probing with the zone
+  // alone (no offset to fall back on) is what tells an unusable name apart from
+  // a usable one, so the footer can't caption an offset-rendered clock with an
+  // IANA name that was rejected.
+  const usedIanaZone = timezone != null && formatSpotLocalTime(data.sunrise, { timezone }) != null
+  const zoneNote = usedIanaZone
+    ? `Times at the spot (${timezone.replace(/_/g, ' ')})`
+    : times.sunrise != null && utcOffsetSeconds != null
+      ? `Times at the spot (${offsetLabel(utcOffsetSeconds)})`
+      : 'Local times unavailable for this spot'
+
   return (
     <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid var(--border)' }}>
       {/* Solar times */}
@@ -95,17 +127,17 @@ export function SolarPanel({ spotSlug, selectedDate }: Props) {
           </div>
           {/* Tick marks for key times */}
           {[
-            { label: 'Dawn', time: formatUTC(data.civilTwilightBegin), pct: 0 },
-            { label: 'Sunrise', time: formatUTC(data.sunrise), pct: 20 },
-            { label: 'Noon', time: formatUTC(data.solarNoon), pct: 50 },
-            { label: 'Sunset', time: formatUTC(data.sunset), pct: 80 },
-            { label: 'Dusk', time: formatUTC(data.civilTwilightEnd), pct: 100 },
+            { label: 'Dawn', time: times.dawn, pct: 0 },
+            { label: 'Sunrise', time: times.sunrise, pct: 20 },
+            { label: 'Noon', time: times.noon, pct: 50 },
+            { label: 'Sunset', time: times.sunset, pct: 80 },
+            { label: 'Dusk', time: times.dusk, pct: 100 },
           ].map(({ label, time, pct }) => (
             <div
               key={label}
               className="absolute -top-6 flex flex-col items-center"
               style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}
-              title={`${label} — ${time}`}
+              title={time ? `${label} — ${time}` : label}
             >
               <span style={{ fontSize: 9, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{label}</span>
             </div>
@@ -113,11 +145,11 @@ export function SolarPanel({ spotSlug, selectedDate }: Props) {
         </div>
 
         <div className="mt-4 space-y-0">
-          <TimeRow label="Civil dawn (first light)" time={formatUTC(data.civilTwilightBegin)} accent="#f97316" />
-          <TimeRow label="Sunrise" time={formatUTC(data.sunrise)} accent="#f59e0b" />
-          <TimeRow label="Solar noon" time={formatUTC(data.solarNoon)} />
-          <TimeRow label="Sunset" time={formatUTC(data.sunset)} accent="#f97316" />
-          <TimeRow label="Civil dusk (last light)" time={formatUTC(data.civilTwilightEnd)} accent="#7c3aed" />
+          <TimeRow label="Civil dawn (first light)" time={times.dawn} accent="#f97316" />
+          <TimeRow label="Sunrise" time={times.sunrise} accent="#f59e0b" />
+          <TimeRow label="Solar noon" time={times.noon} />
+          <TimeRow label="Sunset" time={times.sunset} accent="#f97316" />
+          <TimeRow label="Civil dusk (last light)" time={times.dusk} accent="#7c3aed" />
         </div>
       </div>
 
@@ -143,7 +175,7 @@ export function SolarPanel({ spotSlug, selectedDate }: Props) {
       </div>
 
       <p className="text-xs mt-3" style={{ color: 'var(--text-3)' }}>
-        Times in UTC · Source: sunrise-sunset.org
+        {zoneNote} · Source: sunrise-sunset.org
       </p>
     </div>
   )
