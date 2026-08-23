@@ -20,20 +20,61 @@ import { StormAlerts } from '@/components/forecast/StormAlerts'
 import { SaveSpotButton } from '@/components/spots/SaveSpotButton'
 import { SwellAlertButton } from '@/components/forecast/SwellAlertButton'
 import type { NWSAlert } from '@/lib/api/noaa-alerts'
-import { SurfReports } from '@/components/forecast/SurfReports'
 import { BestTimePanel } from '@/components/forecast/BestTimePanel'
-import { WaterQualityPanel } from '@/components/forecast/WaterQualityPanel'
 import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
 import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
 import { BreakAnimation } from '@/components/forecast/BreakAnimation'
 import { isBreakAnimationRegion } from '@/lib/forecast/break-animation'
-import { AirQualityPanel } from '@/components/forecast/AirQualityPanel'
-import { EarthquakePanel } from '@/components/forecast/EarthquakePanel'
-import { AmenitiesPanel } from '@/components/forecast/AmenitiesPanel'
-import { RiverRunoffPanel } from '@/components/forecast/RiverRunoffPanel'
-import { SeasonalClimatePanel } from '@/components/forecast/SeasonalClimatePanel'
-import { CoastalAlertsPanel } from '@/components/forecast/CoastalAlertsPanel'
-import { SolarPanel } from '@/components/forecast/SolarPanel'
+// Below-fold panels, split out of the initial bundle.
+//
+// SSR stays ON: none of them touch window/canvas at render, the spot pages are
+// statically prerendered for ~1,482 slugs, and `ssr: false` in a prerendered
+// tree buys nothing here — most of these already sit inside LazyMount, which
+// renders null until the section scrolls near.
+//
+// The `loading` element mirrors what each panel does on its own first paint,
+// which is NOT a skeleton for all of them: the ones that return null while
+// loading render nothing at all when a spot has no data (no gauge nearby, no
+// quakes, no active alert), and a skeleton in front of them would flash an
+// empty card that then disappears on most spots. Matching each panel's own
+// behaviour is the point; a uniform skeleton would be a regression.
+const AirQualityPanel = dynamic(
+  () => import('@/components/forecast/AirQualityPanel').then((m) => m.AirQualityPanel),
+  { loading: () => <PanelSkeleton minHeight={120} /> }
+)
+const AmenitiesPanel = dynamic(
+  () => import('@/components/forecast/AmenitiesPanel').then((m) => m.AmenitiesPanel),
+  { loading: () => <PanelSkeleton minHeight={80} /> }
+)
+const SolarPanel = dynamic(
+  () => import('@/components/forecast/SolarPanel').then((m) => m.SolarPanel),
+  { loading: () => <PanelSkeleton minHeight={160} /> }
+)
+const SurfReports = dynamic(
+  () => import('@/components/forecast/SurfReports').then((m) => m.SurfReports),
+  { loading: () => <PanelSkeleton minHeight={160} /> }
+)
+// These five return null while loading — see the note above.
+const WaterQualityPanel = dynamic(
+  () => import('@/components/forecast/WaterQualityPanel').then((m) => m.WaterQualityPanel),
+  { loading: () => null }
+)
+const EarthquakePanel = dynamic(
+  () => import('@/components/forecast/EarthquakePanel').then((m) => m.EarthquakePanel),
+  { loading: () => null }
+)
+const RiverRunoffPanel = dynamic(
+  () => import('@/components/forecast/RiverRunoffPanel').then((m) => m.RiverRunoffPanel),
+  { loading: () => null }
+)
+const SeasonalClimatePanel = dynamic(
+  () => import('@/components/forecast/SeasonalClimatePanel').then((m) => m.SeasonalClimatePanel),
+  { loading: () => null }
+)
+const CoastalAlertsPanel = dynamic(
+  () => import('@/components/forecast/CoastalAlertsPanel').then((m) => m.CoastalAlertsPanel),
+  { loading: () => null }
+)
 import { computeBestTimes } from '@/lib/forecast/best-time'
 import { degreesToCompass } from '@/lib/forecast/rating'
 import { BOTTOM_TYPE_STYLE } from '@/lib/bottom-type'
@@ -47,6 +88,18 @@ import { useUnits } from '@/contexts/UnitsContext'
 import { fmtHeight, fmtWind, fmtTemp } from '@/lib/units'
 
 interface Props { spot: SurfSpot }
+
+// The card placeholder the panels already use for their own loading state
+// (AirQualityPanel, AmenitiesPanel, SolarPanel), reused verbatim so a chunk
+// still downloading looks identical to a request still in flight.
+function PanelSkeleton({ minHeight }: { minHeight: number }) {
+  return (
+    <div
+      className="rounded-2xl p-5 animate-pulse"
+      style={{ background: 'white', border: '1px solid var(--border)', minHeight }}
+    />
+  )
+}
 
 const RATING_STYLES: Record<ConditionRating, { bg: string; border: string; text: string; accent: string }> = {
   poor:  { bg: '#f9fafb', border: '#e5e7eb', text: '#4b5563', accent: '#9ca3af' },
