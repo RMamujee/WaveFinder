@@ -178,6 +178,113 @@ export function conditionsBucketPoint(lat: number, lng: number): { lat: number; 
   return BUCKET_REPRESENTATIVE.get(conditionsBucketKey(lat, lng)) ?? { lat, lng }
 }
 
+// ── Coarse overview cells for wide viewports ─────────────────────────────────
+//
+// A zoomed-out map asks for more 0.05° buckets than one request may fan out to
+// (the whole world is ~1,192 — see MAX_CONDITION_BUCKETS in
+// app/api/spots/route.ts). Refusing such a request greys every pin the moment
+// a visitor zooms out, which is the first thing most visitors do. Instead the
+// route samples: it groups the spots into coarser cells, fetches one
+// representative per cell, and scores every spot in the cell against that
+// reading — flagged `approx` so the popup says so.
+//
+// Cells are NESTED. Level L groups fine-bucket indices by `>> L`, so a level-L
+// cell is exactly 2×2 level-(L-1) cells, and its representative is chosen from
+// its children's representatives (the child holding the most spots wins). That
+// makes every coarser level's sample a SUBSET of the finer one's: zooming out
+// through four levels re-reads buckets the cache already holds rather than
+// fanning out afresh at each level — which at ~400 calls a level would blow
+// the 600/min allowance in a single scroll of the wheel.
+//
+// Representatives are computed from the FULL dataset, like the fine buckets,
+// so a cell's query point does not move with the caller's bbox or filters.
+//
+// Spot counts at each level for the whole dataset, for sizing:
+//   L1 0.1° 1,055 · L2 0.2° 890 · L3 0.4° 714 · L4 0.8° 527 · L5 1.6° 376 ·
+//   L6 3.2° 260 · L7 6.4° 162 · L8 12.8° 87
+export const OVERVIEW_MAX_LEVEL = 8
+
+export function overviewCellKey(lat: number, lng: number, level: number): string {
+  const i = Math.round(lat / CONDITIONS_BUCKET_DEG)
+  const j = Math.round(lng / CONDITIONS_BUCKET_DEG)
+  // Arithmetic shift floors toward -∞ for negatives, so cells tile the globe
+  // without a doubled-up cell either side of the equator or the meridian.
+  return `${i >> level},${j >> level}`
+}
+
+interface CellNode { rep: { lat: number; lng: number }; spots: number }
+
+const OVERVIEW_REPRESENTATIVE: ReadonlyArray<ReadonlyMap<string, CellNode>> = (() => {
+  const levels: Map<string, CellNode>[] = []
+  const fine = new Map<string, CellNode>()
+  for (const s of SPOTS) {
+    const key = conditionsBucketKey(s.lat, s.lng)
+    const node = fine.get(key)
+    if (node) node.spots++
+    else fine.set(key, { rep: BUCKET_REPRESENTATIVE.get(key) ?? { lat: s.lat, lng: s.lng }, spots: 1 })
+  }
+  levels.push(fine)
+  for (let level = 1; level <= OVERVIEW_MAX_LEVEL; level++) {
+    const prev = levels[level - 1]
+    const next = new Map<string, CellNode>()
+    // Children are visited in insertion (dataset) order, so a tie on spot count
+    // resolves to the earlier child — deterministic across processes.
+    for (const child of prev.values()) {
+      const key = overviewCellKey(child.rep.lat, child.rep.lng, level)
+      const node = next.get(key)
+      if (!node) next.set(key, { rep: child.rep, spots: child.spots })
+      else {
+        if (child.spots > node.spots) node.rep = child.rep
+        node.spots += child.spots
+      }
+    }
+    levels.push(next)
+  }
+  return levels
+})()
+
+export interface OverviewPlan {
+  level: number
+  cellDeg: number
+  /** Distinct representative points to fetch, one per occupied cell. */
+  points: { lat: number; lng: number }[]
+  /** The representative point for a spot at (lat, lng). */
+  pointFor(lat: number, lng: number): { lat: number; lng: number }
+}
+
+/**
+ * The finest nested level at which `spots` occupy at most `maxCells` cells,
+ * or null if even the coarsest level is over (it cannot be for this dataset —
+ * the whole world fits in 87 cells at level 8 — but the caller still gets a
+ * definite answer rather than an assumption).
+ */
+export function planConditionsOverview(
+  spots: ReadonlyArray<{ lat: number; lng: number }>,
+  maxCells: number
+): OverviewPlan | null {
+  for (let level = 1; level <= OVERVIEW_MAX_LEVEL; level++) {
+    const cells = new Set<string>()
+    for (const s of spots) cells.add(overviewCellKey(s.lat, s.lng, level))
+    if (cells.size > maxCells) continue
+    const reps = OVERVIEW_REPRESENTATIVE[level]
+    const points: { lat: number; lng: number }[] = []
+    for (const key of cells) {
+      const node = reps.get(key)
+      if (node) points.push(node.rep)
+    }
+    return {
+      level,
+      cellDeg: CONDITIONS_BUCKET_DEG * 2 ** level,
+      points,
+      pointFor: (lat, lng) => {
+        const node = reps.get(overviewCellKey(lat, lng, level))
+        return node ? node.rep : conditionsBucketPoint(lat, lng)
+      },
+    }
+  }
+  return null
+}
+
 // Distinct countries, sorted ascending — byte-matches the Prisma
 // `distinct: ['country'], orderBy: { country: 'asc' }` output in
 // app/api/spots/meta/route.ts.

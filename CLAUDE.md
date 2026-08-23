@@ -11,8 +11,16 @@ Upstash Redis, deployed on Vercel at https://wave-finder.vercel.app.
   auth/billing/stripe routes now 404 unless `ENABLE_ACCOUNTS=true` (they were
   fully live and accepting unauthenticated DB writes; signup logged a live
   verification URL — both fixed). Conditions requests to `/api/spots` have a
-  hard 200-bucket ceiling — over it, markers come back `unknown` on a 20 s TTL
-  with ZERO upstream calls; the `/spots` list view is paginated (48/page) and
+  hard 200-bucket ceiling. Over it the request is SAMPLED, not refused
+  (2026-08-22 — refusing greyed the whole map the moment anyone zoomed out):
+  `planConditionsOverview` in `lib/spots/static-store.ts` groups spots into
+  nested coarse cells (0.05° × 2^L, up to 6.4° for the whole world = 162
+  representatives), fetches one representative per cell, scores every spot
+  against its cell's reading and flags it `approx` (the map popup says
+  "Regional estimate"). Coarser levels are subsets of finer ones, so zooming
+  out re-reads cached buckets instead of fanning out per level. Map buckets
+  cache for 30 min (`CONDITIONS_TTL_SECONDS`, was 5 — the spot page they must
+  agree with caches for 60). The `/spots` list view is paginated (48/page) and
   fetches conditions via `ids=` instead of the unscoped sweep it used to fire.
   Missing wind is now null end-to-end (`WindData.speed`, `SurfRatingInput`,
   `factors.wind`) and a failed wind fetch THROWS instead of caching an empty

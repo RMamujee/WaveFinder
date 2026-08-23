@@ -30,6 +30,15 @@ function dedupe<T>(key: string, fn: () => Promise<T>): Promise<T> {
 // page has nothing at all to show.
 const STALE_IF_ERROR_TTL = 24 * 3600
 
+// Fresh window for a map conditions bucket. This was 5 minutes, which made the
+// map the most expensive surface in the app for no freshness: the per-spot
+// forecast it must agree with (fetchMarineForecast, below) caches for an hour,
+// and Open-Meteo's `current` marine values are hourly model output anyway. At
+// 5 min a continuously watched 150-bucket viewport re-bought its 300 calls
+// twelve times an hour — 3,600/hour against a 5,000/hour allowance, before a
+// single spot page loaded. 30 min buys the same data at a sixth of the price.
+export const CONDITIONS_TTL_SECONDS = 30 * 60
+
 // Pause between the two marine attempts — see fetchOne.
 const RETRY_BACKOFF_MS = 600
 
@@ -515,7 +524,7 @@ export async function fetchCurrentConditionsBatch(
         // failure and must retry on the next request.
         if (cache && outcome) {
           try {
-            await cache.set(key, outcome, { ttl: 5 * 60, tags: ['open-meteo'] })
+            await cache.set(key, outcome, { ttl: CONDITIONS_TTL_SECONDS, tags: ['open-meteo'] })
             // STALE-IF-ERROR, the same protection fetchMarineForecast has had all
             // along. Without it the map is the one surface with no floor under an
             // upstream failure: a rejected chunk resolves null, null is

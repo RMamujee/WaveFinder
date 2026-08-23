@@ -18,6 +18,9 @@ interface SpotWithRating extends SurfSpot {
   currentWindDir?: string | null
   wavePower?: number | null
   bottomType?: string | null
+  /** Set by /api/spots on a zoomed-out view: the reading is the spot's coarse
+   *  cell representative's, not its own. Zooming in replaces it. */
+  approx?: boolean
 }
 
 export interface MapBounds {
@@ -181,6 +184,7 @@ function popupHtml(spot: SpotWithRating): string {
       </div>` : ''}
     </div>
     ${spot.currentWindSpeed != null ? `<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">Wind: ${Math.round(spot.currentWindSpeed! * 0.621371)} mph ${spot.currentWindDir ?? ''}</div>` : ''}
+    ${spot.approx ? `<div style="font-size:11px;color:#8888aa;font-style:italic;margin-bottom:10px;">Regional estimate — zoom in for this spot's own reading</div>` : ''}
   ` : h === 0
     ? `<div style="font-size:13px;color:#8888aa;font-style:italic;margin-bottom:10px;text-align:center;padding:10px;background:#f8fafc;border-radius:10px;">Flat — no rideable waves today</div>`
     : `<div style="font-size:13px;color:#8888aa;font-style:italic;margin-bottom:10px;text-align:center;padding:10px;background:#f8fafc;border-radius:10px;">No live data available</div>`

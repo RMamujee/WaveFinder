@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
-import { listSpots, conditionsBucketKey, conditionsBucketPoint } from '@/lib/spots/static-store'
+import {
+  listSpots,
+  conditionsBucketKey,
+  conditionsBucketPoint,
+  planConditionsOverview,
+} from '@/lib/spots/static-store'
 import { monitor } from '@/lib/monitoring'
 import type { SurfSpot } from '@/types/spot'
 import { fetchCurrentConditionsBatch } from '@/lib/api/open-meteo'
@@ -24,12 +29,20 @@ const FALLBACK_MAX_FACING_DIFF = 45
 // cached only briefly — see the return at the bottom of the conditions path.
 const DEGRADED_UNKNOWN_SHARE = 0.25
 
-// Hard ceiling on the number of 0.05° coordinate buckets one conditions
-// request may fan out to. Each bucket costs 2 upstream Open-Meteo calls
-// (marine + weather) billed per location, so 200 buckets ≈ 400 calls — a
-// generous viewport, but nowhere near the ~2,400-call global sweep that
-// exhausts the daily budget and greys the map for everyone. Whatever the
-// caller sent — huge bbox, weird zoom, hand-built URL — this is the ceiling.
+// Hard ceiling on the number of coordinate buckets one conditions request may
+// fan out to. Each bucket costs 2 upstream Open-Meteo calls (marine + weather)
+// billed per location, so 200 buckets ≈ 400 calls — a generous viewport, but
+// nowhere near the ~2,400-call global sweep that exhausts the daily budget and
+// greys the map for everyone. Whatever the caller sent — huge bbox, weird
+// zoom, hand-built URL — this is the ceiling.
+//
+// A request over the ceiling is not refused, it is SAMPLED: the spots are
+// grouped into coarser nested cells until they fit, one representative per
+// cell is fetched, and every spot in the cell is scored against that reading
+// and flagged `approx`. Refusing (the first version of this ceiling) greyed
+// the whole map the moment anyone zoomed out — which the Vercel logs showed
+// happening within a day of shipping it — while a sampled overview colours
+// every pin for the same bounded cost. See planConditionsOverview.
 const MAX_CONDITION_BUCKETS = 200
 
 interface Bbox { minLat: number; minLng: number; maxLat: number; maxLng: number; wraps: boolean }
@@ -204,7 +217,7 @@ export async function GET(req: Request) {
   // bucket, down from 0.1° — see CONDITIONS_BUCKET_DEG). fetchCurrentConditionsBatch
   // sends the misses as multi-location requests of 50 coordinates each rather
   // than one request per coordinate, and its runtime cache turns repeat
-  // requests within 5 min into instant hits.
+  // requests within 30 min into instant hits (CONDITIONS_TTL_SECONDS).
   //
   // The representative coordinate comes from the full dataset, so it does not
   // shift when the caller filters by difficulty/country — which previously
@@ -224,46 +237,67 @@ export async function GET(req: Request) {
 
   // The ceiling holds regardless of how the caller got here — no bbox at all,
   // an unparseable one, a whole-world box at zoom 2, a huge filtered sweep, a
-  // cache-busted attack URL. Serving grey "unknown" markers at ZERO upstream
-  // cost beats attempting the fan-out: an over-budget sweep gets refused
-  // upstream wholesale anyway, greys every pin for every visitor, and takes
-  // the shared daily budget (and the individual spot pages' headroom) with it.
-  // The short TTL means the pins colour in as soon as the caller scopes down.
+  // cache-busted attack URL. Over it, sample rather than refuse (see the note
+  // on MAX_CONDITION_BUCKETS). Because the sample levels nest, a caller zooming
+  // out re-reads buckets the batch cache already holds — the pins recolour at
+  // coarser resolution instead of going grey, at near-zero upstream cost.
+  let points = bucketKeys.map((k) => buckets.get(k)!)
+  let keyOf = (spot: { lat: number; lng: number }) => conditionsBucketKey(spot.lat, spot.lng)
+  let approx = false
   if (bucketKeys.length > MAX_CONDITION_BUCKETS) {
-    monitor('warn', 'spots.conditions.refused_oversized', {
+    const plan = planConditionsOverview(spots, MAX_CONDITION_BUCKETS)
+    if (!plan) {
+      // Cannot happen for this dataset (the world fits at the coarsest level),
+      // but if it ever does the answer is grey markers at zero cost, not a
+      // global fan-out.
+      monitor('warn', 'spots.conditions.refused_oversized', {
+        buckets: bucketKeys.length,
+        spots: spots.length,
+        scoped: !!bbox,
+      })
+      const refused = spots.map((spot) => ({
+        id:              spot.id,
+        slug:            spot.slug,
+        name:            spot.name,
+        region:          spot.region,
+        country:         spot.country,
+        lat:             spot.lat,
+        lng:             spot.lng,
+        difficulty:      spot.difficulty,
+        facingDirection: spot.facingDirection,
+        bottomType:      spot.bottomType,
+        parkingOptions:  spot.parkingOptions,
+        currentRating:      'unknown',
+        currentWaveHeight:  null,
+        currentFaceHeight:  null,
+        currentPeriod:      null,
+        currentWindSpeed:   null,
+        currentWindDir:     null,
+        wavePower:          null,
+      }))
+      return NextResponse.json(refused, { headers: cdnCacheHeaders(20, 60) })
+    }
+    monitor('info', 'spots.conditions.overview', {
+      level: plan.level,
+      cellDeg: plan.cellDeg,
+      cells: plan.points.length,
       buckets: bucketKeys.length,
       spots: spots.length,
       scoped: !!bbox,
     })
-    const refused = spots.map((spot) => ({
-      id:              spot.id,
-      slug:            spot.slug,
-      name:            spot.name,
-      region:          spot.region,
-      country:         spot.country,
-      lat:             spot.lat,
-      lng:             spot.lng,
-      difficulty:      spot.difficulty,
-      facingDirection: spot.facingDirection,
-      bottomType:      spot.bottomType,
-      parkingOptions:  spot.parkingOptions,
-      currentRating:      'unknown',
-      currentWaveHeight:  null,
-      currentFaceHeight:  null,
-      currentPeriod:      null,
-      currentWindSpeed:   null,
-      currentWindDir:     null,
-      wavePower:          null,
-    }))
-    return NextResponse.json(refused, { headers: cdnCacheHeaders(20, 60) })
+    points = plan.points
+    keyOf = (spot) => {
+      const rep = plan.pointFor(spot.lat, spot.lng)
+      return conditionsBucketKey(rep.lat, rep.lng)
+    }
+    approx = true
   }
 
-  const omResults = await fetchCurrentConditionsBatch(
-    bucketKeys.map((k) => buckets.get(k)!)
-  ).catch(() => bucketKeys.map(() => null))
+  const omResults = await fetchCurrentConditionsBatch(points)
+    .catch(() => points.map(() => null))
 
   const omMap = new Map<string, CurrentMarineConditions | null>()
-  bucketKeys.forEach((k, i) => omMap.set(k, omResults[i] ?? null))
+  points.forEach((p, i) => omMap.set(conditionsBucketKey(p.lat, p.lng), omResults[i] ?? null))
 
   type EnrichedSpot = (typeof spots)[0] & {
     currentRating: string
@@ -312,8 +346,7 @@ export async function GET(req: Request) {
   }
 
   const enriched: EnrichedSpot[] = spots.map((spot) => {
-    const key = conditionsBucketKey(spot.lat, spot.lng)
-    const om = omMap.get(key)
+    const om = omMap.get(keyOf(spot))
 
     if (om && om.waveHeight > 0) {
       // Real swell/windsea partition from the model — no more `waveHeight * 0.7`
@@ -445,6 +478,10 @@ export async function GET(req: Request) {
       ? degreesToCompass(spot.currentWindDirection)
       : null,
     wavePower:          spot.wavePower,
+    // Set only on a sampled overview: the reading came from this spot's cell
+    // representative, up to cellDeg away. Omitted (not false) when exact, so
+    // the common payload does not grow by a field × 1,500 spots.
+    ...(approx ? { approx: true as const } : {}),
   }))
   // A long stale window is the point: conditions up to 15 min old served
   // instantly beat a 5 s block on a cold Open-Meteo fan-out, and the client
@@ -462,7 +499,8 @@ export async function GET(req: Request) {
     monitor('warn', 'spots.conditions.degraded', {
       unknown: unknownCount,
       total: response.length,
-      buckets: bucketKeys.length,
+      buckets: points.length,
+      approx,
       scoped: !!bbox,
     })
   }

@@ -181,23 +181,66 @@ describe('GET /api/spots?withConditions=true&bbox=', () => {
     batchCalls.length = 0
   })
 
-  // An unscoped sweep is ~1,192 buckets, ~2,384 upstream calls — the ceiling
-  // refuses it outright: every marker comes back `unknown`, nothing is fetched,
-  // and the response is cached only briefly so pins colour in on zoom/filter.
-  it('refuses to fan out for an unscoped sweep — zero upstream calls', async () => {
+  // An unscoped sweep is ~1,192 buckets, ~2,384 upstream calls. The ceiling
+  // does not refuse it (that greyed the whole map the moment anyone zoomed
+  // out); it SAMPLES: one representative per coarse cell, at most 200 of them,
+  // and every spot is scored against its cell's reading and flagged `approx`.
+  it('samples an unscoped sweep — at most 200 upstream points, every spot rated', async () => {
     const res = await GET(new Request('http://localhost/api/spots?withConditions=true'))
     const spots = await res.json() as Record<string, unknown>[]
-    expect(batchCalls).toHaveLength(0)
+    expect(batchCalls).toHaveLength(1)
+    expect(batchCalls[0].length).toBeGreaterThan(50)
+    expect(batchCalls[0].length).toBeLessThanOrEqual(200)
     expect(spots.length).toBeGreaterThan(1000)
-    expect(spots.every((s) => s.currentRating === 'unknown')).toBe(true)
-    expect(res.headers.get('Vercel-CDN-Cache-Control')).toMatch(/s-maxage=20/)
+    expect(spots.every((s) => s.currentRating !== 'unknown')).toBe(true)
+    expect(spots.every((s) => s.approx === true)).toBe(true)
+    expect(res.headers.get('Vercel-CDN-Cache-Control')).toMatch(/s-maxage=180/)
   })
 
-  it('still fans out for a scoped viewport', async () => {
-    await getSpots('withConditions=true&bbox=32,-118,34,-117')
+  it('fans out exactly for a scoped viewport, with no approx flag', async () => {
+    const spots = await getSpots('withConditions=true&bbox=32,-118,34,-117')
     expect(batchCalls).toHaveLength(1)
     expect(batchCalls[0].length).toBeGreaterThan(0)
     expect(batchCalls[0].length).toBeLessThanOrEqual(200)
+    expect(spots.every((s) => !('approx' in s))).toBe(true)
+  })
+
+  // Zooming out must not cost a fresh fan-out per level: each coarser sample
+  // is a subset of the finer one, so the batch cache already holds it. Four
+  // zoom levels at ~400 fresh calls each would breach 600/min on one scroll.
+  it('nests the samples: a coarser view fetches a subset of the finer view', async () => {
+    const pointKey = (p: GeoPoint) => `${p.lat},${p.lng}`
+    // North America (~480 fine buckets) → sampled; whole world → sampled coarser.
+    await getSpots('withConditions=true&bbox=10,-150,60,-60')
+    const regional = new Set(batchCalls[0].map(pointKey))
+    batchCalls.length = 0
+    await getSpots('withConditions=true&bbox=-90,-180,90,180')
+    const world = batchCalls[0].map(pointKey)
+    const worldInRegion = world.filter((k) => {
+      const [lat, lng] = k.split(',').map(Number)
+      return lat >= 10 && lat <= 60 && lng >= -150 && lng <= -60
+    })
+    expect(worldInRegion.length).toBeGreaterThan(0)
+    expect(worldInRegion.every((k) => regional.has(k))).toBe(true)
+  })
+
+  // The sample point is the cell's representative, and a cell never straddles
+  // the caller's bbox edge in a way that moves it: the same spot scores
+  // against the same reading whether the box is wide or narrow at that level.
+  it('keeps a cell’s representative stable when the bbox edge moves', async () => {
+    const pointKey = (p: GeoPoint) => `${p.lat},${p.lng}`
+    await getSpots('withConditions=true&bbox=10,-150,60,-60')
+    const a = new Set(batchCalls[0].map(pointKey))
+    batchCalls.length = 0
+    await getSpots('withConditions=true&bbox=10,-150,60,-50')
+    const b = new Set(batchCalls[0].map(pointKey))
+    // Same level → the wider box adds cells but moves none; a coarser level →
+    // its points are a subset of the finer ones. Either way one sample nests
+    // inside the other. Representatives that shifted with the box would break
+    // both containments.
+    const aInB = [...a].every((k) => b.has(k))
+    const bInA = [...b].every((k) => a.has(k))
+    expect(aInB || bInA).toBe(true)
   })
 
   it('returns only the spots inside the box', async () => {
@@ -239,14 +282,16 @@ describe('GET /api/spots?withConditions=true&bbox=', () => {
   // An unusable bbox must not become a global fan-out — that was the fail-open
   // hole: `bbox=garbage` skipped the filter entirely and cost ~2,384 upstream
   // calls, and the CDN keying on the full query string made every variant a
-  // fresh cache miss. Unusable now degrades to the refused (all-unknown,
-  // zero-fetch) response; the pins still render, just grey.
+  // fresh cache miss. Unusable now degrades to the sampled overview: the same
+  // ≤200 representatives every other oversized request reads, so a
+  // cache-busting URL variant costs nothing new upstream.
   for (const bad of ['nonsense', '1,2,3', '34,-117,32,-118', '10,20,30']) {
-    it(`refuses the fan-out for an unusable bbox (${bad}) without dropping the markers`, async () => {
+    it(`samples an unusable bbox (${bad}) within the ceiling, keeping the markers`, async () => {
       const spots = await getSpots(`withConditions=true&bbox=${encodeURIComponent(bad)}`)
       expect(spots.length).toBeGreaterThan(100)
-      expect(batchCalls).toHaveLength(0)
-      expect(spots.every((s) => s.currentRating === 'unknown')).toBe(true)
+      expect(batchCalls).toHaveLength(1)
+      expect(batchCalls[0].length).toBeLessThanOrEqual(200)
+      expect(spots.every((s) => s.approx === true)).toBe(true)
     })
   }
 
@@ -264,11 +309,12 @@ describe('GET /api/spots?withConditions=true&bbox=', () => {
     }
   })
 
-  it('refuses the whole-world box outright', async () => {
+  it('samples the whole-world box within the ceiling', async () => {
     const spots = await getSpots('withConditions=true&bbox=-90,-180,90,180')
-    expect(batchCalls).toHaveLength(0)
+    expect(batchCalls).toHaveLength(1)
+    expect(batchCalls[0].length).toBeLessThanOrEqual(200)
     expect(spots.length).toBeGreaterThan(1000)
-    expect(spots.every((s) => s.currentRating === 'unknown')).toBe(true)
+    expect(spots.every((s) => s.currentRating !== 'unknown')).toBe(true)
   })
 })
 
