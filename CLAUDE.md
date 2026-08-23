@@ -26,10 +26,13 @@ Upstash Redis, deployed on Vercel at https://wave-finder.vercel.app.
   `factors.wind`) and a failed wind fetch THROWS instead of caching an empty
   structure over the 24 h last-known-good copy. `next` is 16.3.2; the postcss
   override is 8.5.23 (8.5.10 carried three high file-read advisories).
-  CoastalAlertsPanel (official NWS warnings) is mounted; **SolarPanel is
-  deliberately unmounted** — it formats UTC times in the viewer's browser
-  timezone, wrong for any remote spot; thread the spot's IANA timezone (free
-  from Open-Meteo) through the forecast payload before wiring it.
+  CoastalAlertsPanel (official NWS warnings) is mounted. SolarPanel is
+  mounted as of 2026-08-22: the forecast payload now carries the spot's IANA
+  `timezone` (from Open-Meteo) beside `utcOffsetSeconds`, and
+  `lib/forecast/local-time.ts` formats instants in it — zone → offset → null,
+  NEVER the viewer's clock (StormAlerts had the same bug; same helper). The
+  home hero reads `/api/spots?markers=true` (no `country`/`slug`; `slug` is
+  `id`); below-fold spot panels are `next/dynamic` with SSR on.
 
 - **Latest audit (read this first):** `docs/audit/05-post-deploy-audit-2026-06-09.md`
   — post-deploy audit with the prioritized open-work list. Done since
