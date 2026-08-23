@@ -65,11 +65,19 @@ function bboxParam(b: MapBounds): string {
 }
 
 export function LiveMapHero({ spotCount }: Props) {
-  // Slim payload: marker-essential fields only (~70% smaller than full)
-  // so the map can render pins as soon as possible on mobile.
+  // Marker payload: the leanest projection the map can draw a pin from —
+  // 230 KB against ?slim=true's 298 KB, and 53 KB against 61 KB on the wire.
+  // The hero never reads `country`, and the route omits `slug` because the
+  // static store keys spots BY slug, so it is identical to `id` (see the
+  // header of lib/spots/static-store.ts). It is re-attached here rather than
+  // shipped twice: SpotMap's popup builds `/spots/${spot.slug}`, and a pin
+  // outside the conditions bbox has no other source for it.
   const { data: baseSpots = [], isLoading: spotsLoading } = useQuery<SpotWithRating[]>({
     queryKey: ['spots-home-base'],
-    queryFn: () => fetch('/api/spots?slim=true').then((r) => r.json()),
+    queryFn: () =>
+      fetch('/api/spots?markers=true')
+        .then((r) => r.json())
+        .then((rows: SpotWithRating[]) => rows.map((s) => ({ ...s, slug: s.id }))),
     staleTime: 30 * 60 * 1000,
   })
 

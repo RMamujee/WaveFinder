@@ -124,6 +124,20 @@ export async function GET(req: Request) {
   // Cuts the home payload from ~500 KB to ~150 KB so first paint on mobile
   // is faster.
   const slim = searchParams.get('slim') === 'true'
+  // ?markers=true is slim minus the two fields no map surface reads.
+  //
+  // `country` is never rendered — SpotMap's popups show `region` only. `slug`
+  // is byte-for-byte identical to `id` for every spot the static store serves
+  // (`id := slug`, see the header of lib/spots/static-store.ts), so shipping
+  // both duplicated a whole column; the caller re-attaches it. Measured over
+  // the full 1,482-spot dataset: 297.6 KB -> 230.1 KB raw (-22.7%), 61.0 KB ->
+  // 53.3 KB gzipped (-12.6%). The raw number is the one that matters on
+  // mobile — it is what JSON.parse walks before the first pin can be placed.
+  //
+  // Deliberately a SEPARATE flag rather than a trim of `slim`: /compare fetches
+  // ?slim=true and reads `country`, so narrowing that projection would silently
+  // blank a column there.
+  const markers = searchParams.get('markers') === 'true'
 
   // Resolve from the in-memory static store. The store's `id` is the slug, so
   // an ids= filter matches slug-shaped tokens; cuid-shaped tokens never match
@@ -194,6 +208,18 @@ export async function GET(req: Request) {
   }
 
   if (!withConditions) {
+    if (markers) {
+      // Every field here is read by SpotMap: lat/lng and facingDirection place
+      // the pin (the marker is nudged offshore along the spot's facing, so
+      // dropping it puts every pin at NaN), name/region/difficulty fill the
+      // popup, id keys the cluster signature and the conditions merge. Adding
+      // a field to the map means adding it here.
+      const markerSpots = spots.map((s) => ({
+        id: s.id, name: s.name, region: s.region,
+        lat: s.lat, lng: s.lng, difficulty: s.difficulty, facingDirection: s.facingDirection,
+      }))
+      return NextResponse.json(markerSpots, { headers: cdnCacheHeaders(600, 1800) })
+    }
     if (slim) {
       // Match the previous Prisma slim projection field-for-field.
       const slimSpots = spots.map((s) => ({
