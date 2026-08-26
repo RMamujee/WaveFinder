@@ -1,6 +1,7 @@
 import 'server-only'
 import { SURF_SPOTS_SEED } from '@/lib/spots-data'
 import { resolveSpotSlug } from './spot-aliases'
+import { harmonicStationForSpot } from '@/lib/tides/stations'
 import type { SurfSpot } from '@/types/spot'
 
 // In-memory store for the ~1,490 immutable surf spots.
@@ -38,6 +39,12 @@ function toStaticSpot(s: SeedSpot): SurfSpot {
       : 'intermediate',
     facingDirection: s.facingDirection,
     noaaTideStationId: s.noaaTideStationId ?? null,
+    // Resolved from the generated table rather than stored in the seed files.
+    // The mapping is a pure function of coordinates computed by a script, so
+    // keeping it in one generated JSON avoids a 1,242-line diff across the 11
+    // hand-authored spot files every time the station database is refreshed —
+    // and keeps the estuary-guard result and the mapping in the same artifact.
+    harmonicTideStationId: harmonicStationForSpot(s.slug),
     noaaBuoyId: s.noaaBuoyId ?? null,
     webcamUrl: s.webcamUrl ?? null,
     webcamType: s.webcamType ?? null,

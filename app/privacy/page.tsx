@@ -58,6 +58,15 @@ export default function PrivacyPage() {
         <a href="https://api.tidesandcurrents.noaa.gov/api/prod/">NOAA CO-OPS tides</a>,
         USGS, and EPA. None of those services receive your account identity from us.
       </p>
+      <p>
+        Tide predictions outside the United States are computed from harmonic constituents
+        published in <a href="https://www.seanoe.org/data/00980/109129/">TICON-4</a> (Hart-Davis M.,
+        Dettmering D., Seitz F., 2025, SEANOE, doi:10.17882/109129), used under{' '}
+        <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> and distributed via{' '}
+        <a href="https://openwaters.io/tides/database">@neaps/tide-database</a>. They are
+        predictions of the astronomical tide only and do not account for storm surge or
+        barometric effects.
+      </p>
 
       <h2>Your rights</h2>
       <p>

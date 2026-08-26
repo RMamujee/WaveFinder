@@ -209,6 +209,57 @@ Hand-editing them puts the seed and the script out of sync and the test fails.
   `--verify` probes every assigned station against the live API. The station
   snapshot in `scripts/data/noaa-tide-stations.json` is refreshed with
   `--refresh`; it is script/test-only and must not be imported by app code.
+- **Harmonic tide stations: `npx tsx scripts/map-harmonic-stations.ts --write`.**
+  CO-OPS is US-only, so 887 of 1,482 spots had no tide at all — blank chart, and
+  `scoreTide` renormalised itself away, meaning international spots were rated
+  on strictly fewer factors than Californian ones. This assigns each spot a
+  harmonic-constituent station from `@neaps/tide-database` (6,115 stations, 126
+  countries) within 100 km; `lib/api/harmonic-tides.ts` turns the constituents
+  into the same `TidePoint[]` the NOAA path returns, with **zero network calls**
+  (~20 ms of arithmetic for the whole 17-day window).
+  - **`@neaps/tide-database` is a devDependency and must never be imported by
+    app code** (58 MB). Only the generated
+    `lib/tides/data/harmonic-stations.json` and `@neaps/tide-predictor` (MIT,
+    zero deps) are importable at runtime — same rule as
+    `scripts/data/noaa-tide-stations.json`.
+  - **Nearest-by-distance is not safe on its own, and the guard is the point of
+    the script.** TICON-4 includes river, slough and canal gauges, and they are
+    frequently the closest station to a surf break. Measured against live CO-OPS
+    over 595 US spots, **31% of distance-only assignments were wrong**:
+    `goleta_slough` for Refugio and El Capitan, `watsonville_slough` for Pleasure
+    Point, `manasquan_river` (5× the real amplitude) for Manasquan Inlet,
+    `bethany_beach_canal` 0 km away carrying 17% of the real range, and a USGS
+    river gauge at the Santa Margarita mouth serving Trestles and San Onofre
+    0.805 m out of datum at r = 0.99. Every one looks perfectly plausible.
+  - **Two referees, whichever is stronger for the spot.** US spots are checked
+    against live CO-OPS predictions (ground truth: phase r ≥ 0.8, amplitude
+    ratio 0.6–1.6, **and** RMSE ≤ 0.35 m, which is the only test that catches a
+    pure datum shift). Everything else is checked against Open-Meteo
+    `sea_level_height_msl`, which matters because it is a Copernicus ocean model
+    rather than a tide gauge and so can tell that a gauge is in the wrong body of
+    water. Both halves of phase-and-amplitude are required —
+    `radhanagar-havelock-andaman` correlates at r = 0.96 while carrying 42% of
+    the real amplitude.
+  - **A downed referee aborts the run; it never writes.** "Everything failed the
+    check" and "the check could not run" both produce an empty table, and
+    writing that would read as a legitimate result. `GateUnavailableError` exits
+    2 and leaves the previous table alone. Relatedly, `lib/tides/stations.ts`
+    returns null for every lookup when `guard` is null in the JSON, so a
+    `--skip-guard` table is inert rather than quietly serving wrong tides.
+  - **CO-OPS throttles on a short rolling window** and says so only as a bare
+    `{"message":"Forbidden"}` — no 429, no `Retry-After`. The gate fetches each
+    distinct station once (595 spots share ~200 gauges), runs 2-wide with a
+    400 ms pause, and backs off 15/45/90 s on a throttle. Don't raise the
+    concurrency; a few hundred rapid calls earns a block lasting minutes.
+  - **Open-Meteo is firewalled on some networks**, so the international gate
+    cannot run everywhere. `--us-only` deliberately generates a US-only table;
+    re-run without it from a network that can reach
+    `marine-api.open-meteo.com` to add the rest of the world.
+  - An offline substitute for the guard (inland-sounding station name, USGS
+    source, or a tidal range anomalous against neighbouring stations) was built
+    and **measured against the CO-OPS ground truth: 74% recall, 40% precision,
+    and it discarded 23% of good assignments.** It is not a usable stand-in for
+    a real referee — don't reintroduce it.
 - **`bottomType`: `npx tsx scripts/backfill-bottom-type.ts`.** A stored seed
   field now, not a regex run against the description on every request (which
   meant editing marketing copy silently re-rated the spot). The store reads
