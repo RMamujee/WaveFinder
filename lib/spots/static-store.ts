@@ -185,6 +185,18 @@ export function conditionsBucketPoint(lat: number, lng: number): { lat: number; 
   return BUCKET_REPRESENTATIVE.get(conditionsBucketKey(lat, lng)) ?? { lat, lng }
 }
 
+/**
+ * Every conditions bucket in the dataset (~1,192), with the coordinate that
+ * represents it.
+ *
+ * The WW3 overview cron precomputes one grid snap per bucket. It has to cover
+ * the FINE buckets rather than any one overview level, because every coarse
+ * level's representative is drawn from a fine bucket's representative — so a
+ * blob keyed by fine bucket answers all nine levels from one pass.
+ */
+export const CONDITIONS_BUCKETS: ReadonlyArray<{ key: string; lat: number; lng: number }> =
+  [...BUCKET_REPRESENTATIVE].map(([key, p]) => ({ key, lat: p.lat, lng: p.lng }))
+
 // ── Coarse overview cells for wide viewports ─────────────────────────────────
 //
 // A zoomed-out map asks for more 0.05° buckets than one request may fan out to

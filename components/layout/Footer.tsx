@@ -59,6 +59,13 @@ export function Footer() {
                 (public domain, not endorsed)
               </li>
               <li>
+                Global wave model by{' '}
+                <a href="https://www.pacioos.hawaii.edu/waves/model-global/" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--text-2)' }}>
+                  PacIOOS
+                </a>{' '}
+                / NOAA WaveWatch III
+              </li>
+              <li>
                 Maps from{' '}
                 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--text-2)' }}>
                   OpenStreetMap

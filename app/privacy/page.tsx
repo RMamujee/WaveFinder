@@ -55,7 +55,10 @@ export default function PrivacyPage() {
       <p>
         Forecast data comes from <a href="https://open-meteo.com/">Open-Meteo</a>,{' '}
         <a href="https://www.ndbc.noaa.gov/">NOAA NDBC buoys</a>,{' '}
-        <a href="https://api.tidesandcurrents.noaa.gov/api/prod/">NOAA CO-OPS tides</a>,
+        <a href="https://api.tidesandcurrents.noaa.gov/api/prod/">NOAA CO-OPS tides</a>,{' '}
+        <a href="https://www.pacioos.hawaii.edu/waves/model-global/">PacIOOS WaveWatch III</a>{' '}
+        (NOAA WaveWatch III, hosted by the Pacific Islands Ocean Observing System at the
+        University of Hawai&apos;i — used for the zoomed-out world map),
         USGS, and EPA. None of those services receive your account identity from us.
       </p>
       <p>
