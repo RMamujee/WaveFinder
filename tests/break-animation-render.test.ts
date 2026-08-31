@@ -23,6 +23,19 @@ const SPOT: SurfSpot = {
   difficulty: 'intermediate', facingDirection: 210, bottomType: 'rock',
 }
 
+// Real Southern Hemisphere spot (lib/spots/australia-nz.ts) — the gate widened
+// 2026-08-31 to render worldwide, so the component must also produce clean,
+// finite markup (no NaN transform/rotation) for a spot well outside the old
+// California-only gate.
+const SOUTHERN_HEMISPHERE_SPOT: SurfSpot = {
+  id: 'bells-beach-victoria', slug: 'bells-beach-victoria', name: 'Bells Beach',
+  region: 'Torquay, Victoria', country: 'Australia',
+  lat: -38.3714, lng: 144.2836,
+  description:
+    "Australia's most iconic surf break and home of the world's longest-running professional surfing event. A powerful right-hand reef that handles massive Southern Ocean swells.",
+  difficulty: 'advanced', facingDirection: 210, bottomType: 'reef',
+}
+
 function hourWith(swellPeriod: number): ForecastHour {
   return {
     time: '2026-08-07T15:00', waveHeight: 1.2, faceHeight: 1.4, wavePeriod: 12,
@@ -34,8 +47,8 @@ function hourWith(swellPeriod: number): ForecastHour {
   }
 }
 
-function render(hour: ForecastHour | null): string {
-  return renderToStaticMarkup(createElement(BreakAnimation, { spot: SPOT, hour }))
+function render(hour: ForecastHour | null, spot: SurfSpot = SPOT): string {
+  return renderToStaticMarkup(createElement(BreakAnimation, { spot, hour }))
 }
 
 /** Every `<path>`/`<circle>`/`<g>` tag in the markup, as raw strings. */
@@ -102,5 +115,13 @@ describe('BreakAnimation markup', () => {
 
   it('describes itself for screen readers', () => {
     expect(render(hourWith(14))).toMatch(/aria-label="[^"]*Malibu[^"]*14 second swell period/)
+  })
+
+  it('renders clean, finite markup for a real Southern Hemisphere spot (Bells Beach)', () => {
+    const southernHour: ForecastHour = { ...hourWith(14), swellDirection: 195 }
+    const html = render(southernHour, SOUTHERN_HEMISPHERE_SPOT)
+    expect(html).not.toContain('NaN')
+    expect(html).toContain('animation-name:break-march')
+    expect(html).toMatch(/aria-label="[^"]*Bells Beach[^"]*reef break, right[^"]*14 second swell period/)
   })
 })
