@@ -6,42 +6,38 @@
 
 import type { SurfSpot } from '@/types/spot'
 
-// ── Region gate ─────────────────────────────────────────────────────────────
-// Ships for California first. The seed's `region` field is "Town, SubRegion"
-// (e.g. "La Jolla, San Diego", "Half Moon Bay, California") and — verified
-// against lib/spots-data.ts — most CA spots do NOT contain the literal word
-// "California"; a naive `.includes('California')` would miss almost all of
-// them. These are the SubRegion strings that actually appear in
-// CALIFORNIA_SPOTS today. This is deliberately NOT lib/region-hierarchy.ts:
-// that file is a separate filter-UI taxonomy whose spellings don't match the
-// stored `region` strings (e.g. it has "Ventura" / "Monterey" as bare state
-// entries and reuses "Central Coast" for Oregon too, while the seed stores
-// "Ventura County", "Monterey Bay", and Oregon spots as "Town, OR" — no
-// collision with the markers below, confirmed against every US region string
-// in the seed).
-//
-// To enable another state/country later, add a `country -> marker[]` entry
-// here — do NOT hardcode a slug list. New spots in an enabled region pick up
-// the animation automatically because this checks the stored fields, not an
-// identity list.
-const ANIMATED_REGIONS: Record<string, string[]> = {
-  USA: [
-    'California',
-    'San Diego',
-    'Orange County',
-    'Los Angeles',
-    'Ventura',
-    'Santa Barbara',
-    'Central Coast',
-    'Monterey',
-    'NorCal',
-  ],
-}
-
-export function isBreakAnimationRegion(spot: Pick<SurfSpot, 'country' | 'region'>): boolean {
-  const markers = ANIMATED_REGIONS[spot.country]
-  if (!markers) return false
-  return markers.some((marker) => spot.region.includes(marker))
+// ── Coverage gate ────────────────────────────────────────────────────────────
+// Used to ship for California only via an ANIMATED_REGIONS country->marker[]
+// allowlist. Audited 2026-08-31 before widening: every derivation below reads
+// only plain compass bearings (`facingDirection`, `hour.swellDirection`) and
+// free-text prose (`description`, `bottomType`), none of which are
+// hemisphere- or region-specific.
+//   - `deriveBreakHand` never touches facingDirection/swellDirection at all —
+//     handedness comes entirely from real-world prose ("left-hand",
+//     "right-hander"...) written for the actual wave, so it is already correct for a
+//     Southern Ocean right-hander (Bells) or a Bukit Peninsula left (Padang
+//     Padang) the same way it is for a Malibu right.
+//   - `relativeSwellAngle` is `swellDirection - facingDirection` on plain
+//     0-360 compass bearings (same convention `directionalExposure`/
+//     `angleDiff` use in lib/forecast/rating.ts) folded into (-180, 180]. That
+//     arithmetic has no latitude term and needs none: a bearing of 210 means
+//     "from the SSW" identically north and south of the equator, so the sign
+//     of the offset is not something a hemisphere could flip.
+//   - `deriveBreakArchetype`/`crestCountForPeriod`/`periodToSetInterval` read
+//     bottom material, prose, and swell period only.
+// Verified against the seed (`SURF_SPOTS_SEED`, 1,482 spots): every spot has
+// a numeric `facingDirection`, a `bottomType`, and a non-empty `description`
+// today, and both derivations already degrade to an honest default (`beach`,
+// `a-frame`) when prose gives no geometry/hand hint — see
+// `deriveBreakArchetype`'s and `deriveBreakHand`'s fallback branches. So there
+// is no region-specific class of spot to exclude; the only real requirement
+// is a finite `facingDirection`, since that one (unlike bottomType/
+// description) is used directly, unguarded, in `relativeSwellAngle`. Gating
+// on that field — not geography — is what makes a legacy/transitional row
+// (e.g. an unmigrated Postgres-cuid spot) degrade to "no animation" instead
+// of a NaN rotation, while every spot with real data renders automatically.
+export function hasBreakAnimationData(spot: Pick<SurfSpot, 'facingDirection'>): boolean {
+  return Number.isFinite(spot.facingDirection)
 }
 
 // ── Archetype: where it breaks ──────────────────────────────────────────────

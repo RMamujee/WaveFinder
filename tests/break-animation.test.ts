@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   deriveBreakArchetype,
   deriveBreakHand,
-  isBreakAnimationRegion,
+  hasBreakAnimationData,
   periodToSetInterval,
   crestCountForPeriod,
   MIN_CRESTS,
@@ -85,32 +85,95 @@ describe('deriveBreakHand', () => {
   })
 })
 
-describe('isBreakAnimationRegion', () => {
-  it('matches real California sub-region strings from the seed', () => {
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'La Jolla, San Diego' })).toBe(true)
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'Half Moon Bay, California' })).toBe(true) // Mavericks
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'Malibu, Los Angeles' })).toBe(true)
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'Arcata, NorCal' })).toBe(true)
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'Santa Cruz, Monterey Bay' })).toBe(true)
+describe('hasBreakAnimationData', () => {
+  // Widened 2026-08-31 from a California-only ANIMATED_REGIONS allowlist to a
+  // field-presence gate: the audit found every derivation below reads plain
+  // compass bearings and free-text prose, none of which are region- or
+  // hemisphere-specific (see the comment above the function). Every one of
+  // the 1,482 seed spots — US and international alike — has a numeric
+  // facingDirection today, so the gate is universal in practice; it exists to
+  // protect a future/legacy row that doesn't.
+  it('is true for any spot with a finite facingDirection, regardless of country', () => {
+    expect(hasBreakAnimationData({ facingDirection: 270 })).toBe(true) // USA
+    expect(hasBreakAnimationData({ facingDirection: 215 })).toBe(true) // Indonesia
+    expect(hasBreakAnimationData({ facingDirection: 210 })).toBe(true) // Australia
+    expect(hasBreakAnimationData({ facingDirection: 145 })).toBe(true) // South Africa
+    expect(hasBreakAnimationData({ facingDirection: 0 })).toBe(true) // due-north facing is a real bearing, not "missing"
   })
 
-  it('excludes the non-CA reference spots embedded in the CALIFORNIA_SPOTS array', () => {
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'North Shore, Oahu' })).toBe(false) // Pipeline
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'Brevard County, Florida' })).toBe(false) // Cocoa Beach
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'Outer Banks, North Carolina' })).toBe(false)
-    expect(isBreakAnimationRegion({ country: 'France', region: 'Landes, Nouvelle-Aquitaine' })).toBe(false) // Hossegor
-    expect(isBreakAnimationRegion({ country: 'Indonesia', region: 'Bukit Peninsula, Bali' })).toBe(false) // Uluwatu
+  it('is false when facingDirection is missing or non-finite', () => {
+    expect(hasBreakAnimationData({ facingDirection: undefined as unknown as number })).toBe(false)
+    expect(hasBreakAnimationData({ facingDirection: NaN })).toBe(false)
+    expect(hasBreakAnimationData({ facingDirection: Infinity })).toBe(false)
+  })
+})
+
+// ── Famous-wave fixtures across regions and hemispheres ─────────────────────
+// Real seed descriptions (lib/spots-data.ts, via the per-region files under
+// lib/spots/) for spots outside the old California-only gate. Peel direction
+// and archetype are checked against how each wave is actually known to break,
+// not just against the regex — this is what would have caught a
+// hemisphere-flipped derivation. All pass unmodified, which is the audit's
+// conclusion: `deriveBreakHand` never reads facingDirection/swellDirection (it
+// is pure prose), and `deriveBreakArchetype` never reads geography at all.
+describe('famous waves outside California (2026-08-31 gate-widening fixtures)', () => {
+  it('Backdoor Pipeline, Oahu, Hawaii, USA — reef, right (northern hemisphere)', () => {
+    const description =
+      'The right-hand barrel that breaks off the same peak as Pipeline, offering a thick, grinding tube over a razor-sharp reef. Considered one of the most dangerous waves in Hawaii.'
+    expect(deriveBreakArchetype('reef', description)).toBe('reef')
+    expect(deriveBreakHand(description)).toBe('right')
   })
 
-  it('excludes Baja California (Mexico) despite the literal substring "California"', () => {
-    expect(isBreakAnimationRegion({ country: 'Mexico', region: 'Ensenada, Baja California' })).toBe(false)
-    expect(isBreakAnimationRegion({ country: 'Mexico', region: 'La Paz, Baja California Sur' })).toBe(false)
+  it('Supertubos, Peniche, Portugal — beach break (Atlantic, northern hemisphere)', () => {
+    const description =
+      'Portugal\'s most powerful beach break, nicknamed the "European Pipeline." Fast, hollow barrels on NW swells at mid to low tide. Hosts the WSL Championship Tour annually.'
+    expect(deriveBreakArchetype('sand', description)).toBe('beach')
+    // The prose names no side — A-frame is the honest default, not a guess.
+    expect(deriveBreakHand(description)).toBe('a-frame')
   })
 
-  it('excludes other US states whose region strings do not carry a CA marker', () => {
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'Cannon Beach, OR' })).toBe(false)
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'La Push, WA' })).toBe(false)
-    expect(isBreakAnimationRegion({ country: 'USA', region: 'North Shore, Oahu' })).toBe(false)
+  it('Padang Padang, Bukit Peninsula, Bali, Indonesia — reef, left (southern hemisphere)', () => {
+    const description =
+      'A world-famous left-hand barrel through a cave entrance and down a steep cliff path. Heavy, shallow tubes over a coral reef. Featured in Eat Pray Love. Hosts the Rip Curl Cup on invitation only.'
+    expect(deriveBreakArchetype('coral', description)).toBe('reef')
+    expect(deriveBreakHand(description)).toBe('left')
+  })
+
+  it('Bells Beach, Torquay, Victoria, Australia — reef, right (Southern Ocean, southern hemisphere)', () => {
+    const description =
+      "Australia's most iconic surf break and home of the world's longest-running professional surfing event. A powerful right-hand reef that handles massive Southern Ocean swells. Easter hosts the Rip Curl Pro."
+    expect(deriveBreakArchetype('reef', description)).toBe('reef')
+    expect(deriveBreakHand(description)).toBe('right')
+  })
+
+  it('Supertubes, Jeffreys Bay, South Africa — point, right (southern hemisphere)', () => {
+    const description =
+      "Arguably the world's best right-hand point break. Supertubes at J-Bay is a flawless, long, hollow right that peels perfectly for hundreds of metres on S-SW swells. Home of the WSL J-Bay Open."
+    expect(deriveBreakArchetype('rock', description)).toBe('point')
+    expect(deriveBreakHand(description)).toBe('right')
+  })
+
+  it('Gravière, Hossegor, France — beach break (Atlantic, northern hemisphere)', () => {
+    const description =
+      'The most powerful beach break peak in Hossegor. The deepwater Hossegor channel delivers unfiltered SW Atlantic groundswell creating intense, barreling peaks. Hosts the WSL France event annually.'
+    expect(deriveBreakArchetype('sand', description)).toBe('beach')
+    expect(deriveBreakHand(description)).toBe('a-frame')
+  })
+
+  // relativeSwellAngle takes no latitude/hemisphere input — it is `swellDirection
+  // - facingDirection` on plain 0-360 compass bearings, the same convention
+  // lib/forecast/rating.ts's directionalExposure/angleDiff use. Pin real
+  // southern-hemisphere facingDirection values through it to confirm the sign
+  // convention holds without a hemisphere-specific branch: swell arriving
+  // exactly on a spot's facing bearing is always 0 off, and a swell a fixed
+  // number of degrees to one side is always signed the same way, wherever the
+  // spot sits on Earth.
+  it('relativeSwellAngle is hemisphere-blind for real southern-hemisphere facing directions', () => {
+    expect(relativeSwellAngle(210, 210)).toBe(0) // Bells, facingDirection 210, swell square on
+    expect(relativeSwellAngle(220, 210)).toBe(10) // Bells, swell 10° round from facing
+    expect(relativeSwellAngle(200, 210)).toBe(-10)
+    expect(relativeSwellAngle(145, 145)).toBe(0) // Supertubes J-Bay, facingDirection 145
+    expect(relativeSwellAngle(215, 215)).toBe(0) // Padang Padang, facingDirection 215
   })
 })
 

@@ -24,7 +24,7 @@ import { BestTimePanel } from '@/components/forecast/BestTimePanel'
 import { IdealConditionsPanel } from '@/components/forecast/IdealConditionsPanel'
 import { SpotSatelliteMap } from '@/components/forecast/SpotSatelliteMap'
 import { BreakAnimation } from '@/components/forecast/BreakAnimation'
-import { isBreakAnimationRegion } from '@/lib/forecast/break-animation'
+import { hasBreakAnimationData } from '@/lib/forecast/break-animation'
 // Below-fold panels, split out of the initial bundle.
 //
 // SSR stays ON: none of them touch window/canvas at render, the spot pages are
@@ -486,11 +486,11 @@ export function SpotForecastView({ spot }: Props) {
           />
         </div>
 
-        {/* Break Anatomy — California only for now; see isBreakAnimationRegion
-            to enable elsewhere. Uses the same client-recomputed `current` hour
-            as SwellPanel/IdealConditionsPanel so it never disagrees with the
-            numbers shown beside it. */}
-        {isBreakAnimationRegion(spot) && (
+        {/* Break Anatomy — renders worldwide; see hasBreakAnimationData for
+            the (field-presence, not geography) gate. Uses the same
+            client-recomputed `current` hour as SwellPanel/IdealConditionsPanel
+            so it never disagrees with the numbers shown beside it. */}
+        {hasBreakAnimationData(spot) && (
           <div>
             <SectionTitle>Break Anatomy</SectionTitle>
             <BreakAnimation spot={spot} hour={current} />
