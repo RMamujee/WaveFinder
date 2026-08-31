@@ -130,7 +130,11 @@ export const WW3_BOXES: readonly WW3Box[] = [
   { id: 'indonesia-w-australia',  latMin: -35.5, latMax:  -6.5, lonMin:  108.5, lonMax:  125.5 },
   { id: 'e-asia',                 latMin:   4.5, latMax:  41.5, lonMin:  116.5, lonMax:  143.5 },
   { id: 'w-pacific-islands',      latMin: -11.5, latMax:  17.5, lonMin:  132.5, lonMax:  165.5 },
-  { id: 'e-australia-nz',         latMin: -47.5, latMax: -12.5, lonMin:  130.5, lonMax:  180.0 },
+  // lonMax must stay ≤ 179.5: the lon180 axis ends there (0.5° centres), and a
+  // stop past the axis maximum is a griddap 404 — the whole box, refused. The
+  // 2° stride from 130.5 samples up to 178.5 either way, so nothing is lost.
+  // Caught live on the first production run: e-australia-nz:http_404.
+  { id: 'e-australia-nz',         latMin: -47.5, latMax: -12.5, lonMin:  130.5, lonMax:  179.5 },
 ]
 
 /**
