@@ -9,6 +9,7 @@ import { monitor } from '@/lib/monitoring'
 import type { SurfSpot } from '@/types/spot'
 import { fetchCurrentConditionsBatch } from '@/lib/api/open-meteo'
 import type { CurrentMarineConditions } from '@/lib/api/open-meteo'
+import { lookupWaveOverview, readWaveOverview } from '@/lib/api/ww3-overview'
 import { rateSurfConditions, computeWavePower, degreesToCompass, angleDiff } from '@/lib/forecast/rating'
 import type { SwellPartition } from '@/lib/forecast/rating'
 import { buildSpatialIndex, findNearestInIndex } from '@/lib/forecast/nearest-fallback'
@@ -319,11 +320,41 @@ export async function GET(req: Request) {
     approx = true
   }
 
-  const omResults = await fetchCurrentConditionsBatch(points)
-    .catch(() => points.map(() => null))
+  const pointKeys = points.map((p) => conditionsBucketKey(p.lat, p.lng))
+
+  // ── Sampled overviews are served from WaveWatch III, not Open-Meteo ─────────
+  // This is the whole reason the ww3 cron exists. Open-Meteo bills per
+  // location, so the sampled path — the one a zoomed-out map always takes —
+  // was still 162 × 2 = 324 billed calls, refreshed every 30 minutes, for
+  // readings nobody reads at spot-page precision anyway. The cron already
+  // snapped every conditions bucket to a WaveWatch III cell, so the same
+  // response can be assembled from a cache read at zero upstream cost.
+  //
+  // The fallback is not optional. If the blob is missing, older than 12 h, or
+  // covers less than 60% of the requested buckets, this falls through to the
+  // Open-Meteo sampling path EXACTLY as it was — greying the map is the one
+  // outcome that is never acceptable here, and a cron that has not run yet
+  // (first deploy, missed schedule, no Runtime Cache in this environment) must
+  // not be able to cause it. Below the bucket ceiling nothing changes at all:
+  // exact requests keep going to Open-Meteo's nearshore model, which is the
+  // same source the spot pages use and therefore the one the map must agree
+  // with.
+  const overview = approx
+    ? lookupWaveOverview(await readWaveOverview(), pointKeys)
+    : null
+  if (overview) {
+    monitor('info', 'spots.conditions.ww3_overview', {
+      cells: points.length,
+      coverage: Math.round(overview.coverage * 100) / 100,
+      spots: spots.length,
+    })
+  }
+  const omResults: (CurrentMarineConditions | null)[] = overview
+    ? overview.readings
+    : await fetchCurrentConditionsBatch(points).catch(() => points.map(() => null))
 
   const omMap = new Map<string, CurrentMarineConditions | null>()
-  points.forEach((p, i) => omMap.set(conditionsBucketKey(p.lat, p.lng), omResults[i] ?? null))
+  pointKeys.forEach((key, i) => omMap.set(key, omResults[i] ?? null))
 
   type EnrichedSpot = (typeof spots)[0] & {
     currentRating: string
