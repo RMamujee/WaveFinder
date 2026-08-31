@@ -6,6 +6,15 @@ import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { SurfSpot, ParkingOption } from '@/types/spot'
 import type { ConditionRating } from '@/types/forecast'
+import {
+  buildFlowIndex,
+  intensityFactorForHeight,
+  metersPerPixel,
+  particleCountForViewport,
+  sampleFlow,
+  speedFactorForPeriod,
+  type FlowIndex,
+} from '@/lib/forecast/swell-flow'
 
 interface SpotWithRating extends SurfSpot {
   currentRating?: ConditionRating | 'unknown'
@@ -28,6 +37,176 @@ export interface MapBounds {
   minLng: number
   maxLat: number
   maxLng: number
+}
+
+// ── Swell-flow layer ─────────────────────────────────────────────────────────
+// Animated particles drifting along the groundswell, drawn on a canvas that
+// sits above the tiles and below the markers — see the pane z-index note by
+// FLOW_PANE_Z_INDEX below. The math (bilinear interpolation, speed/intensity
+// curves, particle budget) lives in lib/forecast/swell-flow.ts, unit-tested
+// with fixtures; this file is the thin canvas/Leaflet wiring around it,
+// matching how the network layer stays thin elsewhere in this app.
+
+/** [lat, lng, heightM, periodS, dirDeg] — GET /api/waves-overview's cell shape. */
+type WaveFlowCell = [number, number, number, number, number]
+
+interface WaveFlowResponse {
+  time: number
+  cells: WaveFlowCell[]
+}
+
+interface FlowParticle {
+  lat: number
+  lng: number
+  /** Seconds since (re)spawn. Drives both the fade-in and the reset-lifetime. */
+  ageS: number
+}
+
+const FLOW_STORAGE_KEY = 'wavefinder:swell-flow-on'
+
+// Below this zoom the map is a regional/continental view, where the flow
+// layer's entire value — seeing a swell's shape across many grid cells — is
+// visible. Above it, the viewport sits inside one or two of the underlying
+// 2° WaveWatch III cells (see WW3_SPATIAL_STRIDE in lib/api/ww3-overview.ts)
+// and the layer would just be a handful of near-identical arrows, so it
+// defaults off there. Chosen against the zooms this app already uses for
+// "regional" views (world default 7, country views 4-6, NorCal-style
+// multi-city regions ~8) versus single-city views (10-11) and spot pages.
+const FLOW_ZOOM_THRESHOLD = 9
+
+// The route's own success-path freshness window (30 min) — no point polling
+// more often than the data can change.
+const FLOW_FETCH_INTERVAL_MS = 30 * 60 * 1000
+
+const FLOW_PANE_NAME = 'swell-flow'
+// Leaflet's own panes: tilePane 200, overlayPane 400, markerPane 600,
+// popupPane 700. Just above the overlay pane (so trails draw over tiles) and
+// well below markers/popups, so pins stay legible and clickable through it.
+const FLOW_PANE_Z_INDEX = '410'
+
+const FLOW_BASE_SPEED_PX_S = 24 // slowest (short-period) particle, screen px/s
+const FLOW_MAX_SPEED_PX_S = 68  // fastest (long-period groundswell)
+const FLOW_TRAIL_FADE_ALPHA = 0.06 // destination-out erosion per frame — the trail-fade technique
+const FLOW_LINE_WIDTH_MIN = 0.8
+const FLOW_LINE_WIDTH_MAX = 2.4
+const FLOW_PARTICLE_LIFETIME_S = 5.5 // reset a particle after this long so trails keep circulating
+const FLOW_METERS_PER_DEG_LAT = 111_320
+
+function flowNormalizeLng(lng: number): number {
+  return ((lng + 180) % 360 + 360) % 360 - 180
+}
+
+/** Deep ocean-600 at low intensity -> bright seafoam at high intensity — the
+ *  app's own "glow on water" accent, sampled from app/globals.css rather than
+ *  an invented palette. `fadeIn` ramps a freshly (re)spawned particle in
+ *  instead of popping it into view mid-trail. */
+function flowStrokeStyle(intensity: number, fadeIn: number): string {
+  const r = Math.round(13 + (77 - 13) * intensity)
+  const g = Math.round(98 + (191 - 98) * intensity)
+  const b = Math.round(168 + (202 - 168) * intensity)
+  const alpha = (0.32 + 0.5 * intensity) * fadeIn
+  return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
+}
+
+interface FlowLatLngBounds { south: number; north: number; west: number; east: number }
+
+/** A random ocean point inside `bounds` that the flow field actually covers,
+ *  or null if a handful of tries all landed on no-data (land, or a viewport
+ *  with little/no modelled ocean in it). */
+function respawnFlowParticle(index: FlowIndex, bounds: FlowLatLngBounds): FlowParticle | null {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const lat = bounds.south + Math.random() * (bounds.north - bounds.south)
+    const lng = flowNormalizeLng(bounds.west + Math.random() * (bounds.east - bounds.west))
+    if (sampleFlow(index, lat, lng)) return { lat, lng, ageS: 0 }
+  }
+  return null
+}
+
+/**
+ * Advance one particle by `dtSec` and stroke its old->new segment onto the
+ * canvas. Returns false (drawing nothing) when the particle has aged out or
+ * walked into a no-data cell — land kills the particle, per spec — so the
+ * caller knows to respawn it.
+ */
+function flowStepAndDraw(
+  map: import('leaflet').Map,
+  ctx: CanvasRenderingContext2D,
+  origin: { x: number; y: number },
+  index: FlowIndex,
+  particle: FlowParticle,
+  dtSec: number
+): boolean {
+  const sample = sampleFlow(index, particle.lat, particle.lng)
+  if (!sample || particle.ageS > FLOW_PARTICLE_LIFETIME_S) return false
+
+  const before = map.latLngToLayerPoint([particle.lat, particle.lng])
+
+  const speedFactor = speedFactorForPeriod(sample.periodS)
+  const speedPxS = FLOW_BASE_SPEED_PX_S + (FLOW_MAX_SPEED_PX_S - FLOW_BASE_SPEED_PX_S) * speedFactor
+  const distM = speedPxS * metersPerPixel(particle.lat, map.getZoom()) * dtSec
+  const headingRad = (sample.headingDeg * Math.PI) / 180
+  const cosLat = Math.max(Math.cos((particle.lat * Math.PI) / 180), 0.05)
+
+  particle.lat += (distM * Math.cos(headingRad)) / FLOW_METERS_PER_DEG_LAT
+  particle.lng = flowNormalizeLng(particle.lng + (distM * Math.sin(headingRad)) / (FLOW_METERS_PER_DEG_LAT * cosLat))
+  particle.ageS += dtSec
+
+  const after = map.latLngToLayerPoint([particle.lat, particle.lng])
+  const intensity = intensityFactorForHeight(sample.heightM)
+  ctx.strokeStyle = flowStrokeStyle(intensity, Math.min(1, particle.ageS / 0.6))
+  ctx.lineWidth = FLOW_LINE_WIDTH_MIN + (FLOW_LINE_WIDTH_MAX - FLOW_LINE_WIDTH_MIN) * intensity
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(before.x - origin.x, before.y - origin.y)
+  ctx.lineTo(after.x - origin.x, after.y - origin.y)
+  ctx.stroke()
+  return true
+}
+
+/**
+ * `prefers-reduced-motion: reduce` path: one static frame of direction
+ * arrows straight off the raw cell tuples (no interpolation, no animation
+ * loop) — no exceptions to the animated version running when this is set.
+ */
+function flowDrawStaticArrows(
+  map: import('leaflet').Map,
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  origin: { x: number; y: number },
+  cells: WaveFlowCell[]
+) {
+  ctx.clearRect(0, 0, width, height)
+  const bounds = map.getBounds().pad(0.25)
+  for (const [lat, lng, heightM, , dirDeg] of cells) {
+    if (!bounds.contains([lat, lng])) continue
+    const headingDeg = (dirDeg + 180) % 360
+    const intensity = intensityFactorForHeight(heightM)
+    const p = map.latLngToLayerPoint([lat, lng])
+    const x = p.x - origin.x
+    const y = p.y - origin.y
+    const len = 8 + intensity * 10
+    const rad = (headingDeg * Math.PI) / 180
+    const dx = Math.sin(rad) * len
+    const dy = -Math.cos(rad) * len // screen y grows downward; heading 0 = up
+
+    ctx.strokeStyle = flowStrokeStyle(intensity, 1)
+    ctx.lineWidth = FLOW_LINE_WIDTH_MIN + (FLOW_LINE_WIDTH_MAX - FLOW_LINE_WIDTH_MIN) * intensity
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(x - dx / 2, y - dy / 2)
+    ctx.lineTo(x + dx / 2, y + dy / 2)
+    ctx.stroke()
+
+    const tip = { x: x + dx / 2, y: y + dy / 2 }
+    const wing = Math.PI / 7
+    ctx.beginPath()
+    ctx.moveTo(tip.x, tip.y)
+    ctx.lineTo(tip.x + Math.sin(rad + Math.PI - wing) * 3.5, tip.y - Math.cos(rad + Math.PI - wing) * 3.5)
+    ctx.moveTo(tip.x, tip.y)
+    ctx.lineTo(tip.x + Math.sin(rad + Math.PI + wing) * 3.5, tip.y - Math.cos(rad + Math.PI + wing) * 3.5)
+    ctx.stroke()
+  }
 }
 
 interface Props {
@@ -242,6 +421,37 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
   onBoundsChangeRef.current = onBoundsChange
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Swell-flow layer state ──────────────────────────────────────────────
+  const flowPaneRef      = useRef<HTMLElement | null>(null)
+  const flowCanvasRef    = useRef<HTMLCanvasElement | null>(null)
+  const flowCtxRef       = useRef<CanvasRenderingContext2D | null>(null)
+  const flowCssSizeRef   = useRef({ w: 0, h: 0 })
+  const flowOriginRef    = useRef({ x: 0, y: 0 })
+  const flowIndexRef     = useRef<FlowIndex | null>(null)
+  const flowCellsRef     = useRef<WaveFlowCell[]>([])
+  const flowParticlesRef = useRef<FlowParticle[]>([])
+  const flowRafRef       = useRef<number | null>(null)
+  const flowLastTsRef    = useRef<number | null>(null)
+  const flowPausedRef    = useRef(false)
+  // True once the user has explicitly clicked the toggle (or a stored
+  // preference was found) — from then on the zoom-based default never
+  // overrides their choice again.
+  const flowHasExplicitPrefRef = useRef(false)
+
+  const [flowSupported, setFlowSupported]     = useState(false)
+  const [flowOn, setFlowOn]                   = useState(false)
+  const [flowDataVersion, setFlowDataVersion] = useState(0)
+  const [flowReducedMotion, setFlowReducedMotion] = useState(false)
+  // Mirrored into refs so the async map-init effect and event handlers (which
+  // must never close over stale state — same reasoning as seamarkOnRef below)
+  // always read the latest values.
+  const flowOnRef = useRef(flowOn)
+  flowOnRef.current = flowOn
+  const flowSupportedRef = useRef(flowSupported)
+  flowSupportedRef.current = flowSupported
+  const flowReducedMotionRef = useRef(flowReducedMotion)
+  flowReducedMotionRef.current = flowReducedMotion
+
   // Report the visible area, debounced. A pan is a continuous stream of
   // moveend/zoomend, and each distinct box is a fresh upstream fan-out — so
   // settle first, then ask.
@@ -257,6 +467,157 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
         maxLng: b.getEast(),
       })
     }, delayMs)
+  }
+
+  // ── Swell-flow layer wiring ────────────────────────────────────────────
+  // Canvas sizing/positioning, the requestAnimationFrame loop and the
+  // static-arrows fallback. The particle math itself lives in
+  // lib/forecast/swell-flow.ts; everything here is DOM/Leaflet plumbing.
+
+  function resizeFlowCanvas(map: import('leaflet').Map, canvas: HTMLCanvasElement) {
+    const size = map.getSize()
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    canvas.width = Math.round(size.x * dpr)
+    canvas.height = Math.round(size.y * dpr)
+    canvas.style.width = `${size.x}px`
+    canvas.style.height = `${size.y}px`
+    flowCssSizeRef.current = { w: size.x, h: size.y }
+    const ctx = canvas.getContext('2d')
+    if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  }
+
+  // Anchors the canvas's own (0,0) to the viewport's current top-left corner,
+  // expressed in the pane's own layer-point space. Leaflet pans the whole
+  // pane via a CSS transform on `.leaflet-map-pane`, so once positioned this
+  // way the canvas tracks the map on every pan for free — only a genuine
+  // resize/zoom/viewreset needs to call this again.
+  function repositionFlowCanvas(map: import('leaflet').Map, canvas: HTMLCanvasElement) {
+    const origin = map.containerPointToLayerPoint([0, 0])
+    flowOriginRef.current = { x: origin.x, y: origin.y }
+    canvas.style.transform = `translate3d(${origin.x}px, ${origin.y}px, 0)`
+  }
+
+  function stopFlowLoop() {
+    if (flowRafRef.current != null) {
+      cancelAnimationFrame(flowRafRef.current)
+      flowRafRef.current = null
+    }
+    flowLastTsRef.current = null
+  }
+
+  function flowFrame(ts: number) {
+    const map = mapInstance.current
+    const canvas = flowCanvasRef.current
+    const ctx = flowCtxRef.current
+    if (!map || !canvas || !ctx) { flowRafRef.current = null; return }
+    flowRafRef.current = requestAnimationFrame(flowFrame)
+    if (flowPausedRef.current || document.hidden) { flowLastTsRef.current = null; return }
+
+    const index = flowIndexRef.current
+    if (!index) return
+    const last = flowLastTsRef.current
+    flowLastTsRef.current = ts
+    if (last == null) return // first tick after (re)start — dt is unknown, skip
+    const dtSec = Math.min((ts - last) / 1000, 0.1) // clamp a long gap (tab was throttled)
+
+    const { w, h } = flowCssSizeRef.current
+    const origin = flowOriginRef.current
+    // Fade previous trails via alpha erosion (destination-out) rather than
+    // clearing — the classic particle-trail technique. The canvas itself
+    // stays otherwise fully transparent, so the basemap underneath is never
+    // washed out by an accumulating tint.
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.fillStyle = `rgba(0,0,0,${FLOW_TRAIL_FADE_ALPHA})`
+    ctx.fillRect(0, 0, w, h)
+    ctx.globalCompositeOperation = 'source-over'
+
+    const b = map.getBounds()
+    const bounds: FlowLatLngBounds = { south: b.getSouth(), north: b.getNorth(), west: b.getWest(), east: b.getEast() }
+
+    const particles = flowParticlesRef.current
+    for (let i = 0; i < particles.length; i++) {
+      const drew = flowStepAndDraw(map, ctx, origin, index, particles[i], dtSec)
+      if (!drew) {
+        const fresh = respawnFlowParticle(index, bounds)
+        if (fresh) particles[i] = fresh
+        // else: leave it — it retries respawn next frame rather than
+        // shrinking the pool when a viewport briefly has little ocean in it.
+      }
+    }
+  }
+
+  function startFlowLoop() {
+    if (flowRafRef.current != null) return
+    flowLastTsRef.current = null
+    flowRafRef.current = requestAnimationFrame(flowFrame)
+  }
+
+  // (Re)builds the particle pool when the target count (viewport area x DPR)
+  // has changed, or there is no pool yet. Not per-frame — called only at
+  // state-change points (layer turned on, new data, resize/zoom settled).
+  function seedFlowParticles(map: import('leaflet').Map) {
+    const index = flowIndexRef.current
+    if (!index) { flowParticlesRef.current = []; return }
+    const { w, h } = flowCssSizeRef.current
+    const target = particleCountForViewport(w, h, Math.min(window.devicePixelRatio || 1, 2))
+    if (flowParticlesRef.current.length === target) return
+    const b = map.getBounds()
+    const bounds: FlowLatLngBounds = { south: b.getSouth(), north: b.getNorth(), west: b.getWest(), east: b.getEast() }
+    const next: FlowParticle[] = []
+    for (let i = 0; i < target; i++) {
+      const p = respawnFlowParticle(index, bounds)
+      if (p) next.push(p)
+    }
+    flowParticlesRef.current = next
+  }
+
+  // The single entry point that reconciles the canvas with the current
+  // on/off + data + motion-preference state. Called both from the async
+  // map-init effect (reading refs, so it is correct even if data arrived
+  // before Leaflet finished loading — see the note by seamarkOnRef restore
+  // below) and from the dedicated useEffect that reacts to state changes
+  // once the map already exists.
+  function applyFlowState() {
+    const map = mapInstance.current
+    const canvas = flowCanvasRef.current
+    const ctx = flowCtxRef.current
+    if (!map || !canvas || !ctx) return
+
+    if (!flowOnRef.current || !flowSupportedRef.current) {
+      canvas.style.display = 'none'
+      stopFlowLoop()
+      return
+    }
+
+    canvas.style.display = 'block'
+    resizeFlowCanvas(map, canvas)
+    repositionFlowCanvas(map, canvas)
+
+    if (flowReducedMotionRef.current) {
+      stopFlowLoop()
+      flowDrawStaticArrows(map, ctx, flowCssSizeRef.current.w, flowCssSizeRef.current.h, flowOriginRef.current, flowCellsRef.current)
+    } else {
+      seedFlowParticles(map)
+      startFlowLoop()
+    }
+  }
+
+  // Called on every settled pan/zoom/resize — repositions the canvas and, for
+  // the static-arrows path, redraws (the animated path just keeps looping
+  // and reads fresh map state every frame, so it needs nothing extra here).
+  function handleFlowViewChange() {
+    const map = mapInstance.current
+    const canvas = flowCanvasRef.current
+    const ctx = flowCtxRef.current
+    if (!map || !canvas) return
+    resizeFlowCanvas(map, canvas)
+    repositionFlowCanvas(map, canvas)
+    if (!flowOnRef.current || !flowSupportedRef.current) return
+    if (flowReducedMotionRef.current) {
+      if (ctx) flowDrawStaticArrows(map, ctx, flowCssSizeRef.current.w, flowCssSizeRef.current.h, flowOriginRef.current, flowCellsRef.current)
+    } else {
+      seedFlowParticles(map)
+    }
   }
 
   // Show or hide parking layer based on current zoom level
@@ -452,6 +813,9 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
         mapInstance.current = null
         clusterRef.current = null
         parkingLayerRef.current = null
+        stopFlowLoop()
+        flowCanvasRef.current = null
+        flowCtxRef.current = null
       }
 
       const map = L.map(mapRef.current, {
@@ -493,6 +857,48 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
         }
       })
 
+      // ── Swell-flow canvas pane ──────────────────────────────────────────
+      // A genuine Leaflet pane (not a plain sibling div) so it can sit
+      // between the tile pane and the marker pane — see FLOW_PANE_Z_INDEX.
+      const flowPane = map.getPane(FLOW_PANE_NAME) ?? map.createPane(FLOW_PANE_NAME)
+      flowPane.style.zIndex = FLOW_PANE_Z_INDEX
+      flowPane.style.pointerEvents = 'none'
+      flowPaneRef.current = flowPane
+
+      const flowCanvas = document.createElement('canvas')
+      flowCanvas.style.position = 'absolute'
+      flowCanvas.style.top = '0'
+      flowCanvas.style.left = '0'
+      flowCanvas.style.pointerEvents = 'none'
+      flowCanvas.style.display = 'none' // applyFlowState() below decides visibility
+      flowPane.appendChild(flowCanvas)
+      flowCanvasRef.current = flowCanvas
+      flowCtxRef.current = flowCanvas.getContext('2d')
+      resizeFlowCanvas(map, flowCanvas)
+      repositionFlowCanvas(map, flowCanvas)
+
+      // Pause the loop for the duration of a drag/zoom animation — mid-gesture
+      // is also when the canvas's own layer-point origin is stale, so drawing
+      // during it would misplace every particle until the next settle.
+      map.on('movestart zoomstart', () => { flowPausedRef.current = true })
+      map.on('moveend zoomend resize', () => {
+        flowPausedRef.current = false
+        handleFlowViewChange()
+      })
+      // Zoom crossing the regional/spot-level threshold flips the default —
+      // but only until the user makes an explicit choice (flowHasExplicitPrefRef).
+      map.on('zoomend', () => {
+        if (flowHasExplicitPrefRef.current) return
+        const shouldBeOn = map.getZoom() <= FLOW_ZOOM_THRESHOLD
+        setFlowOn((prev) => (prev === shouldBeOn ? prev : shouldBeOn))
+      })
+
+      // Restore flow-layer state after a re-init (region change, etc.) —
+      // reads refs rather than the closed-over state, so it is correct even
+      // if the /api/waves-overview fetch resolved before Leaflet did (same
+      // reasoning as the seamarkOnRef restore above).
+      applyFlowState()
+
       // Conditions follow the viewport. The first report is immediate — the map
       // has nothing to colour until it lands.
       map.on('moveend', () => reportBounds(map))
@@ -505,16 +911,110 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
         clearTimeout(boundsTimer.current)
         boundsTimer.current = null
       }
+      stopFlowLoop()
+      flowParticlesRef.current = []
       if (mapInstance.current) {
         mapInstance.current.remove()
         mapInstance.current = null
         clusterRef.current = null
         parkingLayerRef.current = null
         seamarkLayerRef.current = null
+        flowCanvasRef.current = null
+        flowCtxRef.current = null
+        flowPaneRef.current = null
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerLat, centerLng, zoom])
+
+  // Reconcile the canvas with on/off + data + motion-preference changes once
+  // the map already exists (mirrors the seamarkOn effect below).
+  useEffect(() => {
+    if (!mapInstance.current) return
+    applyFlowState()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowOn, flowSupported, flowReducedMotion, flowDataVersion])
+
+  // One-time: the user's stored preference wins outright; otherwise default
+  // from the initial zoom prop (live zoom changes are handled by the
+  // 'zoomend' listener in the init effect above).
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(FLOW_STORAGE_KEY)
+      if (stored === 'on' || stored === 'off') {
+        flowHasExplicitPrefRef.current = true
+        setFlowOn(stored === 'on')
+        return
+      }
+    } catch { /* localStorage unavailable — fall through to the zoom default */ }
+    setFlowOn(zoom <= FLOW_ZOOM_THRESHOLD)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // `prefers-reduced-motion: reduce` -> static arrows, no exceptions.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const update = () => setFlowReducedMotion(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  // Pause the rAF loop while the tab is hidden, not just while it's backgrounded
+  // between frames — stops scheduling entirely rather than relying on the
+  // browser's own background throttling.
+  useEffect(() => {
+    function onVisibility() {
+      if (document.hidden) {
+        stopFlowLoop()
+      } else if (flowOnRef.current && flowSupportedRef.current && !flowReducedMotionRef.current) {
+        startFlowLoop()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Fetch the swell-flow grid once, then on the route's own freshness cadence.
+  // Never surfaces an error state: any non-200 or a network failure just
+  // leaves the layer (and its toggle) hidden, or leaves the last-known-good
+  // field in place if one was already loaded.
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch('/api/waves-overview')
+        if (cancelled) return
+        if (res.status !== 200) {
+          flowCellsRef.current = []
+          flowIndexRef.current = null
+          setFlowSupported(false)
+          return
+        }
+        const data = (await res.json()) as WaveFlowResponse
+        if (cancelled || !Array.isArray(data.cells) || data.cells.length === 0) {
+          if (!cancelled) {
+            flowCellsRef.current = []
+            flowIndexRef.current = null
+            setFlowSupported(false)
+          }
+          return
+        }
+        flowCellsRef.current = data.cells
+        flowIndexRef.current = buildFlowIndex(data.cells)
+        setFlowSupported(true)
+        setFlowDataVersion((v) => v + 1)
+      } catch {
+        // Network hiccup — degrade silently and let the next interval retry;
+        // do not blank out data that was already loading successfully.
+      }
+    }
+    load()
+    const interval = setInterval(load, FLOW_FETCH_INTERVAL_MS)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [])
 
   // Add / remove OpenSeaMap seamark overlay when toggle changes
   useEffect(() => {
@@ -597,6 +1097,15 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
     )
   }
 
+  function handleFlowToggle() {
+    const next = !flowOnRef.current
+    flowHasExplicitPrefRef.current = true
+    setFlowOn(next)
+    try {
+      localStorage.setItem(FLOW_STORAGE_KEY, next ? 'on' : 'off')
+    } catch { /* localStorage unavailable — the choice just won't persist */ }
+  }
+
   // Update blue dot and pan map when GPS location changes
   useEffect(() => {
     if (!mapInstance.current || !gpsLocation) return
@@ -667,6 +1176,31 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
         </svg>
         Ocean
       </button>
+
+      {/* Swell-flow toggle — hidden entirely when the overview has no data to
+          show (see flowSupported), never shown as a broken/disabled control. */}
+      {flowSupported && (
+        <button
+          onClick={handleFlowToggle}
+          title={flowOn ? 'Hide animated swell flow' : 'Show animated swell flow'}
+          aria-pressed={flowOn}
+          className="absolute z-[1000] flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all"
+          style={{
+            bottom: '168px',
+            right: '10px',
+            background: flowOn ? 'var(--ocean-600)' : 'rgba(255,255,255,0.95)',
+            color: flowOn ? 'white' : 'var(--text-2)',
+            border: `1px solid ${flowOn ? 'var(--ocean-600)' : 'var(--border)'}`,
+            boxShadow: '0 1px 5px rgba(0,0,0,0.2)',
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M2 8c2-3 4-3 6 0s4 3 6 0 4-3 6 0" />
+            <path d="M2 15c2-3 4-3 6 0s4 3 6 0 4-3 6 0" />
+          </svg>
+          Swell Flow
+        </button>
+      )}
     </div>
   )
 }

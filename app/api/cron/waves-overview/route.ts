@@ -6,16 +6,19 @@ import {
   WW3_BOXES,
   buildGriddapUrl,
   buildGridIndex,
+  cellToGridTuple,
   cellToOverviewEntry,
   gridCellKey,
   parseGriddapGrid,
   snapToNearestCell,
+  writeWaveGrid,
   writeWaveOverview,
   ww3TimeRange,
   type WW3Box,
   type WW3Cell,
   type WW3Index,
   type WW3TimeRange,
+  type WaveGridCellTuple,
   type WaveOverviewEntry,
 } from '@/lib/api/ww3-overview'
 
@@ -168,8 +171,38 @@ export async function GET(req: NextRequest) {
       entries,
     })
 
+    // The flow-layer grid — a SEPARATE cache entry, keyed by raw grid cell
+    // rather than by conditions bucket, so the map's animated swell layer can
+    // interpolate between neighbouring cells instead of snapping bucket to
+    // bucket. Built from `slices`/`times`, already computed above — no second
+    // fetch. Shares the overview blob's no-overwrite-on-total-failure
+    // semantics for free: both are unreachable once `times.length === 0` above
+    // has already returned.
+    const gridCells: WaveGridCellTuple[][] = times.map((t) => {
+      const slice = slices.get(t)
+      if (!slice) return []
+      const tuples: WaveGridCellTuple[] = []
+      for (const cell of slice.values()) {
+        const tuple = cellToGridTuple(cell)
+        if (tuple) tuples.push(tuple)
+      }
+      return tuples
+    })
+    const gridCellCount = gridCells.reduce((n, arr) => n + arr.length, 0)
+    const gridWritten = await writeWaveGrid({
+      version: 1,
+      generatedAt: Date.now(),
+      times: times.map((t) => Date.parse(t)),
+      cells: gridCells,
+    })
+
     distances.sort((a, b) => a - b)
     const payload = {
+      // The overview blob (per-spot ratings) is the response's primary
+      // success signal — it is what the tests and the on-call runbook key
+      // off. A grid-write failure is logged (below) but does not flip this to
+      // an error: the flow layer degrading to "hidden" is an acceptable
+      // outcome the client already handles, whereas the map going grey is not.
       ok: written,
       window: `${range.start}..${range.end}`,
       timesteps: times.length,
@@ -180,6 +213,8 @@ export async function GET(req: NextRequest) {
       medianSnapKm: distances.length ? Math.round(distances[distances.length >> 1] * 10) / 10 : null,
       maxSnapKm: distances.length ? Math.round(distances[distances.length - 1] * 10) / 10 : null,
       failedBoxes: failed.map((r) => `${r.box.id}:${r.error}`),
+      gridWritten,
+      gridCells: gridCellCount,
       elapsedMs: Date.now() - startedAt,
     }
 

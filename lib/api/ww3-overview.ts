@@ -564,3 +564,139 @@ export function lookupWaveOverview(
   if (coverage < WW3_MIN_COVERAGE) return null
   return { readings, coverage, timestep: blob.times[index], gapMs }
 }
+
+// ── stored flow grid ────────────────────────────────────────────────────────
+//
+// A second, separate Runtime Cache entry alongside the overview blob above —
+// the map's animated swell-flow layer needs the RAW grid lattice (every
+// sampled cell, not one representative per conditions bucket) so particle
+// paths can be bilinearly interpolated between neighbouring cells rather than
+// snapping from bucket to bucket. The overview blob is keyed by conditions
+// bucket (~1,192 of them, several buckets often sharing one snapped cell);
+// this one is keyed by raw grid cell (~5,068 lattice points before land and
+// missing-swell cells are dropped) so the flow field is continuous.
+//
+// `sdir` is the oceanographic convention used everywhere else in this file
+// (see `swellDirection` on `CurrentMarineConditions`): the direction the
+// swell is coming FROM, the same convention `spotFacing`/`directionalExposure`
+// in lib/forecast/rating.ts compare it against. Malibu (facingDirection 200,
+// "paradise... on summer S swells") only makes sense if a due-south swell
+// direction (~180) reads as a small angleDiff against a ~200 facing — i.e.
+// swellDirection is a FROM bearing, not a heading. `overviewEntryToConditions`
+// above passes WW3's `sdir` straight through into that same field with no
+// inversion, so WW3's `sdir` is FROM too. A visual flow particle therefore
+// has to travel TOWARD the opposite bearing: heading = (sdir + 180) % 360.
+
+/**
+ * One grid cell's swell reading at one forecast hour:
+ * [lat, lng, height m, period s, direction deg].
+ *
+ * A TUPLE for the same reason `WaveOverviewEntry` is, and more so: this stores
+ * one entry per RAW grid cell (not per conditions bucket) at every forecast
+ * hour, and there are more raw cells than buckets. Direction is the swell's
+ * FROM bearing — see the note above.
+ */
+export type WaveGridCellTuple = [lat: number, lng: number, heightM: number, periodS: number, dirDeg: number]
+
+export interface WaveGridBlob {
+  version: 1
+  /** Cron run time, ms since epoch. Diagnostic only, same as `WaveOverviewBlob`. */
+  generatedAt: number
+  /** The forecast hours these cells describe, ms since epoch, ascending — the
+   *  SAME hours as the sibling `WaveOverviewBlob.times` from the same cron
+   *  run, so the two entries never disagree about which hour is "current". */
+  times: number[]
+  /**
+   * Per timestep (index-aligned with `times`), every grid cell that reported
+   * a swell partition. Land cells and ocean cells with no swell partition
+   * (wind-wave-only water — enclosed seas, the lee of an island) are omitted:
+   * there is nothing for the flow layer to draw or interpolate through there,
+   * and dropping them is most of what keeps this entry under a megabyte.
+   */
+  cells: WaveGridCellTuple[][]
+}
+
+export const WAVE_GRID_CACHE_KEY = 'ww3:grid:v1'
+
+// Same TTL as the overview blob and for the same reason: a missed cron run
+// must keep serving the tail of the previous grid rather than nothing, and
+// "nothing" here means the flow layer silently disappears for everyone.
+export const WAVE_GRID_TTL_SECONDS = WAVE_OVERVIEW_TTL_SECONDS
+
+export async function readWaveGrid(): Promise<WaveGridBlob | null> {
+  const cache = runtimeCache()
+  if (!cache) return null
+  try {
+    const hit = await cache.get(WAVE_GRID_CACHE_KEY) as WaveGridBlob | null | undefined
+    if (!hit || hit.version !== 1) return null
+    if (!Array.isArray(hit.times) || hit.times.length === 0) return null
+    if (!Array.isArray(hit.cells)) return null
+    return hit
+  } catch {
+    return null
+  }
+}
+
+export async function writeWaveGrid(blob: WaveGridBlob): Promise<boolean> {
+  const cache = runtimeCache()
+  if (!cache) return false
+  try {
+    await cache.set(WAVE_GRID_CACHE_KEY, blob, {
+      ttl: WAVE_GRID_TTL_SECONDS,
+      tags: ['ww3', 'conditions'],
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * A grid cell as a flow-layer tuple, or null when it has no swell partition
+ * to draw — a cell can be legitimately ocean (it has `waveHeight`, so
+ * `parseGriddapGrid` kept it) while carrying only a wind-wave partition, and
+ * that is not a direction the flow layer can animate toward.
+ */
+export function cellToGridTuple(cell: WW3Cell): WaveGridCellTuple | null {
+  if (cell.swellHeight == null || cell.swellPeriod == null || cell.swellDirection == null) return null
+  if (cell.swellHeight <= 0) return null
+  return [
+    Math.round(cell.lat * 10) / 10,
+    Math.round(cell.lng * 10) / 10,
+    round(cell.swellHeight, 2)!,
+    round(cell.swellPeriod, 1)!,
+    Math.round(cell.swellDirection),
+  ]
+}
+
+export interface WaveGridLookup {
+  /** The forecast hour served, ms since epoch. */
+  time: number
+  cells: WaveGridCellTuple[]
+}
+
+/**
+ * The single timestep nearest to `now`, or null when the blob is missing or
+ * every stored hour is further than `WW3_MAX_TIMESTEP_GAP_MS` away — same
+ * validity rule as `lookupWaveOverview`, so the flow layer and the map's
+ * pin colours go stale (and fall back) together.
+ */
+export function lookupWaveGrid(
+  blob: WaveGridBlob | null,
+  now: number = Date.now()
+): WaveGridLookup | null {
+  if (!blob) return null
+  if (!Array.isArray(blob.times) || blob.times.length === 0) return null
+
+  let index = -1
+  let gapMs = Infinity
+  blob.times.forEach((t, i) => {
+    const gap = Math.abs(t - now)
+    if (gap < gapMs) { gapMs = gap; index = i }
+  })
+  if (index < 0 || gapMs > WW3_MAX_TIMESTEP_GAP_MS) return null
+
+  const cells = blob.cells[index]
+  if (!cells || cells.length === 0) return null
+  return { time: blob.times[index], cells }
+}
