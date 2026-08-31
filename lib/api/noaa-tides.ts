@@ -1,5 +1,6 @@
 import type { TidePoint, CoastalWindReading } from '@/types/forecast'
 import { getCache } from '@vercel/functions'
+import { markTideExtremes } from './tide-extremes'
 
 const NOAA_TIDES_BASE = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter'
 
@@ -75,14 +76,10 @@ export async function fetchTidePredictions(stationId: string): Promise<TidePoint
     type:   null as 'H' | 'L' | null,
   }))
 
-  // Detect local maxima (High) and minima (Low) from the hourly series
-  for (let i = 1; i < raw.length - 1; i++) {
-    const prev = raw[i - 1].height
-    const curr = raw[i].height
-    const next = raw[i + 1].height
-    if (curr > prev && curr > next) raw[i].type = 'H'
-    else if (curr < prev && curr < next) raw[i].type = 'L'
-  }
+  // Detect local maxima (High) and minima (Low) from the hourly series.
+  // Shared with lib/api/harmonic-tides.ts so both tide sources mark the same
+  // hour as the high.
+  markTideExtremes(raw)
 
   if (cache && raw.length > 0) {
     try { await cache.set(cacheKey, raw, { ttl: 3600, tags: ['noaa', 'tides'] }) } catch {}

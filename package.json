@@ -22,6 +22,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@neaps/tide-predictor": "^0.11.0",
     "@prisma/client": "^5.22.0",
     "@sentry/nextjs": "^10.20.0",
     "@tanstack/react-query": "^5.96.2",
@@ -44,6 +45,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@neaps/tide-database": "^0.9.20260801",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.21",
     "@types/leaflet.markercluster": "^1.5.6",

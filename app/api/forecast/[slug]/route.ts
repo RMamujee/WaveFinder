@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSpotBySlug } from '@/lib/spots/static-store'
 import { fetchMarineForecast, fetchWindForecast } from '@/lib/api/open-meteo'
 import { fetchTidePredictions, fetchCoastalWind } from '@/lib/api/noaa-tides'
+import { predictTides } from '@/lib/api/harmonic-tides'
 import { fetchBuoyData } from '@/lib/api/noaa-buoy'
 import { mergeForecastData, groupHoursByDay, findNearestFutureHour } from '@/lib/forecast/merge'
 import { handleRouteError, cdnCacheHeaders } from '@/lib/route-helpers'
@@ -25,10 +26,21 @@ export async function GET(
     return NextResponse.json({ error: 'Spot not found' }, { status: 404 })
   }
 
+  // Tide comes from harmonic constituents where a guarded station exists (most
+  // of the world, including nearly every US spot) and from CO-OPS otherwise.
+  // Harmonics are pure CPU and need the spot's UTC offset, which only arrives
+  // with the marine response — so they are computed after the fetches below
+  // rather than raced alongside them. Coastal WIND stays on CO-OPS regardless:
+  // that is an observation product, not a prediction, and has no harmonic
+  // equivalent.
+  const harmonicStationId = spot.harmonicTideStationId ?? null
+
   const [marineResult, windResult, tidesResult, buoyResult, coastalWindResult] = await Promise.allSettled([
     fetchMarineForecast(spot.lat, spot.lng),
     fetchWindForecast(spot.lat, spot.lng),
-    spot.noaaTideStationId ? fetchTidePredictions(spot.noaaTideStationId) : Promise.resolve([]),
+    !harmonicStationId && spot.noaaTideStationId
+      ? fetchTidePredictions(spot.noaaTideStationId)
+      : Promise.resolve([]),
     spot.noaaBuoyId ? fetchBuoyData(spot.noaaBuoyId) : Promise.resolve(null),
     spot.noaaTideStationId ? fetchCoastalWind(spot.noaaTideStationId) : Promise.resolve(null),
   ])
@@ -54,7 +66,18 @@ export async function GET(
 
   // Resolved before the merge: tide height now feeds the surf rating, not just
   // the tide chart.
-  const tides = tidesResult.status === 'fulfilled' ? tidesResult.value : []
+  let tides = tidesResult.status === 'fulfilled' ? tidesResult.value : []
+  if (harmonicStationId) {
+    const offset = marineResult.value.utc_offset_seconds
+    // Without the offset there is no way to emit the spot's local clock, and a
+    // tide series labelled on the wrong clock is worse than none: it would be
+    // misaligned by up to 12 h and scoreTide would read a dead low as a high.
+    // Empty is the correct degraded value — the weights renormalise.
+    tides = offset != null ? predictTides(harmonicStationId, offset) : []
+    if (offset == null) {
+      monitor('warn', 'forecast.tide_offset_missing', { slug, station: harmonicStationId })
+    }
+  }
   const buoy = buoyResult.status === 'fulfilled' ? buoyResult.value : null
 
   let hours, forecast
