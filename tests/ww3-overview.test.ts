@@ -54,8 +54,10 @@ const {
   WW3_VARIABLES,
   buildGridIndex,
   buildGriddapUrl,
+  cellToGridTuple,
   cellToOverviewEntry,
   gridCellKey,
+  lookupWaveGrid,
   lookupWaveOverview,
   overviewEntryToConditions,
   parseGriddapGrid,
@@ -426,6 +428,74 @@ describe('lookupWaveOverview', () => {
     expect(lookupWaveOverview(null, ['a'], NOW)).toBeNull()
     expect(lookupWaveOverview(blob(), [], NOW)).toBeNull()
     expect(lookupWaveOverview(blob({ times: [] }), ['a'], NOW)).toBeNull()
+  })
+})
+
+describe('cellToGridTuple', () => {
+  const baseCell = {
+    time: '2026-08-31T12:00:00Z', lat: 30.5, lng: -124.5,
+    waveHeight: 2.2, wavePeriod: 13.157894,
+    swellHeight: 1.3199999, swellPeriod: 12.58, swellDirection: 146,
+    windWaveHeight: 1.5999999, windWavePeriod: 7.3599997,
+  }
+
+  it('stores a compact 5-number tuple, rounded without changing what it says', () => {
+    expect(cellToGridTuple(baseCell)).toEqual([30.5, -124.5, 1.32, 12.6, 146])
+  })
+
+  it('returns null for an ocean cell with no swell partition — nothing to draw', () => {
+    // A wind-wave-only cell (enclosed sea, lee of an island) still has a
+    // combined wave height, so parseGriddapGrid kept it — but there is no
+    // swell direction for the flow layer to animate toward.
+    expect(cellToGridTuple({ ...baseCell, swellHeight: null })).toBeNull()
+    expect(cellToGridTuple({ ...baseCell, swellPeriod: null })).toBeNull()
+    expect(cellToGridTuple({ ...baseCell, swellDirection: null })).toBeNull()
+  })
+
+  it('returns null for a genuinely flat swell partition (height 0)', () => {
+    expect(cellToGridTuple({ ...baseCell, swellHeight: 0 })).toBeNull()
+  })
+})
+
+describe('lookupWaveGrid', () => {
+  const NOW = Date.parse('2026-08-31T13:00:00Z')
+  const morning: [number, number, number, number, number][] = [[30.5, -124.5, 1.3, 12.6, 146]]
+  const evening: [number, number, number, number, number][] = [[30.5, -124.5, 0.6, 8, 200]]
+
+  const blob = (overrides: Partial<{ times: number[]; cells: typeof morning[] }> = {}) => ({
+    version: 1 as const,
+    generatedAt: NOW - 2 * HOUR,
+    times: [NOW - HOUR, NOW + 3 * HOUR],
+    cells: [morning, evening],
+    ...overrides,
+  })
+
+  it('serves the timestep nearest to now, not the first one stored', () => {
+    const hit = lookupWaveGrid(blob(), NOW)!
+    expect(hit.cells).toEqual(morning)
+    expect(hit.time).toBe(NOW - HOUR)
+  })
+
+  it('moves on to the later timestep as the day advances', () => {
+    const hit = lookupWaveGrid(blob(), NOW + 4 * HOUR)!
+    expect(hit.cells).toEqual(evening)
+  })
+
+  it('refuses a blob whose nearest hour is outside the validity window', () => {
+    const stale = blob({ times: [NOW - 30 * HOUR, NOW - 26 * HOUR] })
+    expect(lookupWaveGrid(stale, NOW)).toBeNull()
+  })
+
+  it('rejects the boundary a whisker past the cutoff and accepts it a whisker before', () => {
+    const at = (offset: number) => lookupWaveGrid(blob({ times: [NOW + offset], cells: [morning] }), NOW)
+    expect(at(WW3_MAX_TIMESTEP_GAP_MS - 1000)).not.toBeNull()
+    expect(at(WW3_MAX_TIMESTEP_GAP_MS + 1000)).toBeNull()
+  })
+
+  it('is null with no blob, no timesteps, or an empty cell list at the chosen hour', () => {
+    expect(lookupWaveGrid(null, NOW)).toBeNull()
+    expect(lookupWaveGrid(blob({ times: [] }), NOW)).toBeNull()
+    expect(lookupWaveGrid(blob({ times: [NOW], cells: [[]] }), NOW)).toBeNull()
   })
 })
 
