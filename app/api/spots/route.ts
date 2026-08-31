@@ -330,15 +330,19 @@ export async function GET(req: Request) {
   // snapped every conditions bucket to a WaveWatch III cell, so the same
   // response can be assembled from a cache read at zero upstream cost.
   //
-  // The fallback is not optional. If the blob is missing, older than 12 h, or
-  // covers less than 60% of the requested buckets, this falls through to the
-  // Open-Meteo sampling path EXACTLY as it was — greying the map is the one
-  // outcome that is never acceptable here, and a cron that has not run yet
-  // (first deploy, missed schedule, no Runtime Cache in this environment) must
-  // not be able to cause it. Below the bucket ceiling nothing changes at all:
-  // exact requests keep going to Open-Meteo's nearshore model, which is the
-  // same source the spot pages use and therefore the one the map must agree
-  // with.
+  // The blob stores eight forecast hours, not a snapshot, and the lookup picks
+  // the one nearest to now — the cron only runs daily, so serving its fetch
+  // hour all day would show an evening visitor the morning's sea.
+  //
+  // The fallback is not optional. If the blob is missing, holds no hour within
+  // 3 h of now, or covers less than 60% of the requested buckets, this falls
+  // through to the Open-Meteo sampling path EXACTLY as it was — greying the map
+  // is the one outcome that is never acceptable here, and a cron that has not
+  // run yet (first deploy, missed schedule, no Runtime Cache in this
+  // environment) must not be able to cause it. Below the bucket ceiling nothing
+  // changes at all: exact requests keep going to Open-Meteo's nearshore model,
+  // which is the same source the spot pages use and therefore the one the map
+  // must agree with.
   const overview = approx
     ? lookupWaveOverview(await readWaveOverview(), pointKeys)
     : null
@@ -346,6 +350,9 @@ export async function GET(req: Request) {
     monitor('info', 'spots.conditions.ww3_overview', {
       cells: points.length,
       coverage: Math.round(overview.coverage * 100) / 100,
+      // How far the served forecast hour is from now. Creeping toward the 3 h
+      // limit is how a missed cron shows up before the map falls back.
+      gapMinutes: Math.round(overview.gapMs / 60000),
       spots: spots.length,
     })
   }

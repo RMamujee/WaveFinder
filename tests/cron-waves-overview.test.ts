@@ -14,7 +14,9 @@ vi.mock('@/lib/api/ww3-overview', async (importOriginal) => {
 })
 
 const { GET } = await import('@/app/api/cron/waves-overview/route')
-const { WW3_BOXES } = await import('@/lib/api/ww3-overview')
+const {
+  WW3_BOXES, WW3_GRID_DEG, WW3_SPATIAL_STRIDE, WW3_TIME_STEPS, WW3_TIME_STRIDE_HOURS,
+} = await import('@/lib/api/ww3-overview')
 
 function makeRequest(authorization?: string) {
   return new NextRequest('https://wavefinder.test/api/cron/waves-overview', {
@@ -22,18 +24,26 @@ function makeRequest(authorization?: string) {
   })
 }
 
-// One ocean cell per box, placed at the box's own centre, so the snap has
-// something to find everywhere without pretending to be a real forecast.
+// An all-ocean box at the real subsampled spacing, across the real number of
+// forecast hours — enough for the snap to find something everywhere without
+// pretending to be a forecast.
+const HOURS = Array.from({ length: WW3_TIME_STEPS }, (_, i) =>
+  new Date(Date.parse('2026-08-31T12:00:00Z') + i * WW3_TIME_STRIDE_HOURS * 3_600_000)
+    .toISOString().replace('.000', ''))
+
 function gridResponse(box: { latMin: number; latMax: number; lonMin: number; lonMax: number }) {
+  const step = WW3_GRID_DEG * WW3_SPATIAL_STRIDE
   const rows: unknown[][] = []
-  for (let lat = box.latMin; lat <= box.latMax; lat += 0.5) {
-    for (let lng = box.lonMin; lng <= box.lonMax; lng += 0.5) {
-      rows.push(['2026-08-31T12:00:00Z', 0, lat, lng, 1.5, 9, 200, 1.1, 12, 210, 0.4, 5, 190])
+  for (const time of HOURS) {
+    for (let lat = box.latMin; lat <= box.latMax; lat += step) {
+      for (let lng = box.lonMin; lng <= box.lonMax; lng += step) {
+        rows.push([time, 0, lat, lng, 1.5, 9, 1.1, 12, 210, 0.4, 5])
+      }
     }
   }
   return {
     table: {
-      columnNames: ['time', 'depth', 'latitude', 'longitude', 'Thgt', 'Tper', 'Tdir', 'shgt', 'sper', 'sdir', 'whgt', 'wper', 'wdir'],
+      columnNames: ['time', 'depth', 'latitude', 'longitude', 'Thgt', 'Tper', 'shgt', 'sper', 'sdir', 'whgt', 'wper'],
       rows,
     },
   }
@@ -84,8 +94,37 @@ describe('GET /api/cron/waves-overview', () => {
     expect(body.snapped).toBe(body.buckets)
     expect(body.failedBoxes).toEqual([])
     const blob = writeWaveOverview.mock.calls[0][0]
-    expect(blob.version).toBe(1)
+    expect(blob.version).toBe(2)
     expect(Object.keys(blob.entries)).toHaveLength(body.buckets)
+  })
+
+  it('stores one reading per bucket per forecast hour, index-aligned with times', async () => {
+    await GET(makeRequest('Bearer test-cron-secret'))
+    const blob = writeWaveOverview.mock.calls[0][0]
+    expect(blob.times).toHaveLength(WW3_TIME_STEPS)
+    expect(blob.times).toEqual([...blob.times].sort((a, b) => a - b))
+    for (const series of Object.values(blob.entries)) {
+      expect(series).toHaveLength(blob.times.length)
+    }
+  })
+
+  it('reads every hour from the SAME grid cell it snapped to', async () => {
+    // Snapping per timestep would let a bucket drift between neighbouring cells
+    // as the land mask edge shifts, which reads as the sea changing when only
+    // the sample point did.
+    await GET(makeRequest('Bearer test-cron-secret'))
+    const blob = writeWaveOverview.mock.calls[0][0]
+    const [series] = Object.values(blob.entries)
+    expect(series.every((e) => e !== null)).toBe(true)
+  })
+
+  it('requests a forecast window, not a single hour', async () => {
+    await GET(makeRequest('Bearer test-cron-secret'))
+    const url = decodeURIComponent(fetchMock.mock.calls[0][0])
+    expect(url).toMatch(
+      new RegExp(`\\[\\(.+?\\):${WW3_TIME_STRIDE_HOURS}:\\(.+?\\)\\]`)
+    )
+    expect(url).toContain(`:${WW3_SPATIAL_STRIDE}:`)
   })
 
   it('still writes when a box fails — a partial world beats no world', async () => {

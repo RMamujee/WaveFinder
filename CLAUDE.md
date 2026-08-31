@@ -205,31 +205,58 @@ read that before changing a constant here.
   calls every 30 minutes purely for pins nobody reads at spot-page precision.
   PacIOOS ERDDAP `ww3_global` is *gridded*: twelve requests cover the planet
   regardless of how many spots exist, with no key and no per-location billing.
-- **The cron (4×/day, `30 3,9,15,21 * * *` — ~3.5 h after the 00/06/12/18Z
-  WW3/GFS runs)** fetches `WW3_BOXES` at full resolution, snaps all ~1,192
-  conditions buckets to their nearest grid cell **that carries data**, and
-  writes one compact blob to the Vercel Runtime Cache (same `getCache` pattern
-  as `noaa-tides.ts`; prod has no Upstash env). **Never request the
-  full-resolution global grid** — 11.3 MB and >120 s, measured.
+- **The cron runs ONCE A DAY (`30 3 * * *` UTC, ~3.5 h after the 00Z WW3/GFS
+  run) because that is the Vercel Hobby limit**, and Hobby cron timing is
+  imprecise — it fires within about an hour of the schedule, so two runs can be
+  ~25 h apart. It fetches `WW3_BOXES`, snaps all ~1,192 conditions buckets to
+  their nearest grid cell **that carries data**, and writes one compact blob
+  (~333 KB) to the Vercel Runtime Cache (same `getCache` pattern as
+  `noaa-tides.ts`; prod has no Upstash env, and functions are pinned to a single
+  region so the cron's write and the map's read share one cache). **Never
+  request the full-resolution global grid** — 11.3 MB and >120 s, measured.
+- **The blob stores a forecast WINDOW, not a snapshot** — eight hours four
+  hours apart, now..now+28 h — and `lookupWaveOverview` serves the hour nearest
+  to the reader's clock. With a daily refresh a single stored hour would show
+  an evening visitor the morning's sea. **Validity is the distance from now to
+  the nearest stored hour (`WW3_MAX_TIMESTEP_GAP_MS`, 3 h), not the blob's
+  age**: a run from 20 h ago whose window still reaches now is perfectly good,
+  and a two-day-old one is useless however it is timestamped.
+- **Everything is sized by one measured cost model**: ~4 s fixed per griddap
+  request plus ~51.2 KB/s, on rows of 45.83 B + 7.09 B per variable. Cost is
+  (boxes × cells × timesteps × variables) and the window multiplies it by
+  eight, so the grid is **subsampled to 2° (`WW3_SPATIAL_STRIDE` 4)** and only
+  the seven consumed variables are requested — 5,068 cells, 40,544 rows,
+  3.87 MB, ~124 s of upstream work (~30 s wall at four in flight). At 0.5° the
+  same window would be 1,230 s. `tests/ww3-overview.test.ts` re-runs that
+  arithmetic and fails if a change blows the budget.
+- **Every box origin must be ≡ 0.5 mod 2°.** griddap counts a stride from the
+  box's own start index, so boxes on different parities sample interleaved
+  lattices and `gridCellKey` rounds cells 0.5° apart onto one key — one cell's
+  readings silently overwrite another's. `s-pacific-islands` started at -180.0
+  and did exactly that; it starts at -179.5 now, and a test pins the invariant.
 - **Use the `ww3_global_lon180` alias for everything.** The base dataset's
   longitude axis is 0-359.5, so a Europe box straddles a seam and 404s
   (`"Stop" is greater than the axis maximum`). Every box is expressed in
   -180..180 and none crosses the antimeridian.
 - **griddap does not accept `[(now)]`** — that is a tabledap convenience and
-  returns `Start=NaN (invalid format?) isn't allowed`. `ww3TimeParam` formats
-  the hour explicitly.
-- **The grid is 0.5° and land cells are `null` in place**, so a coastal spot
-  snaps ~27 km offshore (median over 99 measured spots; max 143 km). That is a
-  legitimate input *here* because the rating engine already treats the swell
-  partition as deep water and shoals it itself — which is exactly why this
-  belongs on the map overview and **not** on the spot page.
+  returns `Start=NaN (invalid format?) isn't allowed`. `ww3TimeRange` formats
+  the hours explicitly.
+- **Land cells are `null` in place** (and a row can be *partially* null — an
+  ocean cell with no windsea partition). At the native 0.5° a coastal spot
+  snapped ~27 km offshore, median over 99 measured spots; at the 2° subsample
+  the lattice alone is a median of 80 km away (p90 115 km) before land is
+  considered, so `WW3_MAX_SNAP_KM` is 250 rather than 165. That is a legitimate
+  input *here* because the rating engine already treats the swell partition as
+  deep water and shoals it itself, and the overview groups these pins into
+  cells 0.1°-12.8° wide anyway — but it is **why this source is confined to the
+  overview path and must never reach a spot page**.
 - **WW3 carries no wind.** `windSpeed`/`windDirection`/`windGust` are null, not
   zero and not `wdir` (the wind-*wave* direction) dressed up as a wind; the
   engine drops the wind factor and renormalises. Rows are also legitimately
   *partially* null — an ocean cell with no windsea partition — and those nulls
   are preserved so cleanliness renormalises too.
-- **The Open-Meteo fallback is not optional.** Blob missing, older than
-  `WW3_MAX_AGE_MS` (12 h), or covering under `WW3_MIN_COVERAGE` (60%) of the
+- **The Open-Meteo fallback is not optional.** Blob missing, holding no hour
+  within 3 h of now, or covering under `WW3_MIN_COVERAGE` (60%) of the
   requested buckets ⇒ the request falls through to the Open-Meteo sampling path
   unchanged. Greying the map is the one outcome that is never acceptable, and a
   cron that has not run yet must not be able to cause it. **Below the

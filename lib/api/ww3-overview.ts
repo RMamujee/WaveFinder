@@ -27,23 +27,66 @@ import type { CurrentMarineConditions } from './open-meteo'
 // identical row shape.
 const WW3_BASE = 'https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ww3_global_lon180.json'
 
-/** Grid spacing of the dataset, degrees (311 lat × 720 lon, -77.5..77.5). */
+/** Native grid spacing of the dataset, degrees (311 lat × 720 lon, -77.5..77.5). */
 export const WW3_GRID_DEG = 0.5
 
 /**
- * Variables pulled in ONE combined query per box.
+ * Variables pulled in ONE combined query per box — exactly the seven the map's
+ * rating path consumes, and no more.
  *
- * Bundling variables is far cheaper than extra requests: the same global grid
- * measured 743 KB with one variable and 942 KB with three, because the
- * time/depth/lat/lon columns dominate a griddap row. `Thgt/Tper/Tdir` are the
- * combined sea, `shgt/sper/sdir` the swell partition and `whgt/wper/wdir` the
- * wind-wave partition — that partition split is the reason this source works
- * for WaveFinder at all, because the rating engine scores the swell partition
- * and derives cleanliness from the wind-wave share.
+ * `Thgt/Tper` are the combined sea (the height the popup shows and the period
+ * used when a cell has no swell partition at all), `shgt/sper/sdir` the swell
+ * partition and `whgt/wper` the wind-wave partition. That partition split is
+ * the reason this source works for WaveFinder at all: the rating engine scores
+ * the swell partition and derives cleanliness from the wind-wave share.
+ *
+ * `Tdir` and `wdir` are deliberately NOT requested. Nothing downstream reads
+ * them — swell direction comes from `sdir`, and `wdir` is a wind-*wave*
+ * direction that must never be passed off as a wind direction. At ~7 B per
+ * variable per row they were 13% of a payload that now carries eight forecast
+ * hours, so dropping them is worth roughly 18 s of the fetch budget.
  */
 export const WW3_VARIABLES = [
-  'Thgt', 'Tper', 'Tdir', 'shgt', 'sper', 'sdir', 'whgt', 'wper', 'wdir',
+  'Thgt', 'Tper', 'shgt', 'sper', 'sdir', 'whgt', 'wper',
 ] as const
+
+/**
+ * Subsampling of the native 0.5° grid, in grid indices.
+ *
+ * FOUR (2° cells) IS A BUDGET DECISION, NOT A PREFERENCE, and it is the single
+ * biggest quality trade in this file. Hobby crons run at most once a day, so
+ * the blob has to carry a day's worth of forecast hours rather than one
+ * snapshot — and cost is (cells × timesteps). At the measured ~51 KB/s and
+ * ~4 s fixed cost per griddap request, the twelve boxes cost, for eight
+ * timesteps: 0.5° = 1,230 s, 1° = 350 s, 1.5° = 183 s, 2° = 124 s. Only the
+ * last fits the budget with headroom under `maxDuration`.
+ *
+ * What it costs: distance from a conditions bucket to the nearest lattice
+ * point goes from a median of 20.2 km (p90 29.0) at 0.5° to 80.0 km (p90
+ * 114.6) at 2°, and the nearest point that actually carries data is further
+ * still. These pins are already labelled "Regional estimate" and the overview
+ * groups them into cells 0.1°-12.8° wide, so a ~100 km sample is inside the
+ * error the sampling already admits to — but it is NOT good enough for a spot
+ * page, which is why this source is confined to the overview path.
+ */
+export const WW3_SPATIAL_STRIDE = 4
+
+/**
+ * Forecast hours per box request: eight steps four hours apart, covering
+ * now .. now+28 h.
+ *
+ * A single snapshot was wrong the moment the cron went daily: an evening
+ * visitor would be shown the morning's sea as "current". The window has to
+ * outlast the gap between runs, and Hobby cron timing is imprecise — it fires
+ * within about an hour of the schedule — so two consecutive runs can be ~25 h
+ * apart. 28 h covers that with margin.
+ *
+ * Four-hourly rather than six: the read path refuses a blob whose nearest
+ * timestep is more than `WW3_MAX_TIMESTEP_GAP_MS` (3 h) away, and 6 h spacing
+ * puts the worst case exactly on that line. 4 h spacing keeps it at 2 h.
+ */
+export const WW3_TIME_STRIDE_HOURS = 4
+export const WW3_TIME_STEPS = 8
 
 export interface WW3Box {
   id: string
@@ -54,14 +97,23 @@ export interface WW3Box {
 }
 
 /**
- * Regional boxes covering every spot in the dataset at FULL resolution.
+ * Regional boxes covering every spot in the dataset.
  *
  * NEVER replace these with one global request: the full-resolution global grid
- * is 11.3 MB and took over 120 s in testing — it does not fit in a function
- * invocation. These were derived from the 1,192 conditions buckets by buffering
- * each by 1.5° (three grid cells, above the 1.28° worst-case spot-to-ocean-cell
- * distance measured in the research doc) and greedily merging the buffered
- * tiles under a 10,000-cell-per-box cap. Total ~79,000 cells.
+ * is 11.3 MB and took over 120 s in testing. These were derived from the 1,192
+ * conditions buckets by buffering each by 1.5° and greedily merging the
+ * buffered tiles under a 10,000-cell cap; at `WW3_SPATIAL_STRIDE` they come to
+ * ~5,068 cells. Twelve is close to the cost optimum — fewer, larger boxes save
+ * the ~4 s fixed cost per request but pay for it in empty ocean multiplied by
+ * eight timesteps.
+ *
+ * EVERY `latMin`/`lonMin` MUST BE CONGRUENT TO 0.5 MODULO 2, and a test pins
+ * it. griddap counts a stride from the box's own start index, so two boxes
+ * whose origins sit on different parities sample two interleaved lattices —
+ * `s-pacific-islands` originally started at -180.0 and sampled -180, -178, …
+ * while its neighbours sampled -177.5, -175.5, …, and `gridCellKey` rounds
+ * both -178 and -177.5 to the same key. That silently overwrites one cell's
+ * readings with another cell's, 0.5° away, with nothing to show for it.
  *
  * `tests/ww3-overview.test.ts` fails if any spot falls outside them, which is
  * what makes adding a spot in a new part of the world safe.
@@ -71,7 +123,7 @@ export const WW3_BOXES: readonly WW3Box[] = [
   { id: 'middle-e-north-america', latMin:   8.5, latMax:  49.5, lonMin: -113.5, lonMax:  -56.5 },
   { id: 'e-pacific-tropics',      latMin: -15.5, latMax:  13.5, lonMin:  -93.5, lonMax:  -74.5 },
   { id: 's-america',              latMin: -43.5, latMax:  -0.5, lonMin:  -75.5, lonMax:  -30.5 },
-  { id: 's-pacific-islands',      latMin: -29.5, latMax: -10.5, lonMin: -180.0, lonMax: -106.5 },
+  { id: 's-pacific-islands',      latMin: -29.5, latMax: -10.5, lonMin: -179.5, lonMax: -106.5 },
   { id: 'europe-w-africa',        latMin:   0.5, latMax:  61.5, lonMin:  -27.5, lonMax:   11.5 },
   { id: 'africa-south-indian',    latMin: -37.5, latMax:  -0.5, lonMin:   10.5, lonMax:   59.5 },
   { id: 'n-indian-ocean',         latMin:  -9.5, latMax:  27.5, lonMin:   50.5, lonMax:  113.5 },
@@ -84,41 +136,70 @@ export const WW3_BOXES: readonly WW3Box[] = [
 /**
  * How far a conditions bucket may be snapped to a grid cell that carries data.
  *
- * The grid is 0.5° and land cells are null, so a coastal spot is typically
- * snapped ~27 km offshore (median measured over 99 real spots; p90 39 km, max
- * 143 km). That is a legitimate input here because the rating engine already
- * treats the swell partition as DEEP WATER and shoals it itself. Past this
- * bound it stops being the same sea, so the bucket gets no reading and the
- * route's nearest-neighbour fallback decides.
+ * Scaled to the SUBSAMPLED grid, not the native one. At 0.5° a coastal spot
+ * snapped ~27 km offshore (median over 99 measured spots, max 143 km) and
+ * 165 km was a generous ceiling; at `WW3_SPATIAL_STRIDE` = 4 the lattice alone
+ * is a median of 80 km away (p90 115 km, max 147 km) before land is taken into
+ * account, so the same ceiling would silently drop the buckets furthest from
+ * open water. 250 km is roughly one and a half subsampled cells.
+ *
+ * It is still a ceiling and not a suggestion: past it the bucket gets no
+ * reading and the route's nearest-neighbour fallback decides, because a borrow
+ * from further than that stops being the same sea.
  */
-export const WW3_MAX_SNAP_KM = 165
+export const WW3_MAX_SNAP_KM = 250
 
 // ── griddap request ─────────────────────────────────────────────────────────
 
-/**
- * The dataset hour to request. griddap resolves a `(value)` time constraint to
- * the nearest index, but it rejects anything it cannot parse — `[(now)]` is a
- * *tabledap* convenience and returns
- * `Start=NaN (invalid format?) isn't allowed` here (verified live), so the hour
- * has to be formatted explicitly.
- */
-export function ww3TimeParam(at: Date = new Date()): string {
-  const iso = new Date(Math.floor(at.getTime() / 3_600_000) * 3_600_000).toISOString()
-  return `${iso.slice(0, 13)}:00:00Z`
+export interface WW3TimeRange {
+  /** First forecast hour, ISO 8601 UTC. */
+  start: string
+  /** Last forecast hour, ISO 8601 UTC. */
+  end: string
 }
 
-/** One combined-variable griddap request for a box at a single hour. */
-export function buildGriddapUrl(box: WW3Box, time: string): string {
-  // depth has a single index (0). Brackets are percent-encoded because they are
-  // not valid in a query string unescaped; ERDDAP accepts either form, and
-  // encoding keeps the URL legal for `fetch` and for logs.
-  const range = `[(${time})][0][(${box.latMin}):(${box.latMax})][(${box.lonMin}):(${box.lonMax})]`
-  const query = WW3_VARIABLES.map((v) => `${v}${range}`).join(',')
+/**
+ * The forecast window to request, floored to the hour.
+ *
+ * griddap resolves a `(value)` time constraint to the nearest index, but it
+ * rejects anything it cannot parse — `[(now)]` is a *tabledap* convenience and
+ * returns `Start=NaN (invalid format?) isn't allowed` here (verified live), so
+ * the hours have to be formatted explicitly.
+ */
+export function ww3TimeRange(at: Date = new Date()): WW3TimeRange {
+  const hour = Math.floor(at.getTime() / 3_600_000) * 3_600_000
+  const fmt = (ms: number) => `${new Date(ms).toISOString().slice(0, 13)}:00:00Z`
+  return {
+    start: fmt(hour),
+    end: fmt(hour + (WW3_TIME_STEPS - 1) * WW3_TIME_STRIDE_HOURS * 3_600_000),
+  }
+}
+
+/**
+ * One combined-variable griddap request for a box across the forecast window.
+ *
+ * Strides are in GRID INDICES on each axis. The time axis is hourly, so a time
+ * stride of 4 is four hours; the space axes are 0.5°, so a spatial stride of 4
+ * is 2°.
+ */
+export function buildGriddapUrl(box: WW3Box, range: WW3TimeRange): string {
+  // depth has a single index (0).
+  const s = WW3_SPATIAL_STRIDE
+  const dims =
+    `[(${range.start}):${WW3_TIME_STRIDE_HOURS}:(${range.end})]` +
+    `[0]` +
+    `[(${box.latMin}):${s}:(${box.latMax})]` +
+    `[(${box.lonMin}):${s}:(${box.lonMax})]`
+  const query = WW3_VARIABLES.map((v) => `${v}${dims}`).join(',')
+  // Brackets are not legal unescaped in a query string; ERDDAP accepts either
+  // form, and encoding keeps the URL valid for `fetch` and readable in logs.
   return `${WW3_BASE}?${encodeURI(query)}`
 }
 
-/** A grid cell that reported a combined wave height (i.e. not land). */
+/** A grid cell, at one forecast hour, that reported a wave height (not land). */
 export interface WW3Cell {
+  /** The forecast hour this reading describes, ISO 8601 UTC. */
+  time: string
   lat: number
   lng: number
   waveHeight: number
@@ -131,8 +212,8 @@ export interface WW3Cell {
 }
 
 export interface WW3Grid {
-  /** The dataset hour every row carries, ISO 8601 UTC. */
-  time: string | null
+  /** Distinct forecast hours present, in the order the response listed them. */
+  times: string[]
   cells: WW3Cell[]
 }
 
@@ -149,9 +230,12 @@ function numOrNull(v: unknown): number | null {
  * response carries `columnTypes`/`columnUnits` that the research doc's
  * abbreviated example omits.
  *
- * Land cells arrive as `null` IN PLACE — correctly indexed — and are dropped.
- * A row may also be partially null: an ocean cell with no wind-wave partition
- * reports `whgt/wper/wdir` as null while the swell columns are populated. Those
+ * Rows arrive fully flattened — every row repeats time, depth, latitude and
+ * longitude — so a multi-hour request returns one row per cell per hour.
+ *
+ * Land cells arrive as `null` IN PLACE, correctly indexed, and are dropped. A
+ * row may also be partially null: an ocean cell with no wind-wave partition
+ * reports `whgt/wper` as null while the swell columns are populated. Those
  * nulls are PRESERVED (never coerced to 0), because the rating engine drops the
  * cleanliness factor and renormalises when the wind-wave partition is missing,
  * whereas a 0 reads as a measured, perfectly clean sea.
@@ -160,14 +244,14 @@ export function parseGriddapGrid(payload: unknown): WW3Grid {
   const table = (payload as { table?: { columnNames?: unknown; rows?: unknown } } | null)?.table
   const names = Array.isArray(table?.columnNames) ? (table.columnNames as unknown[]) : []
   const rows = Array.isArray(table?.rows) ? (table.rows as unknown[]) : []
-  if (names.length === 0 || rows.length === 0) return { time: null, cells: [] }
+  if (names.length === 0 || rows.length === 0) return { times: [], cells: [] }
 
   const col = (name: string) => names.indexOf(name)
   const iTime = col('time')
   const iLat = col('latitude')
   const iLon = col('longitude')
   const iThgt = col('Thgt')
-  if (iLat < 0 || iLon < 0 || iThgt < 0) return { time: null, cells: [] }
+  if (iLat < 0 || iLon < 0 || iThgt < 0) return { times: [], cells: [] }
   const iTper = col('Tper')
   const iShgt = col('shgt')
   const iSper = col('sper')
@@ -177,18 +261,25 @@ export function parseGriddapGrid(payload: unknown): WW3Grid {
 
   const at = (row: unknown[], i: number) => (i >= 0 ? numOrNull(row[i]) : null)
 
-  let time: string | null = null
+  const times: string[] = []
+  const seenTimes = new Set<string>()
   const cells: WW3Cell[] = []
   for (const raw of rows) {
     if (!Array.isArray(raw)) continue
     const row = raw as unknown[]
+    const time = iTime >= 0 && typeof row[iTime] === 'string' ? (row[iTime] as string) : null
+    // A time column is not optional here: without it the readings cannot be
+    // placed on the clock, and serving an unplaceable hour as "now" is the
+    // exact failure a time-indexed blob exists to prevent.
+    if (!time) continue
+    if (!seenTimes.has(time)) { seenTimes.add(time); times.push(time) }
     const waveHeight = at(row, iThgt)
     const lat = at(row, iLat)
     const lng = at(row, iLon)
     // No combined wave height is the land/no-data signal for the whole cell.
     if (waveHeight == null || lat == null || lng == null) continue
-    if (time == null && iTime >= 0 && typeof row[iTime] === 'string') time = row[iTime] as string
     cells.push({
+      time,
       lat,
       lng,
       waveHeight,
@@ -200,20 +291,22 @@ export function parseGriddapGrid(payload: unknown): WW3Grid {
       windWavePeriod: at(row, iWper),
     })
   }
-  return { time, cells }
+  return { times, cells }
 }
 
 // ── nearest valid cell ──────────────────────────────────────────────────────
 
 export type WW3Index = Map<string, WW3Cell>
 
-function indexKey(lat: number, lng: number): string {
-  return `${Math.round(lat / WW3_GRID_DEG)},${Math.round(lng / WW3_GRID_DEG)}`
+/** Lattice key for a cell coordinate. Uses the SUBSAMPLED spacing. */
+export function gridCellKey(lat: number, lng: number): string {
+  const step = WW3_GRID_DEG * WW3_SPATIAL_STRIDE
+  return `${Math.round(lat / step)},${Math.round(lng / step)}`
 }
 
 export function buildGridIndex(cells: Iterable<WW3Cell>): WW3Index {
   const index: WW3Index = new Map()
-  for (const cell of cells) index.set(indexKey(cell.lat, cell.lng), cell)
+  for (const cell of cells) index.set(gridCellKey(cell.lat, cell.lng), cell)
   return index
 }
 
@@ -225,10 +318,11 @@ export interface WW3Snap {
 /**
  * The closest cell WITH DATA to a coordinate, or null past `maxKm`.
  *
- * Searched as expanding rings on the grid lattice rather than by scanning every
- * cell: the snap runs once per conditions bucket (~1,192) against ~50,000
- * ocean cells, and the naive form is 60M distance computations inside a cron
- * invocation that is already spending most of its budget on the network.
+ * Searched as a bounded window on the grid lattice rather than by scanning
+ * every cell: the snap runs once per conditions bucket (~1,192) against every
+ * ocean cell in the world, and the naive form is millions of distance
+ * computations inside a cron invocation that is already spending most of its
+ * budget on the network.
  */
 export function snapToNearestCell(
   index: WW3Index,
@@ -236,21 +330,24 @@ export function snapToNearestCell(
   lng: number,
   maxKm: number = WW3_MAX_SNAP_KM
 ): WW3Snap | null {
-  const centreLat = Math.round(lat / WW3_GRID_DEG)
-  const centreLon = Math.round(lng / WW3_GRID_DEG)
-  const stepKm = WW3_GRID_DEG * 111.32
+  const step = WW3_GRID_DEG * WW3_SPATIAL_STRIDE
+  const centreLat = Math.round(lat / step)
+  const centreLon = Math.round(lng / step)
+  const stepKm = step * 111.32
   // The window is wider in cells than in degrees near the poles, because a
   // degree of longitude shrinks with the cosine of the latitude — a fixed
-  // ±4-cell window would search only 100 km east-west in Alaska while claiming
-  // to search 165.
+  // window would search half as far east-west in Alaska as it claims to.
   const latCells = Math.ceil(maxKm / stepKm)
   const lonCells = Math.ceil(maxKm / (stepKm * Math.max(Math.cos((lat * Math.PI) / 180), 0.15)))
+  // Lattice columns wrap: a spot at 179.4°E must see cells west of the
+  // antimeridian. 360 / step columns cover the globe.
+  const columns = Math.round(360 / step)
 
   let best: WW3Snap | null = null
   for (let di = -latCells; di <= latCells; di++) {
     for (let dj = -lonCells; dj <= lonCells; dj++) {
-      // Longitude wraps: a spot at 179.4°E must see cells at 179.5°W.
-      const j = (((centreLon + dj + 360) % 720) + 720) % 720 - 360
+      const half = columns / 2
+      const j = (((centreLon + dj + half) % columns) + columns) % columns - half
       const cell = index.get(`${centreLat + di},${j}`)
       if (!cell) continue
       const d = distanceKm(lat, lng, cell.lat, cell.lng)
@@ -264,51 +361,66 @@ export function snapToNearestCell(
 // ── stored overview blob ────────────────────────────────────────────────────
 
 /**
- * One bucket's snapped reading, short-keyed.
+ * One bucket's reading at one forecast hour.
  *
- * The blob holds an entry per 0.05° conditions bucket (~1,192), so the field
- * names are paid for 1,192 times over. Nulls are kept as nulls for the reason
- * spelled out on `parseGriddapGrid`.
+ * A TUPLE, not an object, because the blob holds one of these per conditions
+ * bucket per timestep — 1,192 × 8 ≈ 9,500 of them — and repeating seven field
+ * names that many times roughly doubles the stored size for no benefit. Order
+ * is fixed and is the only thing a reader needs; use `overviewEntryToConditions`
+ * rather than indexing it by hand.
+ *
+ * [0] combined significant wave height, m (never null — its absence is no cell)
+ * [1] combined sea mean period, s
+ * [2] swell height, m   [3] swell period, s   [4] swell direction, deg
+ * [5] wind-wave height, m   [6] wind-wave period, s
  */
-export interface WaveOverviewEntry {
-  /** Combined significant wave height, m (never null — its absence is no cell). */
-  h: number
-  /** Combined sea mean period, s. */
-  p: number | null
-  /** Swell partition height (m), period (s), direction (deg). */
-  sh: number | null
-  sp: number | null
-  sd: number | null
-  /** Wind-wave partition height (m) and period (s). */
-  wh: number | null
-  wp: number | null
-}
+export type WaveOverviewEntry = [
+  number,
+  number | null,
+  number | null,
+  number | null,
+  number | null,
+  number | null,
+  number | null,
+]
 
 export interface WaveOverviewBlob {
-  version: 1
-  /** Cron run time, ms since epoch — what staleness is measured against. */
+  version: 2
+  /** Cron run time, ms since epoch. Diagnostic only — see the note on validity. */
   generatedAt: number
-  /** The WW3 forecast hour the readings describe, ISO 8601 UTC. */
-  dataTime: string | null
+  /** The forecast hours the readings describe, ms since epoch, ascending. */
+  times: number[]
   /** Boxes that answered, for diagnosing a partial run. */
   boxes: string[]
-  /** Conditions-bucket key -> reading. */
-  entries: Record<string, WaveOverviewEntry>
+  /**
+   * Conditions-bucket key -> one reading per entry in `times`, index-aligned.
+   * A null element is an hour that box did not return.
+   */
+  entries: Record<string, (WaveOverviewEntry | null)[]>
 }
 
-export const WAVE_OVERVIEW_CACHE_KEY = 'ww3:overview:v1'
+// v2 = time-indexed. A v1 blob is a single snapshot with no `times` array and
+// would be served as "current" forever; the version gate makes an old entry
+// left in the cache across a deploy fall back rather than mislead.
+export const WAVE_OVERVIEW_CACHE_KEY = 'ww3:overview:v2'
 
 /**
- * Runtime Cache TTL, deliberately far longer than the 6-hour cron interval:
- * a missed run must serve stale readings rather than nothing, because "nothing"
- * greys every pin on the map. `WW3_MAX_AGE_MS` is the shorter limit that
- * decides when a stale blob stops being trusted and the request falls back to
- * Open-Meteo sampling.
+ * Runtime Cache TTL, deliberately far longer than the daily cron interval:
+ * a missed run must serve the tail of the previous forecast rather than
+ * nothing, because "nothing" greys every pin on the map.
  */
-export const WAVE_OVERVIEW_TTL_SECONDS = 24 * 3600
+export const WAVE_OVERVIEW_TTL_SECONDS = 48 * 3600
 
-/** Two missed cron runs. Past this the blob is ignored, not served. */
-export const WW3_MAX_AGE_MS = 12 * 3600 * 1000
+/**
+ * How far the nearest stored forecast hour may be from the reader's clock.
+ *
+ * THIS, NOT THE BLOB'S AGE, IS THE VALIDITY TEST. A blob fetched 20 hours ago
+ * is perfectly good if it still holds an hour near now, and a blob fetched two
+ * days ago is useless however recently it was written — its last timestep is
+ * long past, no hour is within this window, and the request falls back to
+ * Open-Meteo sampling. `generatedAt` is kept for telemetry only.
+ */
+export const WW3_MAX_TIMESTEP_GAP_MS = 3 * 3600 * 1000
 
 /**
  * Below this share of the requested buckets the blob is treated as not usable
@@ -326,7 +438,8 @@ export async function readWaveOverview(): Promise<WaveOverviewBlob | null> {
   if (!cache) return null
   try {
     const hit = await cache.get(WAVE_OVERVIEW_CACHE_KEY) as WaveOverviewBlob | null | undefined
-    if (!hit || hit.version !== 1 || typeof hit.generatedAt !== 'number') return null
+    if (!hit || hit.version !== 2) return null
+    if (!Array.isArray(hit.times) || hit.times.length === 0) return null
     if (!hit.entries || typeof hit.entries !== 'object') return null
     return hit
   } catch {
@@ -352,15 +465,15 @@ const round = (v: number | null, dp: number): number | null =>
   v == null ? null : Math.round(v * 10 ** dp) / 10 ** dp
 
 export function cellToOverviewEntry(cell: WW3Cell): WaveOverviewEntry {
-  return {
-    h: round(cell.waveHeight, 2)!,
-    p: round(cell.wavePeriod, 1),
-    sh: round(cell.swellHeight, 2),
-    sp: round(cell.swellPeriod, 1),
-    sd: cell.swellDirection == null ? null : Math.round(cell.swellDirection),
-    wh: round(cell.windWaveHeight, 2),
-    wp: round(cell.windWavePeriod, 1),
-  }
+  return [
+    round(cell.waveHeight, 2)!,
+    round(cell.wavePeriod, 1),
+    round(cell.swellHeight, 2),
+    round(cell.swellPeriod, 1),
+    cell.swellDirection == null ? null : Math.round(cell.swellDirection),
+    round(cell.windWaveHeight, 2),
+    round(cell.windWavePeriod, 1),
+  ]
 }
 
 /**
@@ -385,17 +498,18 @@ export function cellToOverviewEntry(cell: WW3Cell): WaveOverviewEntry {
  * single train.
  */
 export function overviewEntryToConditions(entry: WaveOverviewEntry): CurrentMarineConditions {
+  const [h, p, sh, sp, sd, wh, wp] = entry
   return {
-    waveHeight: entry.h,
-    wavePeriod: entry.p ?? 0,
-    swellHeight: entry.sh ?? 0,
-    swellPeriod: entry.sp ?? 0,
-    swellDirection: entry.sd,
+    waveHeight: h,
+    wavePeriod: p ?? 0,
+    swellHeight: sh ?? 0,
+    swellPeriod: sp ?? 0,
+    swellDirection: sd,
     secondarySwellHeight: null,
     secondarySwellPeriod: null,
     secondarySwellDirection: null,
-    windWaveHeight: entry.wh,
-    windWavePeriod: entry.wp,
+    windWaveHeight: wh,
+    windWavePeriod: wp,
     windSpeed: null,
     windDirection: null,
     windGust: null,
@@ -407,11 +521,16 @@ export interface WaveOverviewLookup {
   readings: (CurrentMarineConditions | null)[]
   /** Share of the requested keys the blob answered, 0..1. */
   coverage: number
+  /** The forecast hour served, ms since epoch. */
+  timestep: number
+  /** How far that hour is from `now`, ms. */
+  gapMs: number
 }
 
 /**
- * Resolve conditions-bucket keys against a blob, or null when the blob is
- * missing, too old, or too sparse to colour the map with.
+ * Resolve conditions-bucket keys against a blob at the forecast hour nearest
+ * to `now`, or null when the blob is missing, out of date, or too sparse to
+ * colour the map with.
  */
 export function lookupWaveOverview(
   blob: WaveOverviewBlob | null,
@@ -419,15 +538,25 @@ export function lookupWaveOverview(
   now: number = Date.now()
 ): WaveOverviewLookup | null {
   if (!blob || keys.length === 0) return null
-  if (now - blob.generatedAt > WW3_MAX_AGE_MS) return null
+  if (!Array.isArray(blob.times) || blob.times.length === 0) return null
+
+  let index = -1
+  let gapMs = Infinity
+  blob.times.forEach((t, i) => {
+    const gap = Math.abs(t - now)
+    if (gap < gapMs) { gapMs = gap; index = i }
+  })
+  // No stored hour is close enough to be called "current".
+  if (index < 0 || gapMs > WW3_MAX_TIMESTEP_GAP_MS) return null
+
   let hits = 0
   const readings = keys.map((key) => {
-    const entry = blob.entries[key]
+    const entry = blob.entries[key]?.[index]
     if (!entry) return null
     hits++
     return overviewEntryToConditions(entry)
   })
   const coverage = hits / keys.length
   if (coverage < WW3_MIN_COVERAGE) return null
-  return { readings, coverage }
+  return { readings, coverage, timestep: blob.times[index], gapMs }
 }

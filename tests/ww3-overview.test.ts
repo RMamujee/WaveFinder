@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { CurrentMarineConditions, GeoPoint } from '@/lib/api/open-meteo'
-import type { WaveOverviewBlob } from '@/lib/api/ww3-overview'
+import type { WaveOverviewBlob, WaveOverviewEntry } from '@/lib/api/ww3-overview'
 
 // The route imports Prisma at module scope for the legacy-cuid bridge. Nothing
 // here goes down that path.
@@ -46,28 +46,42 @@ vi.mock('@/lib/api/open-meteo', async (importOriginal) => {
 const {
   WW3_BOXES,
   WW3_GRID_DEG,
-  WW3_MAX_AGE_MS,
+  WW3_MAX_SNAP_KM,
+  WW3_MAX_TIMESTEP_GAP_MS,
+  WW3_SPATIAL_STRIDE,
+  WW3_TIME_STEPS,
+  WW3_TIME_STRIDE_HOURS,
   WW3_VARIABLES,
   buildGridIndex,
   buildGriddapUrl,
   cellToOverviewEntry,
+  gridCellKey,
   lookupWaveOverview,
   overviewEntryToConditions,
   parseGriddapGrid,
   snapToNearestCell,
-  ww3TimeParam,
+  ww3TimeRange,
 } = await import('@/lib/api/ww3-overview')
 const { CONDITIONS_BUCKETS, SPOTS } = await import('@/lib/spots/static-store')
 const { GET } = await import('@/app/api/spots/route')
+const { distanceKm } = await import('@/lib/forecast/nearest-fallback')
+
+const HOUR = 3_600_000
+const SUBSAMPLED_DEG = WW3_GRID_DEG * WW3_SPATIAL_STRIDE
 
 // ── Fixture ─────────────────────────────────────────────────────────────────
-// Captured verbatim from a live griddap request (small California box,
-// 2026-08-31T12:00Z, all nine variables). The longitudes are on the base
-// dataset's 0-359.5 axis, which the parser neither knows nor cares about — it
-// is column-name driven. The rows are here because three real shapes matter and
-// none of them is obvious from the docs: a fully populated ocean cell, an ocean
-// cell whose WIND-WAVE columns alone are null (no windsea partition), and a
-// land cell that is null across the board.
+// The 12:00Z rows are verbatim from a live griddap request (small California
+// box, all variables, 2026-08-31). The 16:00Z rows are the same cells restamped
+// with the next requested hour — the VALUES are not a second forecast, but the
+// row shape is exactly what a strided time range returns, which is what the
+// parser has to get right.
+//
+// Three real shapes matter here and none is obvious from the docs: a fully
+// populated ocean cell, an ocean cell whose WIND-WAVE columns alone are null
+// (no windsea partition), and a land cell that is null across the board. The
+// longitudes are on the base dataset's 0-359.5 axis and the response carries
+// `Tdir`/`wdir` columns the code no longer requests — both are deliberate: the
+// parser is column-name driven and must not care.
 const GRIDDAP_FIXTURE = {
   table: {
     columnNames: ['time', 'depth', 'latitude', 'longitude', 'Thgt', 'Tper', 'Tdir', 'shgt', 'sper', 'sdir', 'whgt', 'wper', 'wdir'],
@@ -78,16 +92,21 @@ const GRIDDAP_FIXTURE = {
       ['2026-08-31T12:00:00Z', 0, 30, 235.5, 2.25, 12.987012, 159, 1.3399999, 12.53, 148, 1.63, 7.45, 359],
       ['2026-08-31T12:00:00Z', 0, 30, 243.5, 1.8399999, 12.048192, 184, 1.27, 8.139999, 306, null, null, null],
       ['2026-08-31T12:00:00Z', 0, 30, 244.5, null, null, null, null, null, null, null, null, null],
+      ['2026-08-31T16:00:00Z', 0, 30, 235, 2.31, 13.1, 168, 1.4, 12.6, 146, 1.62, 7.4, 1],
+      ['2026-08-31T16:00:00Z', 0, 30, 235.5, 2.36, 12.9, 159, 1.42, 12.5, 148, 1.65, 7.5, 359],
+      ['2026-08-31T16:00:00Z', 0, 30, 243.5, 1.9, 12.0, 184, 1.3, 8.1, 306, null, null, null],
+      ['2026-08-31T16:00:00Z', 0, 30, 244.5, null, null, null, null, null, null, null, null, null],
     ],
   },
 }
 
 describe('parseGriddapGrid', () => {
-  it('reads the ocean cells and the forecast hour out of a real response', () => {
+  it('reads every forecast hour and its ocean cells out of a real response', () => {
     const grid = parseGriddapGrid(GRIDDAP_FIXTURE)
-    expect(grid.time).toBe('2026-08-31T12:00:00Z')
-    expect(grid.cells).toHaveLength(3)
+    expect(grid.times).toEqual(['2026-08-31T12:00:00Z', '2026-08-31T16:00:00Z'])
+    expect(grid.cells).toHaveLength(6)
     expect(grid.cells[0]).toEqual({
+      time: '2026-08-31T12:00:00Z',
       lat: 30,
       lng: 235,
       waveHeight: 2.2,
@@ -100,9 +119,28 @@ describe('parseGriddapGrid', () => {
     })
   })
 
-  it('drops land cells, which arrive as null IN PLACE rather than as gaps', () => {
+  it('keeps the hours distinct — the same cell appears once per timestep', () => {
     const grid = parseGriddapGrid(GRIDDAP_FIXTURE)
-    expect(grid.cells.some((c) => c.lng === 244.5)).toBe(false)
+    const atOrigin = grid.cells.filter((c) => c.lng === 235)
+    expect(atOrigin.map((c) => c.time)).toEqual(['2026-08-31T12:00:00Z', '2026-08-31T16:00:00Z'])
+    expect(atOrigin.map((c) => c.waveHeight)).toEqual([2.2, 2.31])
+  })
+
+  it('lists an hour even when every cell in it is land', () => {
+    // The hour still happened; it just has no ocean in this box. Dropping it
+    // would misalign the per-timestep series the cron builds.
+    const grid = parseGriddapGrid({
+      table: {
+        columnNames: ['time', 'depth', 'latitude', 'longitude', 'Thgt'],
+        rows: [['2026-08-31T12:00:00Z', 0, 30, 244.5, null]],
+      },
+    })
+    expect(grid.times).toEqual(['2026-08-31T12:00:00Z'])
+    expect(grid.cells).toEqual([])
+  })
+
+  it('drops land cells, which arrive as null IN PLACE rather than as gaps', () => {
+    expect(parseGriddapGrid(GRIDDAP_FIXTURE).cells.some((c) => c.lng === 244.5)).toBe(false)
   })
 
   it('preserves a missing wind-wave partition as null, never as 0', () => {
@@ -115,83 +153,123 @@ describe('parseGriddapGrid', () => {
   })
 
   it('is column-name driven, so a reordered or extended response still parses', () => {
-    const reordered = {
+    const grid = parseGriddapGrid({
       table: {
         columnNames: ['time', 'depth', 'longitude', 'latitude', 'shgt', 'Thgt'],
         rows: [['2026-08-31T12:00:00Z', 0, -19.5, 35, 0.81, 1.16]],
       },
-    }
-    const grid = parseGriddapGrid(reordered)
+    })
     expect(grid.cells).toEqual([{
-      lat: 35, lng: -19.5, waveHeight: 1.16, wavePeriod: null,
+      time: '2026-08-31T12:00:00Z', lat: 35, lng: -19.5, waveHeight: 1.16, wavePeriod: null,
       swellHeight: 0.81, swellPeriod: null, swellDirection: null,
       windWaveHeight: null, windWavePeriod: null,
     }])
   })
 
+  it('discards a row with no time — an unplaceable hour must never be served as now', () => {
+    const grid = parseGriddapGrid({
+      table: {
+        columnNames: ['depth', 'latitude', 'longitude', 'Thgt'],
+        rows: [[0, 35, -19.5, 1.16]],
+      },
+    })
+    expect(grid).toEqual({ times: [], cells: [] })
+  })
+
   it('returns nothing rather than throwing on an error body or garbage', () => {
     for (const bad of [null, undefined, {}, { table: {} }, { code: 404, message: 'x' }, 'nope']) {
-      expect(parseGriddapGrid(bad)).toEqual({ time: null, cells: [] })
+      expect(parseGriddapGrid(bad)).toEqual({ times: [], cells: [] })
     }
   })
 })
 
-describe('buildGriddapUrl', () => {
-  const box = { id: 'test', latMin: 30, latMax: 40, lonMin: -125, lonMax: -115 }
-
-  it('asks for every variable in one request, at one hour and one depth', () => {
-    const url = decodeURIComponent(buildGriddapUrl(box, '2026-08-31T12:00:00Z'))
-    for (const v of WW3_VARIABLES) {
-      expect(url).toContain(`${v}[(2026-08-31T12:00:00Z)][0][(30):(40)][(-125):(-115)]`)
-    }
-    // One query, nine variables — adding variables is far cheaper than adding
-    // requests, because the time/depth/lat/lon columns dominate a griddap row.
-    expect(url.split('?')[1].split(',')).toHaveLength(WW3_VARIABLES.length)
-  })
-
-  it('uses the lon180 alias, because the 0-359.5 axis 404s across the meridian', () => {
-    expect(buildGriddapUrl(box, '2026-08-31T12:00:00Z')).toContain('/griddap/ww3_global_lon180.json?')
-  })
-})
-
-describe('ww3TimeParam', () => {
+describe('ww3TimeRange', () => {
   it('floors to the hour and formats what griddap accepts', () => {
-    expect(ww3TimeParam(new Date('2026-08-31T12:47:31.500Z'))).toBe('2026-08-31T12:00:00Z')
+    const range = ww3TimeRange(new Date('2026-08-31T12:47:31.500Z'))
+    expect(range.start).toBe('2026-08-31T12:00:00Z')
+    expect(range.end).toBe('2026-09-01T16:00:00Z')
   })
 
   it('never emits the tabledap-only `now` keyword', () => {
     // griddap answers `[(now)]` with
     // `Start=NaN (invalid format?) isn't allowed` — verified live.
-    expect(ww3TimeParam()).not.toContain('now')
-    expect(ww3TimeParam()).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00:00Z$/)
+    const range = ww3TimeRange()
+    expect(range.start).not.toContain('now')
+    expect(range.start).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00:00Z$/)
+    expect(range.end).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00:00Z$/)
+  })
+
+  it('outlasts the gap between two daily cron runs', () => {
+    // Hobby cron timing is imprecise (it fires within ~an hour of the
+    // schedule), so consecutive runs can be ~25 h apart. A window shorter than
+    // that leaves the map with no usable hour before the next refresh.
+    const span = (WW3_TIME_STEPS - 1) * WW3_TIME_STRIDE_HOURS
+    expect(span).toBeGreaterThanOrEqual(26)
+  })
+
+  it('spaces the hours closer together than the validity window', () => {
+    // With 6-hourly steps the worst-case distance to a stored hour is exactly
+    // the 3 h cutoff, i.e. the feature switches itself off at the midpoint.
+    expect(WW3_TIME_STRIDE_HOURS * HOUR / 2).toBeLessThan(WW3_MAX_TIMESTEP_GAP_MS)
+  })
+})
+
+describe('buildGriddapUrl', () => {
+  const box = { id: 'test', latMin: 30.5, latMax: 40.5, lonMin: -124.5, lonMax: -114.5 }
+  const range = { start: '2026-08-31T12:00:00Z', end: '2026-09-01T16:00:00Z' }
+
+  it('asks for every variable over the whole window in one request', () => {
+    const url = decodeURIComponent(buildGriddapUrl(box, range))
+    for (const v of WW3_VARIABLES) {
+      expect(url).toContain(
+        `${v}[(2026-08-31T12:00:00Z):${WW3_TIME_STRIDE_HOURS}:(2026-09-01T16:00:00Z)]` +
+        `[0][(30.5):${WW3_SPATIAL_STRIDE}:(40.5)][(-124.5):${WW3_SPATIAL_STRIDE}:(-114.5)]`
+      )
+    }
+    // One query, N variables — adding variables is far cheaper than adding
+    // requests, because the time/depth/lat/lon columns dominate a griddap row.
+    expect(url.split('?')[1].split(',')).toHaveLength(WW3_VARIABLES.length)
+  })
+
+  it('requests only what the conditions mapping consumes', () => {
+    // Tdir and wdir are read by nothing: swell direction comes from sdir, and
+    // wdir is a wind-WAVE direction that must never be passed off as a wind.
+    expect([...WW3_VARIABLES]).toEqual(['Thgt', 'Tper', 'shgt', 'sper', 'sdir', 'whgt', 'wper'])
+  })
+
+  it('uses the lon180 alias, because the 0-359.5 axis 404s across the meridian', () => {
+    expect(buildGriddapUrl(box, range)).toContain('/griddap/ww3_global_lon180.json?')
   })
 })
 
 describe('snapToNearestCell', () => {
   const cell = (lat: number, lng: number, waveHeight: number) => ({
-    lat, lng, waveHeight,
+    time: '2026-08-31T12:00:00Z', lat, lng, waveHeight,
     wavePeriod: 10, swellHeight: 1, swellPeriod: 12, swellDirection: 270,
     windWaveHeight: 0.4, windWavePeriod: 5,
   })
 
   it('snaps to the nearest cell that carries data, not the nearest lattice point', () => {
-    // The containing cell is land (absent from the index); the coast is west.
-    const index = buildGridIndex([cell(34, -120, 1.1), cell(34, -120.5, 2.2)])
-    const snap = snapToNearestCell(index, 34.02, -119.9)!
-    expect(snap.cell.lng).toBe(-120)
-    expect(snap.distanceKm).toBeLessThan(15)
+    // The containing cell is land (absent from the index); the ocean is west.
+    const index = buildGridIndex([cell(34.5, -120.5, 1.1), cell(34.5, -122.5, 2.2)])
+    const snap = snapToNearestCell(index, 34.4, -120.1)!
+    expect(snap.cell.lng).toBe(-120.5)
+    expect(snap.distanceKm).toBeLessThan(50)
   })
 
-  it('reaches past a whole grid cell of land to find water', () => {
-    const index = buildGridIndex([cell(34, -121.5, 1.4)])
-    const snap = snapToNearestCell(index, 34, -120)!
-    expect(snap.cell.lng).toBe(-121.5)
-    expect(snap.distanceKm).toBeGreaterThan(100)
+  it('reaches past a subsampled cell of land to find water', () => {
+    const index = buildGridIndex([cell(34.5, -122.5, 1.4)])
+    const snap = snapToNearestCell(index, 34.5, -120.5)!
+    expect(snap.cell.lng).toBe(-122.5)
+    expect(snap.distanceKm).toBeGreaterThan(150)
   })
 
-  it('refuses a borrow past maxKm rather than inventing a reading', () => {
-    const index = buildGridIndex([cell(34, -121.5, 1.4)])
-    expect(snapToNearestCell(index, 34, -120, 50)).toBeNull()
+  it('refuses a borrow past the ceiling rather than inventing a reading', () => {
+    // Two subsampled cells west is ~367 km at this latitude — past
+    // WW3_MAX_SNAP_KM, and far enough that it is no longer the same sea.
+    const index = buildGridIndex([cell(34.5, -124.5, 1.4)])
+    expect(snapToNearestCell(index, 34.5, -120.5)).toBeNull()
+    expect(snapToNearestCell(buildGridIndex([cell(34.5, -122.5, 1.4)]), 34.5, -120.5, 100)).toBeNull()
   })
 
   it('returns null for an index with no cells at all', () => {
@@ -199,36 +277,38 @@ describe('snapToNearestCell', () => {
   })
 
   it('crosses the antimeridian — Fiji must see cells on both sides of it', () => {
-    const index = buildGridIndex([cell(-18, -179.5, 2.0)])
+    const index = buildGridIndex([cell(-18.5, -179.5, 2.0)])
     const snap = snapToNearestCell(index, -18.1, 179.6)!
     expect(snap.cell.lng).toBe(-179.5)
-    expect(snap.distanceKm).toBeLessThan(120)
+    expect(snap.distanceKm).toBeLessThan(150)
   })
 
   it('widens the search in cells near the poles, where a longitude cell is narrow', () => {
-    // At 60°N a 0.5° step of longitude is ~28 km, so a fixed ±3-cell window
-    // would search only ~83 km east-west while claiming to search 165.
-    const index = buildGridIndex([cell(60, -125, 3.1)])
-    const snap = snapToNearestCell(index, 60, -122.5)!
-    expect(snap.cell.lng).toBe(-125)
+    // At 60°N a 2° step of longitude is ~111 km, so a window sized in degrees
+    // would search half as far east-west as it claims to.
+    const index = buildGridIndex([cell(60.5, -124.5, 3.1)])
+    expect(snapToNearestCell(index, 60.5, -120.5)!.cell.lng).toBe(-124.5)
   })
 })
 
 describe('WW3 partition -> map conditions', () => {
   const entry = cellToOverviewEntry({
-    lat: 30, lng: -125,
+    time: '2026-08-31T12:00:00Z', lat: 30.5, lng: -124.5,
     waveHeight: 2.2, wavePeriod: 13.157894,
     swellHeight: 1.3199999, swellPeriod: 12.58, swellDirection: 146,
     windWaveHeight: 1.5999999, windWavePeriod: 7.3599997,
   })
 
-  it('rounds the stored entry without changing what it says', () => {
-    expect(entry).toEqual({ h: 2.2, p: 13.2, sh: 1.32, sp: 12.6, sd: 146, wh: 1.6, wp: 7.4 })
+  it('stores a compact tuple, rounded without changing what it says', () => {
+    // A tuple, not an object: the blob holds ~9,500 of these and repeating
+    // seven field names each time roughly doubles the stored size.
+    expect(entry).toEqual([2.2, 13.2, 1.32, 12.6, 146, 1.6, 7.4])
   })
 
   it('maps the swell and wind-wave partitions onto the conditions shape', () => {
     const om = overviewEntryToConditions(entry)
     expect(om.waveHeight).toBe(2.2)
+    expect(om.wavePeriod).toBe(13.2)
     expect(om.swellHeight).toBe(1.32)
     expect(om.swellPeriod).toBe(12.6)
     expect(om.swellDirection).toBe(146)
@@ -241,10 +321,6 @@ describe('WW3 partition -> map conditions', () => {
     expect(om.windSpeed).toBeNull()
     expect(om.windDirection).toBeNull()
     expect(om.windGust).toBeNull()
-    // The wind-wave DIRECTION is not a wind direction. Passing it as one would
-    // score a real onshore/offshore penalty from a number that never described
-    // the wind.
-    expect(om.windDirection).not.toBe(1)
   })
 
   it('reports no second swell train — WW3 partitions the sea into two, not three', () => {
@@ -255,7 +331,7 @@ describe('WW3 partition -> map conditions', () => {
   })
 
   it('keeps a missing wind-wave partition null so cleanliness renormalises', () => {
-    const om = overviewEntryToConditions({ h: 1.84, p: 12, sh: 1.27, sp: 8.1, sd: 306, wh: null, wp: null })
+    const om = overviewEntryToConditions([1.84, 12, 1.27, 8.1, 306, null, null])
     expect(om.windWaveHeight).toBeNull()
     expect(om.windWavePeriod).toBeNull()
   })
@@ -263,7 +339,7 @@ describe('WW3 partition -> map conditions', () => {
   it('uses 0 only where the conditions shape itself means "absent partition"', () => {
     // waveHeight/swellHeight/swellPeriod are non-nullable in
     // CurrentMarineConditions and every consumer branches on `> 0`.
-    const om = overviewEntryToConditions({ h: 0.9, p: null, sh: null, sp: null, sd: null, wh: 0.9, wp: 4 })
+    const om = overviewEntryToConditions([0.9, null, null, null, null, 0.9, 4])
     expect(om.swellHeight).toBe(0)
     expect(om.swellPeriod).toBe(0)
     expect(om.wavePeriod).toBe(0)
@@ -272,43 +348,84 @@ describe('WW3 partition -> map conditions', () => {
 })
 
 describe('lookupWaveOverview', () => {
+  const NOW = Date.parse('2026-08-31T13:00:00Z')
+  const morning: WaveOverviewEntry = [2.2, 13.2, 1.32, 12.6, 146, 1.6, 7.4]
+  const evening: WaveOverviewEntry = [0.6, 7.1, 0.3, 8, 200, 0.4, 5]
+
   const blob = (overrides: Partial<WaveOverviewBlob> = {}): WaveOverviewBlob => ({
-    version: 1,
-    generatedAt: Date.now(),
-    dataTime: '2026-08-31T12:00:00Z',
+    version: 2,
+    generatedAt: NOW - 2 * HOUR,
+    times: [NOW - HOUR, NOW + 3 * HOUR],
     boxes: ['test'],
     entries: {
-      a: { h: 2.2, p: 13.2, sh: 1.32, sp: 12.6, sd: 146, wh: 1.6, wp: 7.4 },
-      b: { h: 1.1, p: 9.1, sh: 0.6, sp: 11, sd: 200, wh: 0.5, wp: 5 },
+      a: [morning, evening],
+      b: [[1.1, 9.1, 0.6, 11, 200, 0.5, 5], null],
+      c: [morning, evening],
     },
     ...overrides,
   })
 
+  it('serves the forecast hour nearest to now, not the first one stored', () => {
+    // 1 h ago beats 3 h ahead.
+    const hit = lookupWaveOverview(blob(), ['a'], NOW)!
+    expect(hit.readings[0]!.waveHeight).toBe(2.2)
+    expect(hit.timestep).toBe(NOW - HOUR)
+    expect(hit.gapMs).toBe(HOUR)
+  })
+
+  it('moves on to the later hour as the day advances — a snapshot would not', () => {
+    // Four hours later the evening step is the closer one. This is the whole
+    // reason the blob is time-indexed: with a daily cron, a single stored hour
+    // would still be showing the morning's sea.
+    const hit = lookupWaveOverview(blob(), ['a'], NOW + 4 * HOUR)!
+    expect(hit.readings[0]!.waveHeight).toBe(0.6)
+  })
+
   it('answers in the order of the keys it was asked about', () => {
-    const hit = lookupWaveOverview(blob(), ['b', 'a'])!
+    const hit = lookupWaveOverview(blob(), ['b', 'a'], NOW)!
     expect(hit.readings[0]!.waveHeight).toBe(1.1)
     expect(hit.readings[1]!.waveHeight).toBe(2.2)
     expect(hit.coverage).toBe(1)
   })
 
-  it('refuses a blob older than the hard staleness limit', () => {
-    expect(lookupWaveOverview(blob({ generatedAt: Date.now() - WW3_MAX_AGE_MS - 1 }), ['a'])).toBeNull()
+  it('treats a null element as a bucket the blob cannot answer for that hour', () => {
+    // `b` has a reading at the first step and none at the later one, so the
+    // same blob answers differently depending on which hour is served.
+    expect(lookupWaveOverview(blob(), ['a', 'b', 'c'], NOW)!.coverage).toBe(1)
+    const later = lookupWaveOverview(blob(), ['a', 'b', 'c'], NOW + 4 * HOUR)!
+    expect(later.coverage).toBeCloseTo(2 / 3)
+    expect(later.readings[1]).toBeNull()
+  })
+
+  it('refuses a blob whose nearest hour is outside the validity window', () => {
+    const stale = blob({ times: [NOW - 30 * HOUR, NOW - 26 * HOUR] })
+    expect(lookupWaveOverview(stale, ['a'], NOW)).toBeNull()
+  })
+
+  it('accepts a blob written long ago that still holds a nearby hour', () => {
+    // AGE IS NOT THE TEST. A run from 20 h ago whose window reaches now is
+    // exactly as useful as one written a minute ago.
+    const old = blob({ generatedAt: NOW - 20 * HOUR })
+    expect(lookupWaveOverview(old, ['a'], NOW)).not.toBeNull()
+  })
+
+  it('rejects the boundary a whisker past the cutoff and accepts it a whisker before', () => {
+    const at = (offset: number) => lookupWaveOverview(
+      blob({ times: [NOW + offset] }), ['a'], NOW)
+    expect(at(WW3_MAX_TIMESTEP_GAP_MS - 1000)).not.toBeNull()
+    expect(at(WW3_MAX_TIMESTEP_GAP_MS + 1000)).toBeNull()
   })
 
   it('refuses a blob that covers too little of the request', () => {
     // A partial cron run must not paint a third of the world grey; below the
     // coverage floor the caller falls back to Open-Meteo wholesale.
-    expect(lookupWaveOverview(blob(), ['a', 'x', 'y', 'z'])).toBeNull()
+    expect(lookupWaveOverview(blob(), ['a', 'x', 'y', 'z'], NOW)).toBeNull()
   })
 
-  it('serves a sparse-but-usable blob with nulls for the buckets it lacks', () => {
-    const hit = lookupWaveOverview(blob(), ['a', 'b', 'x'])!
-    expect(hit.readings[2]).toBeNull()
-    expect(hit.coverage).toBeCloseTo(2 / 3)
-  })
-
-  it('is null when there is no blob at all', () => {
-    expect(lookupWaveOverview(null, ['a'])).toBeNull()
+  it('is null with no blob, no keys, or no timesteps', () => {
+    expect(lookupWaveOverview(null, ['a'], NOW)).toBeNull()
+    expect(lookupWaveOverview(blob(), [], NOW)).toBeNull()
+    expect(lookupWaveOverview(blob({ times: [] }), ['a'], NOW)).toBeNull()
   })
 })
 
@@ -321,11 +438,52 @@ describe('WW3_BOXES', () => {
     expect(outside.map((s) => `${s.slug} ${s.lat},${s.lng}`)).toEqual([])
   })
 
-  it('leaves at least a grid cell of ocean around each spot to snap to', () => {
-    const tooTight = SPOTS.filter((s) => !WW3_BOXES.some((b) =>
-      s.lat >= b.latMin + WW3_GRID_DEG && s.lat <= b.latMax - WW3_GRID_DEG &&
-      s.lng >= b.lonMin + WW3_GRID_DEG && s.lng <= b.lonMax - WW3_GRID_DEG))
-    expect(tooTight.map((s) => s.slug)).toEqual([])
+  it('puts every box origin on the SAME subsampled lattice', () => {
+    // griddap counts a stride from the box's own start index. Two boxes whose
+    // origins differ by an odd number of native cells sample two interleaved
+    // lattices, and `gridCellKey` then rounds cells 0.5° apart onto one key —
+    // silently serving one cell's readings for another's.
+    for (const b of WW3_BOXES) {
+      for (const v of [b.latMin, b.lonMin]) {
+        expect(((v / WW3_GRID_DEG) % WW3_SPATIAL_STRIDE + WW3_SPATIAL_STRIDE) % WW3_SPATIAL_STRIDE)
+          .toBe(((0.5 / WW3_GRID_DEG) % WW3_SPATIAL_STRIDE))
+      }
+    }
+  })
+
+  it('gives each box origin a distinct lattice key per sampled cell', () => {
+    const keys = new Set<string>()
+    for (const b of WW3_BOXES) {
+      for (let lat = b.latMin; lat <= b.latMax; lat += SUBSAMPLED_DEG) {
+        keys.add(gridCellKey(lat, b.lonMin))
+      }
+    }
+    // A collision here means two real cells share a key and one overwrites the
+    // other in the snap index.
+    const cells: string[] = []
+    for (const b of WW3_BOXES) {
+      for (let lat = b.latMin; lat <= b.latMax; lat += SUBSAMPLED_DEG) cells.push(`${lat},${b.lonMin}`)
+    }
+    expect(keys.size).toBe(new Set(cells).size)
+  })
+
+  it('leaves every conditions bucket a sampled cell within the snap ceiling', () => {
+    // Land is not modelled here, so this is a necessary condition rather than a
+    // sufficient one — but a bucket with no SAMPLED point in range can never be
+    // answered however much ocean is nearby.
+    const unreachable = CONDITIONS_BUCKETS.filter((bucket) => {
+      let best = Infinity
+      for (const b of WW3_BOXES) {
+        for (let lat = b.latMin; lat <= b.latMax + 1e-9; lat += SUBSAMPLED_DEG) {
+          for (let lng = b.lonMin; lng <= b.lonMax + 1e-9; lng += SUBSAMPLED_DEG) {
+            const d = distanceKm(bucket.lat, bucket.lng, lat, lng)
+            if (d < best) best = d
+          }
+        }
+      }
+      return best > WW3_MAX_SNAP_KM
+    })
+    expect(unreachable.map((b) => b.key)).toEqual([])
   })
 
   it('stays inside the dataset domain and never straddles the antimeridian', () => {
@@ -339,23 +497,33 @@ describe('WW3_BOXES', () => {
     }
   })
 
-  it('never asks for the full-resolution global grid', () => {
-    // Measured: 11.3 MB and over 120 s. It does not fit in an invocation.
+  it('keeps the whole run inside the fetch budget', () => {
+    // The measured model: ~4 s of fixed cost per griddap request and ~51.2 KB/s
+    // of throughput, on rows of 45.83 B plus 7.09 B per variable. Blowing this
+    // is how the cron starts dying against `maxDuration` instead of finishing.
     const cells = WW3_BOXES.reduce((n, b) =>
-      n + ((b.latMax - b.latMin) / WW3_GRID_DEG + 1) * ((b.lonMax - b.lonMin) / WW3_GRID_DEG + 1), 0)
+      n + (Math.floor((b.latMax - b.latMin) / SUBSAMPLED_DEG) + 1)
+        * (Math.floor((b.lonMax - b.lonMin) / SUBSAMPLED_DEG) + 1), 0)
+    const bytes = cells * WW3_TIME_STEPS * (45.83 + 7.09 * WW3_VARIABLES.length)
+    const seconds = WW3_BOXES.length * 4 + bytes / 51200
+    expect(seconds).toBeLessThan(130)
+    // And it must never become the full-resolution global grid: 11.3 MB, >120 s
+    // for a SINGLE variable and a single hour, measured.
     expect(cells).toBeLessThan(311 * 720)
   })
 })
 
 // ── The reason the whole thing exists: no Open-Meteo calls on a wide map ─────
 describe('GET /api/spots?withConditions=true — overview source', () => {
-  const fullBlob = (generatedAt = Date.now()): WaveOverviewBlob => ({
-    version: 1,
-    generatedAt,
-    dataTime: '2026-08-31T12:00:00Z',
+  const entry: WaveOverviewEntry = [2.2, 13.2, 1.32, 12.6, 146, 0.4, 7.4]
+
+  const fullBlob = (times = [Date.now()]): WaveOverviewBlob => ({
+    version: 2,
+    generatedAt: Date.now(),
+    times,
     boxes: ['all'],
     entries: Object.fromEntries(CONDITIONS_BUCKETS.map((b) =>
-      [b.key, { h: 2.2, p: 13.2, sh: 1.32, sp: 12.6, sd: 146, wh: 0.4, wp: 7.4 }])),
+      [b.key, times.map(() => entry)])),
   })
 
   beforeEach(() => {
@@ -393,6 +561,17 @@ describe('GET /api/spots?withConditions=true — overview source', () => {
     expect(body.every((s) => s.currentWindSpeed === null && s.currentWindDir === null)).toBe(true)
   })
 
+  it('picks the stored hour nearest to now out of a full day of them', async () => {
+    const now = Date.now()
+    const times = Array.from({ length: WW3_TIME_STEPS }, (_, i) =>
+      now - 6 * HOUR + i * WW3_TIME_STRIDE_HOURS * HOUR)
+    stubBlob = fullBlob(times)
+    await conditions('withConditions=true')
+    // The first two steps are 6 h and 2 h behind; only the second is usable, so
+    // reaching Open-Meteo would mean the nearest-hour pick failed.
+    expect(batchCalls).toHaveLength(0)
+  })
+
   it('falls back to Open-Meteo sampling when the cron has never run', async () => {
     stubBlob = null
     await conditions('withConditions=true')
@@ -400,8 +579,8 @@ describe('GET /api/spots?withConditions=true — overview source', () => {
     expect(batchCalls[0].length).toBeLessThanOrEqual(200)
   })
 
-  it('falls back to Open-Meteo sampling when the blob is too old to trust', async () => {
-    stubBlob = fullBlob(Date.now() - WW3_MAX_AGE_MS - 1)
+  it('falls back when every stored hour is out of the validity window', async () => {
+    stubBlob = fullBlob([Date.now() - 2 * 24 * HOUR])
     await conditions('withConditions=true')
     expect(batchCalls).toHaveLength(1)
   })
