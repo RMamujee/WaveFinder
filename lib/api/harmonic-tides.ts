@@ -3,6 +3,7 @@ import type { TidePoint } from '@/types/forecast'
 // react-hooks/rules-of-hooks. It builds a predictor from a station record.
 import { useStation as createStationPredictor } from '@neaps/tide-predictor'
 import { HARMONIC_STATIONS, type HarmonicStation } from '@/lib/tides/stations'
+import { markTideExtremes } from './tide-extremes'
 
 /**
  * Tide predictions from harmonic constituents, computed in-process.
@@ -100,16 +101,9 @@ export function predictTidesFromStation(
     type: null as 'H' | 'L' | null,
   }))
 
-  // Same local-maxima scan the NOAA path uses, so best-time.ts and the chart
-  // are untouched. getExtremesPrediction() is strictly more accurate but puts
-  // H/L at times between the hourly points, which the chart is not built for.
-  for (let i = 1; i < points.length - 1; i++) {
-    const prev = points[i - 1].height
-    const curr = points[i].height
-    const next = points[i + 1].height
-    if (curr > prev && curr > next) points[i].type = 'H'
-    else if (curr < prev && curr < next) points[i].type = 'L'
-  }
-
-  return points
+  // Same local-maxima scan the NOAA path uses (shared via tide-extremes.ts),
+  // so best-time.ts and the chart are untouched. getExtremesPrediction() is
+  // strictly more accurate but puts H/L at times between the hourly points,
+  // which the chart is not built for.
+  return markTideExtremes(points)
 }
