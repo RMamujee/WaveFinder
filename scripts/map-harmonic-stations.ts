@@ -431,6 +431,14 @@ async function runEstuaryGuard(assignments: Assignment[], stationById: Map<strin
       })
     })
     process.stdout.write(`\r  guarded ${Math.min(i + CHUNK, assignments.length)}/${assignments.length}`)
+    // Open-Meteo bills per LOCATION on a 600/minute window, so ~13 chunks of
+    // 50 fired back-to-back trip the minutely limit around chunk 12-13 and
+    // everything after fails closed (observed 2026-08-31: 47 spots lost to one
+    // 429). Spreading the chunks keeps the whole run under the window; a retry
+    // would be worse because failed requests are billed too.
+    if (i + CHUNK < assignments.length) {
+      await new Promise((r) => setTimeout(r, 5_500))
+    }
   }
   process.stdout.write('\n')
   return results
