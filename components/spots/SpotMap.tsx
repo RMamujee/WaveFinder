@@ -828,10 +828,13 @@ export function SpotMap({ spots, centerLat = 36.5, centerLng = -120.5, zoom = 7,
       })
       mapInstance.current = map
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        subdomains: 'abcd',
+      // Esri, not CARTO: the free `rastertiles/voyager` endpoint now answers every
+      // tile with an "API KEY REQUIRED" placeholder (2026-10). Esri needs no key
+      // and is already allowed by the CSP.
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors',
         maxZoom: 19,
+        maxNativeZoom: 19,
       }).addTo(map)
 
       // Use spotsRef so we get the most recent enriched data — conditions may
