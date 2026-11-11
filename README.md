@@ -1,26 +1,39 @@
 # WaveFinder
 
-Free, Surfline-style surf forecasts for 1,490+ surf spots worldwide. WaveFinder
-pulls 100% free public data (NOAA NDBC buoys, NOAA CO-OPS tides, and Open-Meteo
-marine forecasts) and turns it into wave-height, swell, wind, tide, and live
-buoy readings with a surf-condition rating for every spot.
+**Live: [wave-finder.vercel.app](https://wave-finder.vercel.app)**
 
-**Deployed:** https://wave-finder.vercel.app
+Free surf forecasts for ~1,480 surf spots worldwide, with no account needed.
+WaveFinder combines free public ocean data (NOAA buoys, NOAA tides, harmonic
+tide constituents, Open-Meteo marine forecasts and the NOAA WaveWatch III
+model) into a 16-day forecast and a surf rating for every spot.
 
-## Stack
+![WaveFinder spot forecast](docs/images/spot.png)
 
-- **Framework:** Next.js 16 (App Router) + React 19
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS v4
-- **Auth:** better-auth (email + password)
-- **ORM / DB:** Prisma 5 + Neon Postgres
-- **Payments:** Stripe (Pro subscription, TEST mode)
-- **Rate limiting:** Upstash Redis
-- **Maps:** Leaflet + MarkerCluster
-- **Charts:** Recharts
-- **Query:** TanStack Query
-- **Monitoring:** Sentry
-- **Testing:** Vitest
+![WaveFinder live conditions map](docs/images/map.png)
+
+**Highlights**
+
+- **Physics-based surf rating.** Scores each swell train separately, shoals it
+  by period (Komar & Gaughan), reduces it by the spot's exposure to the swell
+  direction, and blends in live buoy observations, wind, gusts and tide.
+  Veto caps stop a big swell from rating "good" under a 40 km/h onshore wind.
+- **Worldwide tides with validation.** NOAA covers only the US, so every other
+  spot gets a harmonic tide station computed offline. Picking the nearest
+  station was wrong 31% of the time (river and slough gauges), so a script
+  checks each assignment against a reference model before accepting it.
+- **A world map that stays within free-tier budgets.** Zoomed out, the map
+  reads from a daily cron that pulls the gridded WaveWatch III model (12
+  requests for the whole planet) into the Vercel Runtime Cache, falling back
+  to sampled Open-Meteo data. An animated swell-flow layer is drawn on top.
+- **Production hygiene.** 29 Vitest test files, CI (lint with zero warnings,
+  typecheck, tests, build), rate limiting, an uptime workflow, and written
+  security/performance audits in [`docs/audit/`](./docs/audit/).
+
+**Stack:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4,
+Prisma + Postgres, Upstash Redis, Leaflet, Recharts, TanStack Query, Vitest,
+Vercel (cron + Runtime Cache)
+
+---
 
 ## Getting started
 
@@ -116,11 +129,9 @@ checklist.
 
 ## Pricing model
 
-The app is free, except for:
-
-- **Pro tier:** `/api/best-spots` is gated behind a Stripe subscription. All
-  other endpoints (forecast, webcams, surf-reports, water-quality, alerts) are
-  intentionally free.
+The app is entirely free and needs no account. Auth (better-auth) and billing
+(Stripe, test mode) are still in the codebase but dormant: their routes return
+404 unless `ENABLE_ACCOUNTS=true`.
 
 ## Documentation
 
